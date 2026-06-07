@@ -7,10 +7,22 @@ import type { CliDeps } from "./io.js";
 import { ReiseError } from "../client/errors.js";
 import type { EngineOptions, RawResponse } from "../client/engine.js";
 
-/** commander value-parser: a non-negative integer. */
+/**
+ * commander value-parser: a non-negative integer in plain base-10 notation.
+ *
+ * Only a run of ASCII digits is accepted. This deliberately rejects the forms
+ * `Number()` would otherwise coerce silently (hex `0x10`, binary `0b101`,
+ * exponent `1e3`, a leading `+`, surrounding whitespace, and the empty string),
+ * each of which would mask a typo as a real value. Values above
+ * `Number.MAX_SAFE_INTEGER` are rejected too, since they cannot be represented
+ * as the integer the user typed.
+ */
 export function parseIntArg(value: string): number {
+  if (!/^\d+$/.test(value)) {
+    throw new InvalidArgumentError("Expected a non-negative integer.");
+  }
   const n = Number(value);
-  if (!Number.isInteger(n) || n < 0) {
+  if (!Number.isSafeInteger(n)) {
     throw new InvalidArgumentError("Expected a non-negative integer.");
   }
   return n;
@@ -53,10 +65,20 @@ export function toEngineOptions(global: GlobalOptions): EngineOptions {
   return options;
 }
 
-/** Render a JSON value to stdout, pretty by default, compact with --compact. */
+/**
+ * Render a JSON value, pretty by default and compact with --compact. Writes to
+ * the file given by --output (with a short confirmation on stderr so stdout stays
+ * clean for piping) or to stdout otherwise.
+ */
 export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown): void {
   const text = global.compact ? JSON.stringify(value) : JSON.stringify(value, null, 2);
-  deps.io.out(text);
+  if (global.output) {
+    const data = Buffer.from(text + "\n", "utf8");
+    deps.io.writeFile(global.output, data);
+    deps.io.err(`Wrote ${data.length} bytes to ${global.output}`);
+  } else {
+    deps.io.out(text);
+  }
 }
 
 /**

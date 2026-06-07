@@ -36,8 +36,12 @@ export interface TravelWarning {
 }
 
 /**
- * The unwrapped `response` of the list endpoint: a `lastModified` timestamp plus
- * one numeric-string key per country pointing at its summary.
+ * The unwrapped `response` of the list endpoint: a `lastModified` timestamp, a
+ * `contentList` array of all content ids, and one numeric-string key per country
+ * pointing at its summary.
+ *
+ * Both `lastModified` and `contentList` are envelope members rather than country
+ * entries; `summaries()` skips them when flattening.
  */
 export type TravelWarningList = JsonObject;
 

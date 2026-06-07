@@ -20,7 +20,8 @@ Many "probe" candidates from the brief turned out to be correctly handled (see
 
 ## High severity
 
-### 1. Numeric global flags silently accept hex / exponent / whitespace / empty via bare `Number()`
+### 1. Numeric global flags silently accept hex / exponent / whitespace / empty via bare `Number()` — ✅ FIXED
+- **Fix:** `src/cli/shared.ts` `parseIntArg` now rejects anything that is not a plain run of base-10 digits (`/^\d+$/`) and additionally rejects values above `Number.MAX_SAFE_INTEGER` via `Number.isSafeInteger`. Hex/binary/exponent/`+`-prefixed/whitespace/empty/overlarge inputs now all error with exit 1.
 - **Severity:** High · **Confidence:** High
 - **Repro (hex parsed as a real value):**
   ```
@@ -68,7 +69,8 @@ Many "probe" candidates from the brief turned out to be correctly handled (see
 
 ## Medium severity
 
-### 2. A 200 response missing the `response` envelope is masked as empty success (`{}` / `[]`), exit 0
+### 2. A 200 response missing the `response` envelope is masked as empty success (`{}` / `[]`), exit 0 — ✅ FIXED
+- **Fix:** `src/client/client.ts` `list()` now throws `ReiseParseError` when the parsed body lacks a `response` object (null / array / missing), instead of falling back to `?? {}`. This propagates to both `list` and `countries`, surfacing as exit 1. (`get()` is intentionally left as-is: per the existing tests, a `get` against an empty/missing envelope must still be a `ReiseNotFoundError` exit 4.)
 - **Severity:** Medium · **Confidence:** High
 - **Repro** (local mock that returns `{"foo":"bar"}` for the list endpoint):
   ```
@@ -92,7 +94,8 @@ Many "probe" candidates from the brief turned out to be correctly handled (see
   `summaries()`/filter chain. The `?? {}` fallback swallows a missing envelope
   instead of raising a `ReiseParseError`.
 
-### 3. `-o/--output` is advertised in `--help` but silently does nothing for every command
+### 3. `-o/--output` is advertised in `--help` but silently does nothing for every command — ✅ FIXED
+- **Fix:** `src/cli/shared.ts` `renderJson` now honors `global.output`: when set, it writes the JSON (plus trailing newline) to that file via `deps.io.writeFile` and prints a `Wrote N bytes to <file>` confirmation to stderr (keeping stdout clean for piping), exactly as `renderRaw` already did. The flag now does what the help text says for every JSON command.
 - **Severity:** Medium · **Confidence:** High
 - **Repro:**
   ```
@@ -110,7 +113,8 @@ Many "probe" candidates from the brief turned out to be correctly handled (see
   entirely; `renderRaw` (which honors `--output`) is never wired to any command
   (`src/cli/commands/warnings.ts` only ever calls `renderJson`).
 
-### 4. Empty `get` id round-trips to the network instead of being a usage error
+### 4. Empty `get` id round-trips to the network instead of being a usage error — ✅ FIXED
+- **Fix:** `src/cli/commands/warnings.ts` `get` action now throws a `ReiseError` ("Missing required argument: contentId must not be empty.") when the positional is empty/whitespace, before any client call. This yields an input-validation failure (exit 1) with no network request.
 - **Severity:** Medium · **Confidence:** Medium
 - **Repro:**
   ```
@@ -134,7 +138,8 @@ Many "probe" candidates from the brief turned out to be correctly handled (see
 
 ## Low severity
 
-### 5. `list` exposes an undocumented `contentList` envelope key
+### 5. `list` exposes an undocumented `contentList` envelope key — ✅ FIXED
+- **Fix:** `src/client/client.ts` `summaries()` now skips `contentList` explicitly (alongside `lastModified`) rather than relying on the incidental object-vs-array shape check, and `src/client/types.ts` documents `contentList` as an envelope member in the `TravelWarningList` doc comment. `list` continues to pass the key through faithfully.
 - **Severity:** Low · **Confidence:** High
 - **Repro:**
   ```
@@ -154,7 +159,8 @@ Many "probe" candidates from the brief turned out to be correctly handled (see
 - **Root cause:** `src/client/client.ts:39-44` and `types.ts` only special-case
   `lastModified`; `contentList` is an unmodeled, undocumented envelope member.
 
-### 6. `--help` text for `-o/--output` claims a behavior the tool does not implement
+### 6. `--help` text for `-o/--output` claims a behavior the tool does not implement — ✅ FIXED
+- **Fix:** `src/cli/program.ts:40` help text changed to "write output to this file instead of stdout", and the README global-options table updated to match. With bug #3 fixed, the flag now actually performs this behavior, so the help is accurate.
 - **Severity:** Low · **Confidence:** High
 - **Repro:**
   ```
@@ -166,7 +172,8 @@ Many "probe" candidates from the brief turned out to be correctly handled (see
   **Actual:** The help string reads as a working option. (Companion to bug #3.)
 - **Root cause:** `src/cli/program.ts:40`.
 
-### 7. Bare invocation (no command) prints help to stdout but exits 1
+### 7. Bare invocation (no command) prints help to stdout but exits 1 — ✅ FIXED
+- **Fix:** `src/cli/run.ts` now special-cases an empty argv before parsing: it prints `program.helpInformation()` to stdout and returns 0, matching `--help`. This avoids commander's default `help({ error: true })` path (exit 1).
 - **Severity:** Low · **Confidence:** High
 - **Repro:**
   ```
@@ -181,7 +188,8 @@ Many "probe" candidates from the brief turned out to be correctly handled (see
 - **Root cause:** commander default when no subcommand is given; not overridden
   in `src/cli/run.ts` / `program.ts`.
 
-### 8. README overstates the global-options-position constraint
+### 8. README overstates the global-options-position constraint — ✅ FIXED
+- **Fix:** README "Global options" section reworded to "Global options may be given **before or after** the command", with both forms shown as examples, reflecting commander's `optsWithGlobals()` behavior.
 - **Severity:** Low · **Confidence:** High
 - **Repro:**
   ```

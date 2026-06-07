@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import type { CliDeps } from "../io.js";
 import { action, renderJson } from "../shared.js";
+import { ReiseError } from "../../client/errors.js";
 
 export function registerWarningCommands(program: Command, deps: CliDeps): void {
   program
@@ -33,7 +34,13 @@ export function registerWarningCommands(program: Command, deps: CliDeps): void {
     .description("One country's full travel warning (with HTML content)")
     .action(
       action(deps, async ({ client, global }, [id]) => {
-        renderJson(deps, global, await client.get(id!));
+        // An empty content id is structurally invalid: reject it as a usage
+        // error instead of issuing a request to a trailing-slash URL that can
+        // only ever 404.
+        if (!id || id.trim() === "") {
+          throw new ReiseError("Missing required argument: contentId must not be empty.");
+        }
+        renderJson(deps, global, await client.get(id));
       }),
     );
 }

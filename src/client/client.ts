@@ -6,7 +6,7 @@
 //   client.get("226768")     // one country's full warning (HTML content)
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
-import { ReiseNotFoundError } from "./errors.js";
+import { ReiseNotFoundError, ReiseParseError } from "./errors.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
 
 const PATH = "/opendata/travelwarning";
@@ -26,7 +26,13 @@ export class ReisewarnungenClient {
   /** The raw `response`: a `lastModified` timestamp plus one entry per country. */
   async list(): Promise<TravelWarningList> {
     const res = await this.engine.getJson<Wrapped>(PATH);
-    return res.response ?? {};
+    // A 200 whose body lacks the documented `response` envelope is a broken or
+    // wrong-API response, not an empty list: surface it as a parse error rather
+    // than masking the data loss as a clean empty success.
+    if (!res || typeof res.response !== "object" || res.response === null || Array.isArray(res.response)) {
+      throw new ReiseParseError(`Unexpected response shape from ${PATH}: missing "response" envelope`);
+    }
+    return res.response;
   }
 
   /**
@@ -37,7 +43,11 @@ export class ReisewarnungenClient {
     const response = await this.list();
     const entries: CountryEntry[] = [];
     for (const [id, value] of Object.entries(response)) {
-      if (id === "lastModified") continue;
+      // `lastModified` is the envelope timestamp; `contentList` is an array of
+      // all content ids the upstream includes alongside the per-country
+      // summaries. Neither is a country, so both are skipped explicitly rather
+      // than relying on the (incidental) object-vs-array shape check below.
+      if (id === "lastModified" || id === "contentList") continue;
       if (value && typeof value === "object" && !Array.isArray(value)) {
         entries.push({ id, ...(value as TravelWarning) });
       }

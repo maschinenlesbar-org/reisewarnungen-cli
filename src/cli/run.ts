@@ -25,6 +25,14 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
   const program = buildProgram(deps);
   configureTree(program, deps);
 
+  // Bare invocation (no command, no flags) is a benign "show me what this does"
+  // action: print help to stdout and exit 0, consistent with --help. Commander's
+  // default would instead print help as an error and exit 1.
+  if (argv.length === 0) {
+    deps.io.out(program.helpInformation().replace(/\n$/, ""));
+    return 0;
+  }
+
   try {
     await program.parseAsync(argv, { from: "user" });
     return 0;

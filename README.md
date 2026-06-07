@@ -46,9 +46,10 @@ content. `--compact` for a single line.
 | `--max-retries <n>` | Retries for transient `429`/`503` responses (default `2`) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 | `--compact` | Print JSON on a single line |
-| `-o, --output <file>` | Reserved for future binary/download commands (write bytes to a file instead of stdout); no current command emits raw output |
+| `-o, --output <file>` | Write the command output to this file instead of stdout |
 
-Global options go **before** the command, e.g. `reisewarnungen --compact countries`.
+Global options may be given **before or after** the command, e.g.
+`reisewarnungen --compact countries` or `reisewarnungen countries --compact`.
 
 ### Commands
 
