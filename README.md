@@ -10,6 +10,10 @@ A TypeScript **API client** and **command-line interface** for the open
 - **Well tested** — unit tests on Node's built-in test runner (`node --test`), every HTTP response mocked.
 - **Read-only, no auth** — the travel-warning open-data API needs no key; this client only reads.
 
+New to the Auswärtiges Amt travel-warning data, or terms like *content id*,
+*Teilreisewarnung* and the `response` envelope? See **[GLOSSARY.md](GLOSSARY.md)**
+for the domain concepts and the project's own vocabulary.
+
 ## Requirements
 
 - Node.js **>= 20** (uses the stable built-in test runner, ESM and top-level `await`).
@@ -51,6 +55,9 @@ content. `--compact` for a single line.
 Global options may be given **before or after** the command, e.g.
 `reisewarnungen --compact countries` or `reisewarnungen countries --compact`.
 
+The `-o/--output` path is **trusted input** — it is written verbatim with no
+traversal or overwrite guard (you own your shell).
+
 ### Commands
 
 ```text
@@ -87,7 +94,7 @@ import {
   ReisewarnungenClient,
   ReiseApiError,
   ReiseNotFoundError,
-} from "reisewarnungen-cli";
+} from "@maschinenlesbar.org/reisewarnungen-cli";
 
 const client = new ReisewarnungenClient(); // defaults to https://www.auswaertiges-amt.de
 
