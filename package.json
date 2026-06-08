@@ -1,6 +1,6 @@
 {
   "name": "@maschinenlesbar.org/reisewarnungen-cli",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "TypeScript API client and CLI for the open Auswärtiges Amt travel-warning API (auswaertiges-amt.de)",
   "type": "module",
   "bin": {
