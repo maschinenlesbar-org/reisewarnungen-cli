@@ -1,192 +1,181 @@
 # reisewarnungen-cli
 
-A TypeScript **API client** and **command-line interface** for the open
-[Auswärtiges Amt travel-warning API](https://www.auswaertiges-amt.de/opendata/travelwarning)
-(`auswaertiges-amt.de`) — official German **travel and safety warnings** by country.
+Check Germany's official **travel and safety warnings** by country from your
+terminal. `reisewarnungen` is a small command-line tool over the
+[Auswärtiges Amt travel-warning open-data API](https://www.auswaertiges-amt.de/opendata/travelwarning)
+— list all countries, filter to those with active warnings, and fetch the full
+advisory text — as clean JSON you can pipe straight into
+[`jq`](https://jqlang.github.io/jq/).
 
-- **Zero runtime HTTP dependencies** — built on Node's built-in `http`/`https` (no axios, no fetch polyfill).
-- **One small dependency** for the CLI: [`commander`](https://github.com/tj/commander.js).
-- **Strongly typed** — typed country summaries and the `response` envelope.
-- **Well tested** — unit tests on Node's built-in test runner (`node --test`), every HTTP response mocked.
-- **Read-only, no auth** — the travel-warning open-data API needs no key; this client only reads.
+- **Works out of the box** — no account, no API key, no configuration. Install and run.
+- **Clean JSON output** — pretty-printed by default, `--compact` for one-line/scripting.
+- **Three focused commands** — `list`, `countries`, and `get`.
+- **Save to file** — write output directly to a file with `-o/--output` instead of stdout.
 
-New to the Auswärtiges Amt travel-warning data, or terms like *content id*,
-*Teilreisewarnung* and the `response` envelope? See **[GLOSSARY.md](GLOSSARY.md)**
-for the domain concepts and the project's own vocabulary.
-
-## Requirements
-
-- Node.js **>= 20** (uses the stable built-in test runner, ESM and top-level `await`).
+> Want to use this as a TypeScript library or understand how it's built?
+> See **[DEVELOPING.md](DEVELOPING.md)**.
 
 ## Install
 
 ```bash
-npm install
-npm run build        # compiles TypeScript to dist/
+npm i -g @maschinenlesbar.org/reisewarnungen-cli
 ```
 
-Run the CLI without a global install:
+This installs the **`reisewarnungen`** command. Requires **Node.js 20+**.
+
+Check it works:
 
 ```bash
-node dist/src/cli/index.js --help
-# or, after `npm link` / global install:
 reisewarnungen --help
 ```
 
----
+## Quickstart
 
-## CLI usage
+No setup needed — the API is open data, no key required. Your first query:
 
-The API wraps everything in a top-level `response`; this CLI prints the unwrapped
-content. `--compact` for a single line.
+```bash
+reisewarnungen countries
+```
 
-### Global options
+Each entry in the result array has an `id`, `countryName`, and the four warning
+flags. Filter to only countries with an active warning:
+
+```bash
+reisewarnungen countries --warned-only
+```
+
+Pull out just country names and ids with `jq`:
+
+```bash
+reisewarnungen countries --warned-only | jq '.[] | {id, countryName}'
+```
+
+Fetch the full advisory text (HTML `content` included) for one country:
+
+```bash
+reisewarnungen get 226768
+```
+
+## Commands
+
+```text
+list                        all warnings, keyed by content id (raw response)
+countries [--warned-only]   flattened overview (id, country, warning flags)
+get <contentId>             one country's full warning (with HTML content)
+```
+
+The `<contentId>` is the numeric key from `list` / the `id` field from `countries`.
+
+### `countries` options
+
+| Flag | Meaning |
+| --- | --- |
+| `--warned-only` | only countries with a warning of any kind in force |
+
+A country is included by `--warned-only` if **any** of `warning`,
+`partialWarning`, `situationWarning`, or `situationPartWarning` is true.
+The **[Glossary](GLOSSARY.md)** explains every warning flag.
+
+## Common tasks
+
+A few recipes to get going — see **[Usage.md](Usage.md)** for the full,
+use-case-driven set.
+
+```bash
+# All countries with any kind of warning in force
+reisewarnungen countries --warned-only
+
+# Find a country's content id by name, then fetch the full advisory
+reisewarnungen countries --compact | jq -r '.[] | select(.countryName == "Ukraine") | .id'
+reisewarnungen get 201946
+
+# Quick table of warned countries (code, id, name)
+reisewarnungen countries --warned-only --compact \
+  | jq -r '.[] | [.countryCode, .id, .countryName] | @tsv'
+
+# Filter by ISO-3 country code
+reisewarnungen countries --compact \
+  | jq '.[] | select(.iso3CountryCode == "UKR")'
+
+# Save the full raw dataset to a file
+reisewarnungen list -o warnings-2026-06-08.json
+```
+
+## Output & scripting
+
+Every command prints **pretty JSON to stdout** (or to a file with `-o`). Errors
+and diagnostics go to stderr, so piping stdout into `jq` stays clean.
+
+```bash
+# Extract the HTML advisory text from a single warning
+reisewarnungen get 226768 --compact | jq -r '.content'
+
+# Count how many countries are currently warned
+reisewarnungen countries --warned-only | jq 'length'
+
+# Raw response with all envelope members (lastModified, contentList)
+reisewarnungen list | jq '.lastModified'
+```
+
+Use `--compact` for single-line JSON in pipelines and logs:
+
+```bash
+reisewarnungen --compact countries --warned-only | jq -c '.[]'
+```
+
+`--compact` (and every global option) works **before or after** the command —
+both `reisewarnungen --compact countries` and `reisewarnungen countries --compact`
+do the same thing.
+
+**Exit codes** make the CLI easy to use in scripts:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | success (also `--help` / `--version`) |
+| `4` | country not found — upstream `404` or a `get` whose response holds no matching entry |
+| `1` | any other error — including bad usage / invalid arguments |
+
+## Troubleshooting
+
+- **`command not found: reisewarnungen`** — the global npm bin directory isn't on
+  your `PATH`. Run `npm bin -g` to find it and add it, or run via
+  `npx @maschinenlesbar.org/reisewarnungen-cli …`.
+- **Exit `4` / "not found"** — the content id doesn't exist or the advisory has
+  been removed. Re-fetch it from a fresh `countries` result; ids can change as
+  the catalogue updates.
+- **Exit `1` / network error** — connectivity, DNS, or a timeout. Try again, or
+  raise the limit with `--timeout 60000`.
+- **Empty array from `countries --warned-only`** — no warnings are currently in
+  force, or the upstream data was recently reset; try `countries` without the
+  flag to verify the API is returning data.
+- **HTML in `content`** — the advisory text is delivered as HTML by the upstream
+  API. Use `jq -r '.content'` to print it raw, or pipe it through an HTML
+  renderer.
+
+## Global options
+
+These apply to every command and may be given before *or* after it:
 
 | Option | Description |
 | --- | --- |
+| `-V, --version` | Print the version number |
+| `-h, --help` | Show help for the program or a command |
+| `--compact` | Print JSON on a single line instead of pretty-printed |
+| `-o, --output <file>` | Write output to this file instead of stdout |
 | `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`) |
 | `--timeout <ms>` | Per-request timeout (default `30000`) |
 | `--user-agent <ua>` | `User-Agent` header value |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses (default `2`) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
-| `--compact` | Print JSON on a single line |
-| `-o, --output <file>` | Write the command output to this file instead of stdout |
-
-Global options may be given **before or after** the command, e.g.
-`reisewarnungen --compact countries` or `reisewarnungen countries --compact`.
 
 The `-o/--output` path is **trusted input** — it is written verbatim with no
 traversal or overwrite guard (you own your shell).
 
-### Commands
+## Learn more
 
-```text
-list                          all warnings, keyed by content id (raw response)
-countries [--warned-only]     flattened overview (id, country, warning flags)
-get <contentId>               one country's full warning (with HTML content)
-```
-
-The `<contentId>` is the numeric key from `list` / the `id` field from `countries`.
-
-### Examples
-
-```bash
-# Compact overview of every country
-reisewarnungen countries
-
-# Only countries with a warning of any kind in force
-reisewarnungen countries --warned-only
-
-# Full warning text for one country (id from `countries`)
-reisewarnungen get 226768
-```
-
-Exit codes: `0` success, `4` when a country is not found (an upstream `404` **or** a
-`get` whose response contains no matching entry), `1` for any other error. Usage errors
-exit with commander's own non-zero code, while `--help` / `--version` exit `0`.
-
----
-
-## Library usage
-
-```ts
-import {
-  ReisewarnungenClient,
-  ReiseApiError,
-  ReiseNotFoundError,
-} from "@maschinenlesbar.org/reisewarnungen-cli";
-
-const client = new ReisewarnungenClient(); // defaults to https://www.auswaertiges-amt.de
-
-const countries = await client.summaries();          // CountryEntry[]
-const warned = countries.filter((c) => c.warning);
-const detail = await client.get(countries[0]!.id);   // full warning incl. HTML content
-
-try {
-  await client.get("does-not-exist");
-} catch (err) {
-  // Upstream may answer with a 404 (ReiseApiError) or a 200 whose envelope holds
-  // no matching entry (ReiseNotFoundError). Both signal "not found".
-  if (err instanceof ReiseApiError) console.error(err.status, err.detail);
-  if (err instanceof ReiseNotFoundError) console.error("not found:", err.contentId);
-}
-```
-
-`get(contentId)` resolves to the matching entry, tolerating the single-warning
-endpoint keying its sole entry under a different id, but it **never** returns a
-different country than requested: an ambiguous (multi-entry) or empty response
-throws `ReiseNotFoundError` rather than guessing.
-
-### Client options
-
-```ts
-new ReisewarnungenClient({
-  baseUrl: "https://www.auswaertiges-amt.de",
-  timeoutMs: 15_000,
-  maxRetries: 3,              // 429 / 503 are retried with linear backoff
-  maxResponseBytes: 50 << 20, // abort responses larger than 50 MiB (0 = unlimited)
-  userAgent: "my-app/1.0",
-  transport: customTransport, // inject your own HTTP transport
-});
-```
-
-### Methods
-
-`client.list()` (raw `response` map), `client.summaries()` (flattened array with ids),
-`client.get(contentId)` (one full warning).
-
----
-
-## Architecture
-
-```
-src/
-  client/
-    types.ts     # TravelWarning / CountryEntry + the response envelope
-    query.ts     # dependency-free query-string builder
-    http.ts      # the Transport interface + default node:http/https transport
-    engine.ts    # URL building, retry/backoff, redirects (cross-origin credential strip), JSON/raw decoding, error mapping
-    errors.ts    # ReiseError / ReiseApiError / ReiseNetworkError / ReiseParseError
-    client.ts    # ReisewarnungenClient — list / summaries / get over the engine
-  cli/
-    io.ts        # injectable I/O seam (stdout/stderr/file)
-    shared.ts    # option parsers, global-option resolver, JSON renderer
-    commands/    # list / countries / get
-    program.ts   # assembles the commander program from injectable deps
-    run.ts       # parses argv -> exit code (no process.exit; testable)
-    index.ts     # #! bin shim
-```
-
-**Design notes**
-
-- The HTTP layer is a single `Transport` function (`(req) => Promise<HttpResponse>`). The default
-  uses `node:http`/`node:https`; tests inject a mock. This keeps the client free of any HTTP framework.
-- The client unwraps the `{ response: ... }` envelope and offers a flattened `summaries()` view, since
-  the raw response mixes a `lastModified` scalar in with the country-keyed entries.
-- The full HTML warning text is only returned by the single-warning endpoint, so `get` is where `content` appears.
-
----
-
-## Testing
-
-```bash
-npm test          # builds, then runs `node --test` over dist/test
-```
-
-- **`query.test.ts`** — query-string serialisation.
-- **`http.test.ts`** — the default transport against a real loopback `http.createServer`.
-- **`engine.test.ts`** — URL building, JSON decoding, error mapping, 429/503 retry, redirects — mocked transport.
-- **`client.test.ts`** — response unwrapping, the flattened `summaries()` view, the `get` sole-entry tolerance and its not-found / ambiguous-match handling — mocked transport.
-- **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, and exit codes (network/parse → 1, not-found → 4) — mocked client.
-
-## Continuous integration
-
-GitHub Actions workflows under `.github/workflows/`:
-
-- **ci.yml** — type-check, build and test on Node 20/22/24 for every push and PR.
-- **release.yml** — on a `v*` tag: verify the tag matches `package.json`, test, `npm pack`, and create a GitHub Release with the tarball.
-- **publish.yml** — manual dispatch: publish to npm via OIDC **Trusted Publishing** (no stored `NPM_TOKEN`) with provenance.
-- **docs.yml** — build TypeDoc API docs and deploy to GitHub Pages on each `v*` tag.
+- **[Usage.md](Usage.md)** — full use-case-driven cookbook.
+- **[GLOSSARY.md](GLOSSARY.md)** — every domain term and warning flag explained.
+- **[DEVELOPING.md](DEVELOPING.md)** — TypeScript library usage, architecture, testing, CI.
 
 ## License
 

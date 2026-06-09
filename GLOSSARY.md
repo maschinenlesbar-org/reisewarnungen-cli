@@ -158,31 +158,6 @@ rather than risk returning a different country than requested.
 
 ---
 
-## Project / technical terms
-
-**API client.** [`ReisewarnungenClient`](src/client/client.ts) — the typed
-wrapper over the API (`list` / `summaries` / `get`). Usable as a library
-independently of the CLI.
-
-**Transport.** A single function `(HttpRequest) => Promise<HttpResponse>`
-([`http.ts`](src/client/http.ts)). The default uses Node's built-in
-`http`/`https`; tests inject a mock. This is the only HTTP seam.
-
-**Request engine.** [`RequestEngine`](src/client/engine.ts) — builds URLs,
-serialises queries, applies retry/backoff, follows redirects, decodes JSON/raw
-responses and maps errors. Sits between the client and the transport.
-
-**RawResponse.** The result of a raw request: `{ data: Buffer, contentType,
-status }` — raw bytes, never lossily decoded.
-
-**CliDeps / CliIO.** The dependency-injection seam for the CLI
-([`io.ts`](src/cli/io.ts)): a client factory plus an I/O object
-(`out`/`err`/`writeFile`/`outBinary`). Lets the whole CLI run in tests with a
-mocked client and captured output — no subprocess.
-
-**Error types.** [`errors.ts`](src/client/errors.ts): `ReiseApiError` (non-2xx,
-carries `status`/`detail`), `ReiseNotFoundError` (a 2xx response with no matching
-entry; synthetic `status` 404), `ReiseNetworkError` (transport
-failure/timeout), `ReiseParseError` (bad JSON / missing envelope), all extending
-`ReiseError`. The CLI maps a `404` (real or synthetic) to exit code `4`, other
-errors to `1`.
+> **Library & internals.** Terms for the TypeScript client and its internals —
+> `ReisewarnungenClient`, the request engine, transport, retry/backoff, error
+> types, sole-entry tolerance — now live in **[DEVELOPING.md](DEVELOPING.md)**.
