@@ -177,6 +177,7 @@ traversal or overwrite guard (you own your shell).
 
 ## Learn more
 
+- **[SKILLS.md](SKILLS.md)** — Claude Code Agent Skills that drive this CLI for live travel-safety briefings.
 - **[Usage.md](Usage.md)** — full use-case-driven cookbook.
 - **[GLOSSARY.md](GLOSSARY.md)** — every domain term and warning flag explained.
 - **[DEVELOPING.md](DEVELOPING.md)** — TypeScript library usage, architecture, testing, CI.

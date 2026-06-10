@@ -1,0 +1,23 @@
+{
+  "name": "reisewarnungen",
+  "version": "0.1.0",
+  "description": "Official German travel-warning intelligence skills powered by the reisewarnungen-cli (Auswärtiges Amt travel-warning API).",
+  "author": {
+    "name": "Sebastian Schürmann",
+    "email": "sebs@2xs.org"
+  },
+  "license": "AGPL-3.0-or-later",
+  "repository": "https://github.com/maschinenlesbar-org/reisewarnungen-cli",
+  "homepage": "https://github.com/maschinenlesbar-org/reisewarnungen-cli#readme",
+  "keywords": [
+    "reisewarnungen",
+    "travel-warning",
+    "reisewarnung",
+    "auswaertiges-amt",
+    "travel-safety",
+    "advisory",
+    "germany",
+    "opendata",
+    "bund.dev"
+  ]
+}
