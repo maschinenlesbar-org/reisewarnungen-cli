@@ -34,13 +34,18 @@ export function registerWarningCommands(program: Command, deps: CliDeps): void {
     .description("One country's full travel warning (with HTML content)")
     .action(
       action(deps, async ({ client, global }, [id]) => {
-        // An empty content id is structurally invalid: reject it as a usage
-        // error instead of issuing a request to a trailing-slash URL that can
-        // only ever 404.
-        if (!id || id.trim() === "") {
-          throw new ReiseError("Missing required argument: contentId must not be empty.");
+        // A content id is the numeric key from `list` / the `id` field of
+        // `countries`. Validate it up front: an empty id would hit a
+        // trailing-slash URL that can only 404, and the upstream leniently parses
+        // a *leading* integer — so `get 226768x` would otherwise silently return
+        // 226768's country. Rejecting non-numeric ids keeps that consistent
+        // (every malformed id is a usage error, not a surprise hit or a 404).
+        if (!/^\d+$/.test(id ?? "")) {
+          throw new ReiseError(
+            `Invalid contentId "${id ?? ""}". Expected a numeric content id (e.g. 226768).`,
+          );
         }
-        renderJson(deps, global, await client.get(id));
+        renderJson(deps, global, await client.get(id!));
       }),
     );
 }

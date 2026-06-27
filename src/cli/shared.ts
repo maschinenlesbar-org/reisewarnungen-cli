@@ -1,11 +1,11 @@
 // Shared helpers used across CLI command groups: option parsers, the global
-// option resolver, and the two result-rendering paths (JSON and raw download).
+// option resolver, and the JSON result renderer.
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
 import { ReiseError } from "../client/errors.js";
-import type { EngineOptions, RawResponse } from "../client/engine.js";
+import type { EngineOptions } from "../client/engine.js";
 
 /**
  * commander value-parser: a non-negative integer in plain base-10 notation.
@@ -29,6 +29,18 @@ export function parseIntArg(value: string): number {
 }
 
 /**
+ * commander value-parser for `--output`: reject an empty / whitespace-only path.
+ * Without this, `-o ""` (e.g. from an unset `-o "$VAR"` in a script) is falsy and
+ * would silently fall back to stdout, writing no file and giving no warning.
+ */
+export function parseOutputPath(value: string): string {
+  if (value.trim() === "") {
+    throw new InvalidArgumentError("Output path must not be empty.");
+  }
+  return value;
+}
+
+/**
  * Validate a positional argument against an allowed set (commander does not
  * support .choices() on positional args). Throws a ReiseError so run() prints a
  * clear message and exits 1.
@@ -49,6 +61,7 @@ export interface GlobalOptions {
   timeout?: number;
   userAgent?: string;
   maxRetries?: number;
+  maxRedirects?: number;
   maxResponseBytes?: number;
   compact?: boolean;
   output?: string;
@@ -61,6 +74,7 @@ export function toEngineOptions(global: GlobalOptions): EngineOptions {
   if (global.timeout !== undefined) options.timeoutMs = global.timeout;
   if (global.userAgent !== undefined) options.userAgent = global.userAgent;
   if (global.maxRetries !== undefined) options.maxRetries = global.maxRetries;
+  if (global.maxRedirects !== undefined) options.maxRedirects = global.maxRedirects;
   if (global.maxResponseBytes !== undefined) options.maxResponseBytes = global.maxResponseBytes;
   return options;
 }
@@ -74,25 +88,27 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
   const text = global.compact ? JSON.stringify(value) : JSON.stringify(value, null, 2);
   if (global.output) {
     const data = Buffer.from(text + "\n", "utf8");
-    deps.io.writeFile(global.output, data);
-    deps.io.err(`Wrote ${data.length} bytes to ${global.output}`);
+    writeOutputFile(deps, global.output, data);
   } else {
     deps.io.out(text);
   }
 }
 
 /**
- * Render a raw (binary/text) download. Writes to the file given by --output, or
- * to stdout otherwise. Prints a short confirmation to stderr when writing a file
- * so stdout stays clean for piping.
+ * Write the result to `--output`, with a short confirmation on stderr so stdout
+ * stays clean for piping. A filesystem failure (bad path, missing directory,
+ * permission denied) is a foreseeable user error, so it is surfaced as a clean
+ * ReiseError ("Error: could not write …", exit 1) rather than bubbling up as a
+ * raw Node errno through run()'s "Unexpected error" fallback.
  */
-export function renderRaw(deps: CliDeps, global: GlobalOptions, response: RawResponse): void {
-  if (global.output) {
-    deps.io.writeFile(global.output, response.data);
-    deps.io.err(`Wrote ${response.data.length} bytes to ${global.output}`);
-  } else {
-    deps.io.outBinary(response.data);
+function writeOutputFile(deps: CliDeps, path: string, data: Buffer): void {
+  try {
+    deps.io.writeFile(path, data);
+  } catch (cause) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    throw new ReiseError(`Could not write to ${path}: ${reason}`, { cause });
   }
+  deps.io.err(`Wrote ${data.length} bytes to ${path}`);
 }
 
 export interface ActionContext {

@@ -101,7 +101,7 @@ src/
     types.ts     # TravelWarning / CountryEntry + the response envelope
     query.ts     # dependency-free query-string builder
     http.ts      # the Transport interface + default node:http/https transport
-    engine.ts    # URL building, retry/backoff, redirects (cross-origin credential strip), JSON/raw decoding, error mapping
+    engine.ts    # URL building, retry/backoff, redirects (cross-origin credential strip), JSON decoding, error mapping
     errors.ts    # ReiseError / ReiseApiError / ReiseNetworkError / ReiseParseError
     client.ts    # ReisewarnungenClient — list / summaries / get over the engine
   cli/
@@ -133,15 +133,15 @@ independently of the CLI.
 `http`/`https`; tests inject a mock. This is the only HTTP seam.
 
 **Request engine.** [`RequestEngine`](src/client/engine.ts) — builds URLs,
-serialises queries, applies retry/backoff, follows redirects, decodes JSON/raw
+serialises queries, applies retry/backoff, follows redirects, decodes JSON
 responses and maps errors. Sits between the client and the transport.
 
-**RawResponse.** The result of a raw request: `{ data: Buffer, contentType,
-status }` — raw bytes, never lossily decoded.
+**RawResponse.** The result of `request()` — `{ data: Buffer, contentType,
+status }`, the raw bytes `getJson()` then decodes.
 
 **CliDeps / CliIO.** The dependency-injection seam for the CLI
 ([`io.ts`](src/cli/io.ts)): a client factory plus an I/O object
-(`out`/`err`/`writeFile`/`outBinary`). Lets the whole CLI run in tests with a
+(`out`/`err`/`writeFile`). Lets the whole CLI run in tests with a
 mocked client and captured output — no subprocess.
 
 **Error types.** [`errors.ts`](src/client/errors.ts): `ReiseApiError` (non-2xx,

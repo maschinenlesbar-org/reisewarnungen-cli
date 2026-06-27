@@ -150,6 +150,7 @@ Real flags only, from `reisewarnungen --help`:
 | `--timeout <ms>` | Per-request timeout in milliseconds |
 | `--user-agent <ua>` | `User-Agent` header value |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses |
+| `--max-redirects <n>` | HTTP redirects to follow (`0` = none; default `5`) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
 | `-o, --output <file>` | Write output to this file instead of stdout |

@@ -26,7 +26,6 @@ function makeCli(responder: (req: HttpRequest) => HttpResponse) {
       out: (s) => out.push(s),
       err: (s) => err.push(s),
       writeFile: (p, d) => files.set(p, d),
-      outBinary: (d) => out.push(d.toString("utf8")),
     },
     createClient: (opts) => new ReisewarnungenClient({ ...opts, transport: mt.transport }),
   };
@@ -92,7 +91,7 @@ test("get builds the per-id path", async () => {
 
 test("a 404 from the API maps to exit code 4", async () => {
   const cli = makeCli(() => jsonResponse({}, 404));
-  const code = await run(["get", "nope"], cli.deps);
+  const code = await run(["get", "999999"], cli.deps);
   assert.equal(code, 4);
 });
 
@@ -121,4 +120,71 @@ test("a malformed JSON success body maps to exit code 1 (parse error)", async ()
   const code = await run(["list"], cli.deps);
   assert.equal(code, 1);
   assert.ok(cli.err.join("\n").startsWith("Error:"));
+});
+
+test("no command prints help to stdout and exits 0", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  const code = await run([], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.mt.calls.length, 0); // never touched the network
+  assert.equal(cli.err.length, 0); // help went to stdout, not stderr
+  assert.match(cli.out.join("\n"), /Usage: reisewarnungen/);
+});
+
+test("a global flag without a command still shows help on stdout, exit 0", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  const code = await run(["--compact"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.err.length, 0);
+  assert.match(cli.out.join("\n"), /Usage: reisewarnungen/);
+});
+
+test("an unknown command still errors on stderr with exit 1", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  const code = await run(["boguscmd"], cli.deps);
+  assert.equal(code, 1);
+  assert.match(cli.err.join("\n"), /unknown command 'boguscmd'/);
+});
+
+test("get rejects a non-numeric content id as a usage error (exit 1)", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  const code = await run(["get", "199124x"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.mt.calls.length, 0); // rejected before any request
+  assert.match(cli.err.join("\n"), /Invalid contentId "199124x"/);
+});
+
+test("--output writes the file and confirms on stderr (stdout stays clean)", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  const code = await run(["--compact", "-o", "out.json", "countries"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.out.length, 0); // nothing on stdout
+  assert.ok(cli.files.has("out.json"));
+  assert.match(cli.err.join("\n"), /Wrote \d+ bytes to out\.json/);
+});
+
+test("a failed --output write surfaces a clean error (exit 1), not 'Unexpected error'", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  cli.deps.io.writeFile = () => {
+    throw new Error("EACCES: permission denied, open 'out.json'");
+  };
+  const code = await run(["-o", "out.json", "countries"], cli.deps);
+  assert.equal(code, 1);
+  const errText = cli.err.join("\n");
+  assert.match(errText, /Error: Could not write to out\.json/);
+  assert.doesNotMatch(errText, /Unexpected error/);
+});
+
+test("--max-redirects is parsed and passed through to the client", async () => {
+  let seen: number | undefined;
+  const deps: CliDeps = {
+    io: { out: () => {}, err: () => {}, writeFile: () => {} },
+    createClient: (opts) => {
+      seen = opts.maxRedirects;
+      return new ReisewarnungenClient({ ...opts, transport: makeMockTransport(() => jsonResponse(listBody)).transport });
+    },
+  };
+  const code = await run(["--max-redirects", "0", "list"], deps);
+  assert.equal(code, 0);
+  assert.equal(seen, 0);
 });

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RequestEngine } from "../src/client/engine.js";
-import { ReiseApiError, ReiseParseError } from "../src/client/errors.js";
+import { ReiseApiError, ReiseNetworkError, ReiseParseError } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
 
 test("buildUrl normalises the path and appends the query", () => {
@@ -10,6 +10,18 @@ test("buildUrl normalises the path and appends the query", () => {
   assert.equal(
     e.buildUrl("/x", { a: "1", b: ["2", "3"] }),
     "https://example.test/x?a=1&b=2&b=3",
+  );
+});
+
+test("buildUrl rejects a malformed base URL with a clear, base-only message", () => {
+  const e = new RequestEngine({ baseUrl: "notaurl" });
+  assert.throws(
+    () => e.buildUrl("/opendata/travelwarning"),
+    (err: unknown) =>
+      err instanceof ReiseNetworkError &&
+      /Invalid base URL: "notaurl"/.test(err.message) &&
+      // the diagnostic must NOT carry the request path (which read as if at fault)
+      !/travelwarning/.test(err.message),
   );
 });
 

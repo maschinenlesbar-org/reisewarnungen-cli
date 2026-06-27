@@ -8,7 +8,7 @@ import { Command } from "commander";
 import type { CliDeps } from "./io.js";
 import { defaultIO } from "./io.js";
 import { ReisewarnungenClient } from "../client/client.js";
-import { parseIntArg } from "./shared.js";
+import { parseIntArg, parseOutputPath } from "./shared.js";
 import { registerWarningCommands } from "./commands/warnings.js";
 
 /**
@@ -49,13 +49,14 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .option("--timeout <ms>", "per-request timeout in milliseconds", parseIntArg)
     .option("--user-agent <ua>", "User-Agent header value")
     .option("--max-retries <n>", "retries for transient 429/503 responses", parseIntArg)
+    .option("--max-redirects <n>", "HTTP redirects to follow (0 = none; default 5)", parseIntArg)
     .option(
       "--max-response-bytes <n>",
       "cap response body size in bytes (0 = unlimited; default 100 MiB)",
       parseIntArg,
     )
     .option("--compact", "print JSON on a single line instead of pretty-printed")
-    .option("-o, --output <file>", "write output to this file instead of stdout")
+    .option("-o, --output <file>", "write output to this file instead of stdout", parseOutputPath)
     .showHelpAfterError();
 
   registerWarningCommands(program, deps);

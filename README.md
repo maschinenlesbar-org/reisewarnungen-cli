@@ -170,6 +170,7 @@ These apply to every command and may be given before *or* after it:
 | `--timeout <ms>` | Per-request timeout (default `30000`) |
 | `--user-agent <ua>` | `User-Agent` header value |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses (default `2`) |
+| `--max-redirects <n>` | HTTP redirects to follow (`0` = none; default `5`) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 
 The `-o/--output` path is **trusted input** — it is written verbatim with no

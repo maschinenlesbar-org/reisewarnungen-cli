@@ -4,7 +4,7 @@
 
 import { nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { ReiseApiError, ReiseParseError } from "./errors.js";
+import { ReiseApiError, ReiseNetworkError, ReiseParseError } from "./errors.js";
 
 export const DEFAULT_BASE_URL = "https://www.auswaertiges-amt.de";
 const DEFAULT_USER_AGENT = "reisewarnungen-cli";
@@ -77,6 +77,15 @@ export class RequestEngine {
 
   /** Build a fully-qualified URL from a path and optional query parameters. */
   buildUrl(path: string, query?: QueryParams): string {
+    // Validate the base URL up front so a malformed `baseUrl` (e.g. a stray
+    // `--base-url notaurl`) yields a clear message naming the offending value,
+    // instead of an opaque "Invalid URL" that carries the full request path and
+    // reads as if the path were at fault.
+    try {
+      new URL(this.baseUrl);
+    } catch {
+      throw new ReiseNetworkError(`Invalid base URL: ${JSON.stringify(this.baseUrl)}`);
+    }
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     const qs = query ? buildQueryString(query) : "";
     return `${this.baseUrl}${normalizedPath}${qs ? `?${qs}` : ""}`;
@@ -154,11 +163,6 @@ export class RequestEngine {
     } catch (cause) {
       throw new ReiseParseError(`Failed to parse JSON response from ${path}`, { cause });
     }
-  }
-
-  /** Perform a GET returning the raw bytes (image / binary downloads). */
-  async getRaw(path: string, accept: string, query?: QueryParams): Promise<RawResponse> {
-    return this.request("GET", path, { query, accept });
   }
 
   private toApiError(method: string, url: string, status: number, body: Buffer): ReiseApiError {

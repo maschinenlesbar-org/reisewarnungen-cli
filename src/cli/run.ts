@@ -25,12 +25,22 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
   const program = buildProgram(deps);
   configureTree(program, deps);
 
-  // Bare invocation (no command, no flags) is a benign "show me what this does"
-  // action: print help to stdout and exit 0, consistent with --help. Commander's
-  // default would instead print help as an error and exit 1.
-  if (argv.length === 0) {
-    deps.io.out(program.helpInformation().replace(/\n$/, ""));
-    return 0;
+  // A no-subcommand invocation (`reisewarnungen`, `reisewarnungen --compact`,
+  // `reisewarnungen -o x.json`) is a benign "show me what this does": print help to
+  // stdout and exit 0, consistent with `--help`. Commander's default would instead
+  // print help as an error to stderr and exit 1. We detect it by parsing only the
+  // options (which correctly consumes global-option values) on a throwaway program:
+  // empty `operands` with nothing left in `unknown` means no command and no
+  // help/version or unknown option. `--help`/`--version`/unknown options land in
+  // `unknown` and fall through to commander so it handles (and reports) them as before.
+  try {
+    const probe = buildProgram(deps).parseOptions([...argv]);
+    if (probe.operands.length === 0 && probe.unknown.length === 0) {
+      deps.io.out(program.helpInformation().replace(/\n$/, ""));
+      return 0;
+    }
+  } catch {
+    // Option parsing hiccuped — fall through and let the real parse report it.
   }
 
   try {
