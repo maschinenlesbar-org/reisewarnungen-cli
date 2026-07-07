@@ -49,6 +49,27 @@ const SENSITIVE_HEADERS = new Set([
   "www-authenticate",
 ]);
 
+/**
+ * Strip control characters out of a string that originates in an
+ * attacker-controlled response — the error `detail` and the echoed Content-Type.
+ * `JSON.parse` decodes an escaped ESC in an error body into a real ESC byte, so
+ * without this a hostile or MITM'd endpoint could drive ANSI/OSC escape sequences
+ * into the user's terminal when the message is printed to stderr (display
+ * spoofing, title changes). Drops all C0/C1 controls and DEL (0x7f-0x9f); tab and
+ * newline are intentionally preserved. The success path is already safe
+ * (`JSON.stringify` escapes these), so this only covers text flowing into an
+ * error message.
+ */
+function sanitizeServerText(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    const n = ch.codePointAt(0) ?? 0;
+    if (n <= 8 || (n >= 0x0b && n <= 0x1f) || (n >= 0x7f && n <= 0x9f)) continue;
+    out += ch;
+  }
+  return out;
+}
+
 const realSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -175,6 +196,9 @@ export class RequestEngine {
     } catch {
       // Non-JSON error body; leave detail undefined.
     }
+    // `detail` came from the response body; strip control characters so a hostile
+    // endpoint cannot inject terminal escape sequences via the stderr error message.
+    if (detail !== undefined) detail = sanitizeServerText(detail);
     return new ReiseApiError({ status, url, method, body: text, detail });
   }
 }
