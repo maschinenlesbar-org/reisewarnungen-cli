@@ -151,6 +151,17 @@ export class RequestEngine {
         if (typeof location === "string" && location.length > 0) {
           const from = new URL(url);
           const to = new URL(location, url);
+          // Refuse to follow a redirect that downgrades the connection security
+          // from https to http. `new URL(location, url)` would happily accept an
+          // absolute `http://...` Location, and the rest of the exchange would
+          // then proceed in cleartext even though the user targeted an https URL
+          // — letting an on-path attacker tamper the (safety-relevant)
+          // travel-warning data. Fail closed with a typed error instead.
+          if (from.protocol === "https:" && to.protocol === "http:") {
+            throw new ReiseNetworkError(
+              `Refusing to follow an insecure https->http redirect to ${to.toString()}`,
+            );
+          }
           // Credential-strip guard: on a cross-origin redirect, drop any
           // sensitive headers so credentials are never leaked to another host.
           // The default headers (Accept, User-Agent) carry nothing sensitive,

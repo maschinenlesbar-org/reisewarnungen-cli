@@ -2,7 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RequestEngine } from "../src/client/engine.js";
 import { ReiseApiError, ReiseNetworkError, ReiseParseError } from "../src/client/errors.js";
-import { makeMockTransport, jsonResponse, rawResponse } from "./helpers.js";
+import {
+  makeMockTransport,
+  jsonResponse,
+  rawResponse,
+  redirectResponse,
+} from "./helpers.js";
 import type { HttpResponse } from "../src/client/http.js";
 
 // Built via char codes so no raw control bytes ever appear in this source file.
@@ -131,6 +136,23 @@ test("error detail is stripped of terminal control characters", async () => {
       return true;
     },
   );
+});
+
+test("refuses to follow an https->http downgrade redirect (RW-01)", async () => {
+  const mt = makeMockTransport((req) =>
+    req.url.startsWith("https://")
+      ? redirectResponse("http://a.test/insecure")
+      : jsonResponse({ ok: 1 }),
+  );
+  const e = new RequestEngine({ baseUrl: "https://a.test", transport: mt.transport });
+
+  await assert.rejects(
+    () => e.getJson("/start"),
+    (err: unknown) =>
+      err instanceof ReiseNetworkError && /https->http/.test(err.message),
+  );
+  // The cleartext hop is never issued: only the initial https request was made.
+  assert.equal(mt.calls.length, 1);
 });
 
 test("the User-Agent and Accept headers are sent", async () => {

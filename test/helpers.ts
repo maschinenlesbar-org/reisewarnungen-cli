@@ -25,6 +25,24 @@ export function rawResponse(
   };
 }
 
+/** A 3xx redirect response pointing at `location`. */
+export function redirectResponse(location: string, status = 302): HttpResponse {
+  return {
+    status,
+    headers: { location },
+    body: Buffer.alloc(0),
+  };
+}
+
+/** A 3xx redirect response with no Location header (malformed). */
+export function redirectWithoutLocation(status = 302): HttpResponse {
+  return {
+    status,
+    headers: {},
+    body: Buffer.alloc(0),
+  };
+}
+
 export interface MockTransport {
   transport: Transport;
   /** All requests the transport has received, in order. */
