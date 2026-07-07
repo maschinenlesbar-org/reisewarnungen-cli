@@ -29,6 +29,26 @@ export function parseIntArg(value: string): number {
 }
 
 /**
+ * commander value-parser for `--base-url`: accept only a well-formed absolute
+ * `http:`/`https:` URL. Rejecting at parse time yields commander's usage error
+ * (exit 2) with a clear message, and forecloses a non-http(s) scheme up front —
+ * defense in depth ahead of the transport's own request-time allowlist. `--base-url`
+ * is self-chosen input, so this is a usability/contract guard, not a trust boundary.
+ */
+export function parseBaseUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new InvalidArgumentError("Expected a valid absolute URL (e.g. https://host).");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new InvalidArgumentError('Only "http:" and "https:" base URLs are supported.');
+  }
+  return value;
+}
+
+/**
  * commander value-parser for `--output`: reject an empty / whitespace-only path.
  * Without this, `-o ""` (e.g. from an unset `-o "$VAR"` in a script) is falsy and
  * would silently fall back to stdout, writing no file and giving no warning.

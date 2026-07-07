@@ -202,6 +202,21 @@ test("a failed --output write surfaces a clean error (exit 1), not 'Unexpected e
   assert.doesNotMatch(errText, /Unexpected error/);
 });
 
+test("--base-url rejects a non-http(s) scheme at parse time, never fetching", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  const code = await run(["--base-url", "ftp://evil.test", "list"], cli.deps);
+  assert.notEqual(code, 0);
+  assert.equal(cli.mt.calls.length, 0); // rejected before any request
+  assert.match(cli.err.join("\n"), /base URLs are supported|is invalid/);
+});
+
+test("--base-url rejects a malformed URL at parse time", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  const code = await run(["--base-url", "notaurl", "list"], cli.deps);
+  assert.notEqual(code, 0);
+  assert.equal(cli.mt.calls.length, 0);
+});
+
 test("--max-redirects is parsed and passed through to the client", async () => {
   let seen: number | undefined;
   const deps: CliDeps = {

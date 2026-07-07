@@ -34,7 +34,14 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
   // help/version or unknown option. `--help`/`--version`/unknown options land in
   // `unknown` and fall through to commander so it handles (and reports) them as before.
   try {
-    const probe = buildProgram(deps).parseOptions([...argv]);
+    // The probe program must be exit-overridden AND silenced: parseOptions runs
+    // the option value-parsers (e.g. parseBaseUrl), so an invalid value would
+    // otherwise trigger commander's default process.exit(). Silence its output so
+    // the error is only reported once, by the real parse below.
+    const probeProgram = buildProgram(deps);
+    probeProgram.exitOverride();
+    probeProgram.configureOutput({ writeOut: () => {}, writeErr: () => {} });
+    const probe = probeProgram.parseOptions([...argv]);
     if (probe.operands.length === 0 && probe.unknown.length === 0) {
       deps.io.out(program.helpInformation().replace(/\n$/, ""));
       return 0;
