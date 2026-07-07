@@ -89,9 +89,9 @@ no `--api-key` flag, no env var, and nothing to configure.
 
 **Cross-origin credential stripping.** On a redirect that crosses an origin
 boundary (different scheme, host, or port), the engine strips sensitive headers
-(`Authorization`, `Cookie`, `Proxy-Authorization`, `WWW-Authenticate`) before
-following it, so any credentials set via custom headers are never forwarded to
-another host.
+(`Authorization`, `Cookie`, `X-API-Key`, `Proxy-Authorization`,
+`WWW-Authenticate`) before following it, so any credentials set via custom
+headers are never forwarded to another host.
 
 ## Architecture
 

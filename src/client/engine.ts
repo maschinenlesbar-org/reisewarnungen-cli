@@ -45,6 +45,7 @@ const DEFAULT_MAX_RESPONSE_BYTES = 100 * 1024 * 1024;
 const SENSITIVE_HEADERS = new Set([
   "authorization",
   "cookie",
+  "x-api-key",
   "proxy-authorization",
   "www-authenticate",
 ]);

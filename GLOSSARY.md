@@ -143,8 +143,8 @@ base delay grows with each attempt).
 **Redirects.** The engine follows up to `maxRedirects` (default `5`) HTTP
 redirects (`301/302/303/307/308`), resolving `Location` relative to the current
 URL. On a **cross-origin** redirect it strips sensitive headers
-(`Authorization`, `Cookie`, `Proxy-Authorization`, `WWW-Authenticate`) so
-credentials are never leaked to another host.
+(`Authorization`, `Cookie`, `X-API-Key`, `Proxy-Authorization`,
+`WWW-Authenticate`) so credentials are never leaked to another host.
 
 **maxResponseBytes.** A hard cap on the response body size (default 100 MiB;
 `0` disables it) that aborts the request if exceeded, defending against memory
