@@ -65,6 +65,7 @@ export interface GlobalOptions {
   maxResponseBytes?: number;
   compact?: boolean;
   output?: string;
+  force?: boolean;
 }
 
 /** Translate resolved global CLI options into client EngineOptions. */
@@ -88,7 +89,7 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
   const text = global.compact ? JSON.stringify(value) : JSON.stringify(value, null, 2);
   if (global.output) {
     const data = Buffer.from(text + "\n", "utf8");
-    writeOutputFile(deps, global.output, data);
+    writeOutputFile(deps, global.output, data, global.force === true);
   } else {
     deps.io.out(text);
   }
@@ -100,11 +101,22 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
  * permission denied) is a foreseeable user error, so it is surfaced as a clean
  * ReiseError ("Error: could not write …", exit 1) rather than bubbling up as a
  * raw Node errno through run()'s "Unexpected error" fallback.
+ *
+ * The write is exclusive unless `force` is set: an existing file at `path` is
+ * never silently overwritten (a mistyped `-o` path would otherwise destroy it).
+ * The EEXIST case is surfaced with a message pointing at --force.
  */
-function writeOutputFile(deps: CliDeps, path: string, data: Buffer): void {
+function writeOutputFile(deps: CliDeps, path: string, data: Buffer, force: boolean): void {
   try {
-    deps.io.writeFile(path, data);
+    deps.io.writeFile(path, data, force);
   } catch (cause) {
+    const code = (cause as { code?: unknown } | null)?.code;
+    if (code === "EEXIST") {
+      throw new ReiseError(
+        `Refusing to overwrite existing file ${path}; pass --force to overwrite.`,
+        { cause },
+      );
+    }
     const reason = cause instanceof Error ? cause.message : String(cause);
     throw new ReiseError(`Could not write to ${path}: ${reason}`, { cause });
   }

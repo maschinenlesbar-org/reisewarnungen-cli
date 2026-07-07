@@ -116,7 +116,8 @@ reisewarnungen list -o warnings-2026-06-08.json
 reisewarnungen countries --warned-only --compact -o active.json
 ```
 
-`-o/--output` writes the command output to the given path instead of stdout.
+`-o/--output` writes the command output to the given path instead of stdout. It
+refuses to overwrite an existing file (exit 1); pass `--force` to overwrite.
 
 ### 9. Extract just the warning text from a single advisory
 
@@ -154,10 +155,12 @@ Real flags only, from `reisewarnungen --help`:
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
 | `-o, --output <file>` | Write output to this file instead of stdout |
+| `--force` | Overwrite the `--output` file if it already exists |
 | `-h, --help` | Display help for a command |
 
 Note: `-o/--output` is **trusted input** — the path is written verbatim with no
-traversal or overwrite guard (you own your shell).
+traversal guard (you own your shell). An existing file is **not** overwritten
+unless you pass `--force`.
 
 Exit codes: `0` success, `4` when a country is not found, `1` for any other
 error; usage errors use commander's own non-zero code, while `--help` /

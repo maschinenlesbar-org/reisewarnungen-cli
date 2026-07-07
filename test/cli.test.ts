@@ -25,7 +25,16 @@ function makeCli(responder: (req: HttpRequest) => HttpResponse) {
     io: {
       out: (s) => out.push(s),
       err: (s) => err.push(s),
-      writeFile: (p, d) => files.set(p, d),
+      // Model the real exclusive-write semantics: without --force, a second write
+      // to an existing path throws an EEXIST error just as writeFileSync("wx") does.
+      writeFile: (p, d, force) => {
+        if (!force && files.has(p)) {
+          const err = new Error(`EEXIST: file already exists, open '${p}'`) as Error & { code: string };
+          err.code = "EEXIST";
+          throw err;
+        }
+        files.set(p, d);
+      },
     },
     createClient: (opts) => new ReisewarnungenClient({ ...opts, transport: mt.transport }),
   };
@@ -161,6 +170,24 @@ test("--output writes the file and confirms on stderr (stdout stays clean)", asy
   assert.equal(cli.out.length, 0); // nothing on stdout
   assert.ok(cli.files.has("out.json"));
   assert.match(cli.err.join("\n"), /Wrote \d+ bytes to out\.json/);
+});
+
+test("--output refuses to overwrite an existing file without --force (exit 1)", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  cli.files.set("out.json", Buffer.from("existing"));
+  const code = await run(["-o", "out.json", "countries"], cli.deps);
+  assert.equal(code, 1);
+  assert.match(cli.err.join("\n"), /Refusing to overwrite existing file out\.json.*--force/);
+  // The pre-existing file is left untouched.
+  assert.equal(cli.files.get("out.json")?.toString(), "existing");
+});
+
+test("--output with --force overwrites an existing file", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  cli.files.set("out.json", Buffer.from("existing"));
+  const code = await run(["--force", "-o", "out.json", "countries"], cli.deps);
+  assert.equal(code, 0);
+  assert.notEqual(cli.files.get("out.json")?.toString(), "existing");
 });
 
 test("a failed --output write surfaces a clean error (exit 1), not 'Unexpected error'", async () => {
