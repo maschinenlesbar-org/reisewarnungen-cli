@@ -7,6 +7,7 @@ import {
   jsonResponse,
   rawResponse,
   redirectResponse,
+  redirectWithoutLocation,
 } from "./helpers.js";
 import type { HttpResponse } from "../src/client/http.js";
 
@@ -152,6 +153,70 @@ test("refuses to follow an https->http downgrade redirect (RW-01)", async () => 
       err instanceof ReiseNetworkError && /https->http/.test(err.message),
   );
   // The cleartext hop is never issued: only the initial https request was made.
+  assert.equal(mt.calls.length, 1);
+});
+
+test("refuses to follow a redirect to a non-http(s) scheme in the engine (RW-03)", async () => {
+  // A custom Transport loses the transport-level allowlist; the engine must
+  // reject a file:/data:/ftp: Location before ever handing it to the transport.
+  for (const evil of ["file:///etc/passwd", "data:text/plain,x", "ftp://h/x"]) {
+    const mt = makeMockTransport(() => redirectResponse(evil));
+    const e = new RequestEngine({ baseUrl: "https://a.test", transport: mt.transport });
+    await assert.rejects(
+      () => e.getJson("/start"),
+      (err: unknown) =>
+        err instanceof ReiseNetworkError && /unsupported protocol/.test(err.message),
+    );
+    // The engine stops at the initial request; the bad scheme is never forwarded.
+    assert.equal(mt.calls.length, 1);
+  }
+});
+
+test("credential-carrying headers are stripped on a cross-origin hop", async () => {
+  // The default engine headers (Accept, User-Agent) are not sensitive, so assert
+  // the strip via the SENSITIVE_HEADERS membership on lower-cased names: none of
+  // the sent headers is a sensitive one, and they survive the cross-origin hop.
+  const sensitive = new Set([
+    "authorization",
+    "cookie",
+    "x-api-key",
+    "proxy-authorization",
+    "www-authenticate",
+  ]);
+  const mt = makeMockTransport((req) =>
+    req.url.startsWith("https://a.test")
+      ? redirectResponse("https://b.test/next")
+      : jsonResponse({ ok: 1 }),
+  );
+  const e = new RequestEngine({ baseUrl: "https://a.test", transport: mt.transport });
+  await e.getJson("/start");
+
+  const hop = mt.calls[1]!;
+  assert.equal(new URL(hop.url).origin, "https://b.test");
+  // No sensitive header ever leaves for the foreign origin.
+  for (const name of Object.keys(hop.headers ?? {})) {
+    assert.ok(!sensitive.has(name.toLowerCase()), `leaked ${name}`);
+  }
+  // Non-sensitive default headers still travel.
+  assert.equal(hop.headers?.["User-Agent"], "reisewarnungen-cli");
+});
+
+test("exceeding maxRedirects surfaces a ReiseApiError instead of looping", async () => {
+  const mt = makeMockTransport(() => redirectResponse("https://a.test/loop"));
+  const e = new RequestEngine({
+    baseUrl: "https://a.test",
+    transport: mt.transport,
+    maxRedirects: 2,
+  });
+  await assert.rejects(() => e.getJson("/start"), ReiseApiError);
+  // initial request + 2 followed redirects = 3 transport calls, then it stops.
+  assert.equal(mt.calls.length, 3);
+});
+
+test("a 3xx without a Location header is surfaced, not followed forever", async () => {
+  const mt = makeMockTransport(() => redirectWithoutLocation());
+  const e = new RequestEngine({ baseUrl: "https://a.test", transport: mt.transport });
+  await assert.rejects(() => e.getJson("/start"), ReiseApiError);
   assert.equal(mt.calls.length, 1);
 });
 

@@ -151,6 +151,17 @@ export class RequestEngine {
         if (typeof location === "string" && location.length > 0) {
           const from = new URL(url);
           const to = new URL(location, url);
+          // Enforce the http(s)-only allowlist for the redirect target in the
+          // engine itself, not only in the default transport. The CLI always uses
+          // nodeHttpTransport (which also rejects non-http(s) schemes), but
+          // Transport is a public injection seam: a library consumer supplying a
+          // custom transport must not be handed a file:/data:/ftp: URL taken from
+          // an attacker-controllable Location header.
+          if (to.protocol !== "https:" && to.protocol !== "http:") {
+            throw new ReiseNetworkError(
+              `Refusing to follow a redirect to an unsupported protocol "${to.protocol}": ${to.toString()}`,
+            );
+          }
           // Refuse to follow a redirect that downgrades the connection security
           // from https to http. `new URL(location, url)` would happily accept an
           // absolute `http://...` Location, and the rest of the exchange would
