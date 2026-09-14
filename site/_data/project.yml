@@ -1,0 +1,17 @@
+# The only repo-specific texts of the website. Everything else comes from the
+# repository: the English intro from README.md, the commands from the built CLI.
+
+# How the API is accessed: open | key (env: VAR) | account (token, user, password: VARs)
+access:
+  type: open
+
+de:
+  # German version of the README's intro paragraph. Keep it in step with README.md.
+  intro: >-
+    Die amtlichen **Reise- und Sicherheitshinweise** des Auswärtigen Amts nach Land direkt im
+    Terminal abrufen. `reisewarnungen` ist ein kleines Kommandozeilen-Tool für die
+    [Open-Data-API des Auswärtigen Amts zu
+    Reisewarnungen](https://www.auswaertiges-amt.de/opendata/travelwarning): alle Länder
+    auflisten, auf Länder mit aktiven Warnungen filtern und den vollständigen Hinweistext
+    abrufen – als sauberes JSON, das Sie direkt an [`jq`](https://jqlang.github.io/jq/)
+    weitergeben können.

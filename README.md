@@ -4,6 +4,8 @@
 [![Release](https://github.com/maschinenlesbar-org/reisewarnungen-cli/actions/workflows/release.yml/badge.svg)](https://github.com/maschinenlesbar-org/reisewarnungen-cli/actions/workflows/release.yml)
 [![npm](https://img.shields.io/npm/v/@maschinenlesbar.org/reisewarnungen-cli)](https://www.npmjs.com/package/@maschinenlesbar.org/reisewarnungen-cli)
 
+**Website:** [English](https://maschinenlesbar-org.github.io/reisewarnungen-cli/) · [Deutsch](https://maschinenlesbar-org.github.io/reisewarnungen-cli/de/) — command reference, guides and API docs
+
 Check Germany's official **travel and safety warnings** by country from your
 terminal. `reisewarnungen` is a small command-line tool over the
 [Auswärtiges Amt travel-warning open-data API](https://www.auswaertiges-amt.de/opendata/travelwarning)
