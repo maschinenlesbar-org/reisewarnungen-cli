@@ -163,6 +163,27 @@ test("get rejects a non-numeric content id as a usage error (exit 1)", async () 
   assert.match(cli.err.join("\n"), /Invalid contentId "199124x"/);
 });
 
+test("DEL and C1 control characters in server data are escaped in the JSON output", async () => {
+  const controls = String.fromCharCode(0x7f, 0x85, 0x9b) + "2J";
+  const served = {
+    response: {
+      lastModified: 1,
+      "226768": { countryName: `Atlantis${controls}`, title: String.fromCharCode(0x1b) + "[31m" },
+    },
+  };
+  for (const format of [[], ["--compact"]]) {
+    const cli = makeCli(() => jsonResponse(served));
+    assert.equal(await run([...format, "list"], cli.deps), 0);
+    const text = cli.out.join("\n");
+    const raw = [...text].filter((c) =>
+      c.charCodeAt(0) < 0x20 ? c !== "\n" : c.charCodeAt(0) >= 0x7f && c.charCodeAt(0) <= 0x9f,
+    );
+    assert.deepEqual(raw, [], format.join(" "));
+    assert.match(text, /Atlantis\\u007f\\u0085\\u009b2J/);
+    assert.deepEqual(JSON.parse(text), served.response);
+  }
+});
+
 test("--output writes the file and confirms on stderr (stdout stays clean)", async () => {
   const cli = makeCli(() => jsonResponse(listBody));
   const code = await run(["--compact", "-o", "out.json", "countries"], cli.deps);

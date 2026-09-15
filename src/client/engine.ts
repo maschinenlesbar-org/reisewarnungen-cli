@@ -57,9 +57,9 @@ const SENSITIVE_HEADERS = new Set([
  * without this a hostile or MITM'd endpoint could drive ANSI/OSC escape sequences
  * into the user's terminal when the message is printed to stderr (display
  * spoofing, title changes). Drops all C0/C1 controls and DEL (0x7f-0x9f); tab and
- * newline are intentionally preserved. The success path is already safe
- * (`JSON.stringify` escapes these), so this only covers text flowing into an
- * error message.
+ * newline are intentionally preserved. This only covers text flowing into an
+ * error message; the CLI's JSON output is escaped separately (escapeControlChars
+ * in cli/shared.ts), since `JSON.stringify` alone leaves DEL and the C1 range raw.
  */
 function sanitizeServerText(text: string): string {
   let out = "";
