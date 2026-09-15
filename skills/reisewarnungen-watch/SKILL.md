@@ -33,10 +33,18 @@ flags and its `lastModified` timestamp. Save it dated, with `-o`:
 reisewarnungen countries --compact -o reisewarnungen-2026-06-11.json
 ```
 
+> **Trap — `-o` never overwrites.** If the file exists (a second snapshot the same day),
+> the CLI exits `1` with `Refusing to overwrite existing file …; pass --force to
+> overwrite.` Ask the user before replacing an existing snapshot, since it may be the
+> baseline for a diff. Then either add `--force` or pick a new name (e.g. add the time:
+> `reisewarnungen-2026-06-11T1430.json`). On success the CLI prints `Wrote N bytes to …`
+> on stderr; tell the user the file name.
+
 > Use **`countries`**, not `list`, for snapshots: `countries` is a clean array with `id`
-> per entry; `list` is a map and its top-level `lastModified` (≈ Nov 2024 in current data)
-> is a stale dataset-level value that does **not** track per-country edits — use the
-> **per-country** `lastModified` instead.
+> per entry; `list` is a map and its top-level `lastModified` is a stale dataset-level
+> value that does **not** track per-country edits (on 2026-09-15 it was `1757063288`,
+> 2025-09-05, while country entries had been edited that day) — use the **per-country**
+> `lastModified` instead.
 
 For a freshness-only view (no prior snapshot) you can skip straight to Step 3.
 

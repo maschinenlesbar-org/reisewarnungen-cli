@@ -104,8 +104,11 @@ skills encode the non-obvious parts of this API, for example:
 - **the flags don't record advice against travel** („wird dringend abgeraten"): Jordanien
   has all flags `false` while its advisory advises against travel to its border regions,
   so a trip check reads the advisory text before calling a country advice-only;
-- `list`'s top-level `lastModified` is a **stale dataset-level** value (≈ Nov 2024); for
-  change-tracking use the **per-country** `lastModified` instead;
+- `list`'s top-level `lastModified` is a **stale dataset-level** value (2025-09-05 when
+  checked on 2026-09-15); for change-tracking use the **per-country** `lastModified`
+  instead;
+- `-o` **refuses to overwrite** an existing file (exit `1`) unless you pass `--force`, so
+  a second snapshot on the same day needs a new name or the user's OK to overwrite;
 - a missing country makes `get` exit **`4`** (`HTTP 404`) — that's a wrong id, not a safe
   country; an empty `--warned-only` array (exit `0`) means no warnings are in force.
 
