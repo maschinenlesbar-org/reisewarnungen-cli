@@ -58,8 +58,10 @@ lacks the `response` envelope is surfaced as a `ReiseParseError` rather than
 masked as an empty success.
 
 **`lastModified`.** An envelope member (a Unix-epoch timestamp, in
-milliseconds) carried alongside the country entries — when the dataset was last
-changed. It is **not** a country, so `summaries()` skips it when flattening.
+**seconds**) carried alongside the country entries — nominally when the dataset
+was last changed, but it lags far behind the entries' own `lastModified` values
+(`1757063288`, 2025-09-05, when checked on 2026-09-15). It is **not** a country, so
+`summaries()` skips it when flattening.
 
 **`contentList`.** An envelope member: an array of all content ids the upstream
 includes alongside the per-country summaries. Also **not** a country, so
@@ -83,8 +85,8 @@ entry is stored in the `response` map (e.g. `226768`). It is the `id` field on a
 country code. An empty content id is rejected as a usage error rather than sent
 upstream.
 
-**countryCode.** The country's identifier as supplied by the AA. (The AA uses
-its own numeric country coding alongside the standard ISO codes.)
+**countryCode.** The ISO 3166-1 alpha-2 (two-letter) country code, e.g. `TH`,
+`JO`. Kosovo, which has no official ISO code, uses `XK`.
 
 **iso3CountryCode.** The ISO 3166-1 alpha-3 (three-letter) country code, e.g.
 `DEU`, `FRA`.
@@ -117,8 +119,8 @@ and limited to part of the country.
 
 **title.** The advice document's title.
 
-**effective.** A Unix-epoch timestamp (milliseconds): when the current advice
-took effect.
+**effective.** A Unix-epoch timestamp (**seconds**): when the current advice
+took effect. Each entry's own `lastModified` uses the same unit.
 
 **lastChanges.** A short, human-readable note describing what changed in the
 latest revision of the advice.

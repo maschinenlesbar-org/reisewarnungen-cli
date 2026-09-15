@@ -56,9 +56,11 @@ eingebettet. Der Client packt es aus: `list()` liefert `response`; eine `200`-An
 deren Body der `response`-Envelope fehlt, wird als `ReiseParseError` gemeldet, statt als
 leerer Erfolg verschleiert zu werden.
 
-**`lastModified`.** Ein Envelope-Feld (ein Unix-Epoch-Zeitstempel in Millisekunden),
-das neben den Ländereinträgen mitgeliefert wird – der Zeitpunkt der letzten Änderung des
-Datenbestands. Es ist **kein** Land, deshalb überspringt `summaries()` es beim Abflachen.
+**`lastModified`.** Ein Envelope-Feld (ein Unix-Epoch-Zeitstempel in **Sekunden**),
+das neben den Ländereinträgen mitgeliefert wird – dem Namen nach der Zeitpunkt der letzten
+Änderung des Datenbestands, doch es hinkt den `lastModified`-Werten der Einträge weit
+hinterher (`1757063288`, also 05.09.2025, bei einer Prüfung am 15.09.2026). Es ist
+**kein** Land, deshalb überspringt `summaries()` es beim Abflachen.
 
 **`contentList`.** Ein Envelope-Feld: ein Array aller Content-IDs, das die Quelle neben
 den Zusammenfassungen je Land mitliefert. Ebenfalls **kein** Land, deshalb überspringt
@@ -82,8 +84,8 @@ eines `CountryEntry` und das Pflichtargument von `get <contentId>`. Er ist *kein
 ISO-Ländercode. Eine leere Content-ID wird als Aufruffehler abgelehnt, statt an die
 Quelle gesendet zu werden.
 
-**countryCode.** Die Kennung des Landes, wie das AA sie liefert. (Das AA verwendet
-neben den üblichen ISO-Codes eine eigene numerische Länderkodierung.)
+**countryCode.** Der zweibuchstabige Ländercode nach ISO 3166-1 alpha-2, z. B. `TH`,
+`JO`. Kosovo, das keinen offiziellen ISO-Code hat, trägt `XK`.
 
 **iso3CountryCode.** Der dreibuchstabige Ländercode nach ISO 3166-1 alpha-3, z. B.
 `DEU`, `FRA`.
@@ -116,8 +118,8 @@ Teil des Landes beschränkt.
 
 **title.** Der Titel des Hinweisdokuments.
 
-**effective.** Ein Unix-Epoch-Zeitstempel (Millisekunden): seit wann die aktuellen
-Hinweise gelten.
+**effective.** Ein Unix-Epoch-Zeitstempel (**Sekunden**): seit wann die aktuellen
+Hinweise gelten. Das eigene `lastModified` jedes Eintrags verwendet dieselbe Einheit.
 
 **lastChanges.** Eine kurze, lesbare Notiz dazu, was sich in der letzten Überarbeitung
 der Hinweise geändert hat.
