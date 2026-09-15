@@ -238,6 +238,17 @@ test("--base-url rejects a malformed URL at parse time", async () => {
   assert.equal(cli.mt.calls.length, 0);
 });
 
+test("--timeout accepts up to the largest timer Node supports", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["--timeout", "2147483647", "list"], cli.deps), 0);
+  assert.equal(cli.mt.last().timeoutMs, 2_147_483_647);
+
+  const over = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["--timeout", "2147483648", "list"], over.deps), 1);
+  assert.equal(over.mt.calls.length, 0); // rejected before any request
+  assert.match(over.err.join("\n"), /Must be <= 2147483647/);
+});
+
 test("--max-redirects is parsed and passed through to the client", async () => {
   let seen: number | undefined;
   const deps: CliDeps = {
