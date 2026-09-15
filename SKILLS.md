@@ -100,7 +100,10 @@ skills encode the non-obvious parts of this API, for example:
   (`Aktuelles`, `Sicherheit`, `Terrorismus`, …) and summarise rather than dumping it;
 - only **`warning` and `partialWarning`** are set in current data; the `situation*` flags
   exist in the schema but are presently all `false` — don't claim a level the flags don't
-  support, and read "all flags false" as advice-only, not "no data";
+  support, and read "all flags false" as "no formal warning", not "no data";
+- **the flags don't record advice against travel** („wird dringend abgeraten"): Jordanien
+  has all flags `false` while its advisory advises against travel to its border regions,
+  so a trip check reads the advisory text before calling a country advice-only;
 - `list`'s top-level `lastModified` is a **stale dataset-level** value (≈ Nov 2024); for
   change-tracking use the **per-country** `lastModified` instead;
 - a missing country makes `get` exit **`4`** (`HTTP 404`) — that's a wrong id, not a safe

@@ -36,10 +36,17 @@ Each entry: `id`, `countryName` (German), `countryCode` (alpha-2), `iso3CountryC
 (alpha-3), `warning`, `partialWarning`, `situationWarning`, `situationPartWarning`,
 `lastModified`, `effective`, `title`.
 
-> **Scale.** ~200 countries total; typically **~45 warned** at any time (currently ~19
-> full warnings, ~27 regional). That's a listable size — you can enumerate all of them,
-> unlike some sibling APIs. Use plain `countries` (no flag) only if the user wants the
-> *whole* world or a count of unwarned countries too.
+> **Scale.** ~200 countries total; on 2026-09-15, **46 warned** (18 full warnings, 28
+> regional). Count them live; the headline numbers change. That's a listable size — you
+> can enumerate all of them, unlike some sibling APIs. Use plain `countries` (no flag)
+> only if the user wants the *whole* world or a count of unwarned countries too.
+
+> **Trap — formal warnings only.** The flags record Reisewarnung and Teilreisewarnung,
+> not advice against travel („Von Reisen … wird dringend abgeraten"), which lives only in
+> the advisory text. Jordanien has all flags `false` although its advisory strongly
+> advises against travel to its border regions. Call the list "countries with a formal
+> travel warning", not "everywhere Germany advises against travel", and hand a specific
+> country to `reisewarnungen-trip-check`, which reads the text.
 
 ## Step 2 — Classify and rank by severity
 

@@ -35,8 +35,9 @@ reisewarnungen countries --compact \
 ```
 
 Notes and traps:
-- **Country names are German** (`Ägypten`, `Vereinigte Staaten`, `Russische Föderation`,
-  `Côte d'Ivoire`). For an English request, match on `countryCode` (ISO-3166 alpha-2,
+- **Country names are German** (`Ägypten`, `Vereinigtes Königreich`, `Russische Föderation`,
+  `Côte d'Ivoire`), with exceptions: the United States is `USA`, not "Vereinigte
+  Staaten". For an English request, match on `countryCode` (ISO-3166 alpha-2,
   e.g. `TH`) or `iso3CountryCode` (alpha-3, e.g. `THA`) instead — those are stable:
   `jq -r '.[] | select(.iso3CountryCode=="THA")'`. If a German exact match fails, fall
   back to a case-insensitive substring match, or to the ISO code.
@@ -56,22 +57,43 @@ advisory. In increasing concern:
 | `partialWarning` | Regional warning (Teilreisewarnung) — applies to specific regions | 🟠 **Regional warning** |
 | `situationWarning` | Situation-specific warning (event-driven) | 🟡 **Situation warning** |
 | `situationPartWarning` | Situation-specific, limited to part of the country | 🟡 **Partial situation warning** |
-| *(all false)* | Routine travel & safety advice only, no warning | 🟢 **Advice only** |
+| *(all false)* | No formal warning — but the advisory can still advise against travel (see trap) | 🟢 **Advice only**, once Step 3 finds no "abgeraten" |
 
 > **Quirk.** In current live data only `warning` and `partialWarning` are ever set;
 > `situation*` flags exist in the schema but are presently all `false` across every
 > country. Don't claim a situation warning unless the flag is actually `true`.
+
+> **Trap — the flags don't carry the "abgeraten" level.** Below a formal warning, the
+> Auswärtiges Amt advises against travel in the text alone: „Von Reisen … wird dringend
+> abgeraten" or „Von nicht notwendigen Reisen … wird abgeraten". No flag records it.
+> Jordanien (`218008`) has all four flags `false`, yet its `Aktuelles` and `Sicherheit`
+> sections strongly advise against travel to the Syrian and Iraqi border regions and
+> against non-essential travel to the rest of the country. So an all-false entry is
+> **not** a verdict yet: always run the Step 3 check before saying 🟢.
 
 A country counts as "warned" if **any** flag is true — that's exactly what
 `countries --warned-only` filters on.
 
 ## Step 3 — Fetch the full advisory for the briefing
 
-For the verdict you can stop at the flags, but for a real briefing fetch the HTML:
+The flags give a 🔴/🟠 verdict on their own, but an all-false country needs the text
+(see the trap above), and a real briefing needs it anyway:
 
 ```bash
 reisewarnungen get 201558 --compact
 ```
+
+To pull out the advice-against-travel sentences (warnings say „wird gewarnt", advice
+against travel says „wird abgeraten" or „dringend abgeraten"):
+
+```bash
+reisewarnungen get 218008 --compact \
+  | jq -r '.content | gsub("<[^>]*>"; " ") | [scan("[^.]*(?:abgeraten|gewarnt)[^.]*\\.") | gsub("\\s+"; " ") | ltrimstr(" ")] | unique[]'
+```
+
+Sentences can start with the section heading they follow (`Aktuelles Von Reisen …`), and
+unrelated ones match too (warnings about drugs, driving after dark). Read them and keep
+the ones about travelling to the country or its regions.
 
 Fields on a `get` result that matter:
 
@@ -127,4 +149,7 @@ Rules:
 - Always note this is the **German** Foreign Office's advice (in German) and offer the
   `get <id>` command for the full text.
 - Never soften or invent a level the flags don't support — and never read "all flags
-  false" as "no data"; it means advice-only, which is a valid, reassuring answer.
+  false" as "no data". It means there is no formal warning. If the advisory says
+  „abgeraten", lead with that („Das Auswärtige Amt rät von Reisen in … dringend ab"),
+  naming the regions, and don't call it a warning. Only when the text has no such
+  sentence is advice-only the valid, reassuring answer.
