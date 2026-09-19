@@ -8,8 +8,10 @@ description: >
   Africa", "how many countries are warned right now?", or wants the global / a
   regional picture. Aggregates and ranks the flat country list by severity and
   groups it the way the bare CLI doesn't.
-version: 1.0.0
-userInvocable: true
+compatibility: >
+  Requires the `reisewarnungen` CLI (npm package
+  @maschinenlesbar.org/reisewarnungen-cli) on PATH, installed by the user; the
+  skill never installs it. Network access to www.auswaertiges-amt.de.
 ---
 
 # Reisewarnungen Warned-Country Overview

@@ -8,8 +8,11 @@ description: >
   warnings?", or wants the German government's current advice for a trip. Resolves
   country names to content ids, classifies the warning level, and distils the long
   HTML advisory into the parts a traveller acts on — not the raw JSON.
-version: 1.0.0
-userInvocable: true
+compatibility: >
+  Requires the `reisewarnungen` CLI (npm package
+  @maschinenlesbar.org/reisewarnungen-cli) on PATH, installed by the user; the
+  skill never installs it. Uses jq for JSON filtering. Network access to
+  www.auswaertiges-amt.de.
 ---
 
 # Reisewarnungen Trip Check
@@ -21,6 +24,8 @@ of handing back a 50 KB HTML blob.
 ## Tooling
 
 This skill drives the `reisewarnungen` command. **Before anything else, validate it is available** — run `command -v reisewarnungen` (or `reisewarnungen --version`). If it is not on your PATH, STOP and inform the user that the `reisewarnungen` CLI (`@maschinenlesbar.org/reisewarnungen-cli`) is not installed — installing it is their responsibility; never install it yourself, and do not fall back to `npx` or a local `node dist/...` build.
+
+This skill also filters JSON with `jq`. **Validate it too** — run `command -v jq`. If it is missing, inform the user that `jq` is not installed — installing it is their responsibility; never install it yourself — and carry on without it: filter the CLI output with `node -e` instead (Node is already on your PATH, since the CLI runs on it).
 
 The CLI is read-only, needs **no API key**, and wraps the open Auswärtiges Amt travel-warning API. Always pass `--compact` so output is one line, easy to pipe into `jq`. Bump `--timeout 60000` if `get` (which fetches a large HTML body) times out. A country that doesn't exist makes `get` exit **`4`** with `HTTP 404` — that means the id is wrong, not that the country is safe.
 
