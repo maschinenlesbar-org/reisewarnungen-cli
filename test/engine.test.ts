@@ -41,16 +41,29 @@ test("buildUrl normalises the path and appends the query", () => {
   );
 });
 
-test("buildUrl rejects a malformed base URL with a clear, base-only message", () => {
-  const e = new RequestEngine({ baseUrl: "notaurl" });
+test("the constructor rejects a malformed base URL with a clear, base-only message", () => {
   assert.throws(
-    () => e.buildUrl("/opendata/travelwarning"),
+    () => new RequestEngine({ baseUrl: "notaurl" }).buildUrl("/opendata/travelwarning"),
     (err: unknown) =>
       err instanceof ReiseNetworkError &&
       /Invalid base URL: "notaurl"/.test(err.message) &&
       // the diagnostic must NOT carry the request path (which read as if at fault)
       !/travelwarning/.test(err.message),
   );
+});
+
+test("the constructor rejects a non-http(s) base URL before any request", () => {
+  // A library consumer may inject its own transport, which need not check the
+  // scheme; the engine itself must never hand it a file:/ftp: base URL.
+  for (const baseUrl of ["file:///etc/passwd", "ftp://example.org"]) {
+    const mt = makeMockTransport(() => jsonResponse({ ok: true }));
+    assert.throws(
+      () => new RequestEngine({ baseUrl, transport: mt.transport }),
+      (err: unknown) =>
+        err instanceof ReiseNetworkError && /Unsupported protocol/.test(err.message),
+    );
+    assert.equal(mt.calls.length, 0);
+  }
 });
 
 test("getJson parses a JSON body", async () => {

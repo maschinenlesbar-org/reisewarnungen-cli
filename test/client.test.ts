@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ReisewarnungenClient } from "../src/client/client.js";
-import { ReiseApiError, ReiseNotFoundError } from "../src/client/errors.js";
+import { ReiseApiError, ReiseNetworkError, ReiseNotFoundError } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse } from "./helpers.js";
 
 function clientWith(mt: ReturnType<typeof makeMockTransport>): ReisewarnungenClient {
@@ -15,6 +15,18 @@ const listBody = {
     "200": { countryName: "Bukovia", countryCode: "BU", warning: false, partialWarning: true },
   },
 };
+
+test("the client rejects a non-http(s) base URL even with a custom transport", () => {
+  for (const baseUrl of ["file:///etc/passwd", "ftp://example.org"]) {
+    const mt = makeMockTransport(() => jsonResponse(listBody));
+    assert.throws(
+      () => new ReisewarnungenClient({ baseUrl, transport: mt.transport }),
+      (err: unknown) =>
+        err instanceof ReiseNetworkError && /Unsupported protocol/.test(err.message),
+    );
+    assert.equal(mt.calls.length, 0);
+  }
+});
 
 test("list unwraps the response object", async () => {
   const mt = makeMockTransport(() => jsonResponse(listBody));
