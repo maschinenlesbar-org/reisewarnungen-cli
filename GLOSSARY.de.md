@@ -52,9 +52,11 @@ vollständigen Hinweise eines Landes, mit befülltem HTML-`content`. CLI: `get`.
 ## Antwortstruktur
 
 **`response`-Envelope.** Jede API-Antwort ist in ein oberstes `response`-Objekt
-eingebettet. Der Client packt es aus: `list()` liefert `response`; eine `200`-Antwort,
-deren Body der `response`-Envelope fehlt, wird als `ReiseParseError` gemeldet, statt als
-leerer Erfolg verschleiert zu werden.
+eingebettet. Der Client packt es aus: `list()` liefert `response`. Eine `200`-Antwort,
+deren Body kein solcher Envelope ist (`null`, `{}`, das JSON einer anderen API, ein
+`response`, das kein Objekt ist), wird bei `list`, `countries` **und** `get` als
+`ReiseParseError` (Exit `1`) gemeldet, statt als leerer Erfolg verschleiert oder als
+„nicht gefunden“ gemeldet zu werden.
 
 **`lastModified`.** Ein Envelope-Feld (ein Unix-Epoch-Zeitstempel in **Sekunden**),
 das neben den Ländereinträgen mitgeliefert wird – dem Namen nach der Zeitpunkt der letzten

@@ -147,7 +147,8 @@ mocked client and captured output — no subprocess.
 **Error types.** [`errors.ts`](src/client/errors.ts): `ReiseApiError` (non-2xx,
 carries `status`/`detail`), `ReiseNotFoundError` (a 2xx response with no matching
 entry; synthetic `status` 404), `ReiseNetworkError` (transport
-failure/timeout), `ReiseParseError` (bad JSON / missing envelope), all extending
+failure/timeout), `ReiseParseError` (bad JSON, or a 2xx body that is not the
+`{ "response": { … } }` envelope — on `list` and `get` alike), all extending
 `ReiseError`. The CLI maps a `404` (real or synthetic) to exit code `4`, other
 errors to `1`.
 

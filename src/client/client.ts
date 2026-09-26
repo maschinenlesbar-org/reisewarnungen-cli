@@ -12,8 +12,26 @@ import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from 
 const PATH = "/opendata/travelwarning";
 const enc = encodeURIComponent;
 
-interface Wrapped {
-  response: JsonObject;
+/** A non-null, non-array JSON object. */
+function isObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function shapeError(path: string, expected: string): ReiseParseError {
+  return new ReiseParseError(`Unexpected response shape from ${path}: expected ${expected}.`);
+}
+
+/**
+ * The documented `{ "response": { ... } }` envelope, unwrapped. A 2xx body that is
+ * not such an envelope (null, an array, `{}`, another API's JSON) is a broken or
+ * wrong-API response, not an empty result: it raises ReiseParseError rather than
+ * reading as "no data" or "not found".
+ */
+function unwrap(body: unknown, path: string): JsonObject {
+  if (!isObject(body) || !isObject(body["response"])) {
+    throw shapeError(path, 'a JSON object with a "response" object');
+  }
+  return body["response"];
 }
 
 export class ReisewarnungenClient {
@@ -25,14 +43,7 @@ export class ReisewarnungenClient {
 
   /** The raw `response`: a `lastModified` timestamp plus one entry per country. */
   async list(): Promise<TravelWarningList> {
-    const res = await this.engine.getJson<Wrapped>(PATH);
-    // A 200 whose body lacks the documented `response` envelope is a broken or
-    // wrong-API response, not an empty list: surface it as a parse error rather
-    // than masking the data loss as a clean empty success.
-    if (!res || typeof res.response !== "object" || res.response === null || Array.isArray(res.response)) {
-      throw new ReiseParseError(`Unexpected response shape from ${PATH}: missing "response" envelope`);
-    }
-    return res.response;
+    return unwrap(await this.engine.getJson<unknown>(PATH), PATH);
   }
 
   /**
@@ -58,8 +69,9 @@ export class ReisewarnungenClient {
   /**
    * One country's full travel warning (the HTML `content` is populated here).
    *
-   * Throws {@link ReiseNotFoundError} when the (2xx) response contains no entry
-   * for `contentId`, so an absent country is observable rather than masked as an
+   * Throws {@link ReiseParseError} when the body is not the `{ "response": {...} }`
+   * envelope, and {@link ReiseNotFoundError} when the (2xx) envelope contains no
+   * entry for `contentId`, so an absent country is observable rather than masked as an
    * empty success. The single-warning endpoint keys its one entry under the
    * content id; as a tolerance for that key ever differing, a *sole* non-
    * `lastModified` object entry is accepted as the result, but an ambiguous
@@ -67,8 +79,8 @@ export class ReisewarnungenClient {
    * different country than requested.
    */
   async get(contentId: string): Promise<TravelWarning> {
-    const res = await this.engine.getJson<Wrapped>(`${PATH}/${enc(contentId)}`);
-    const response = res.response ?? {};
+    const path = `${PATH}/${enc(contentId)}`;
+    const response = unwrap(await this.engine.getJson<unknown>(path), path);
 
     const direct = response[contentId];
     if (direct && typeof direct === "object" && !Array.isArray(direct)) {

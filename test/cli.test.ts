@@ -111,6 +111,18 @@ test("get on a 200-but-empty envelope maps to exit code 4 (not-found)", async ()
   assert.ok(cli.err.join("\n").includes("226768"));
 });
 
+test("get on a body without the response envelope is a parse error (exit 1), not exit 4", async () => {
+  for (const body of [null, {}, { data: { items: [] } }]) {
+    const cli = makeCli(() => jsonResponse(body));
+    const code = await run(["get", "100"], cli.deps);
+    assert.equal(code, 1, JSON.stringify(body));
+    assert.equal(
+      cli.err.join("\n"),
+      'Error: Unexpected response shape from /opendata/travelwarning/100: expected a JSON object with a "response" object.',
+    );
+  }
+});
+
 test("a network failure maps to exit code 1", async () => {
   const cli = makeCli(() => {
     throw new ReiseNetworkError("connection reset");

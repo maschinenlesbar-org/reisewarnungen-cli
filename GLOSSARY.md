@@ -53,9 +53,11 @@ one country's full advice, with the HTML `content` populated. CLI: `get`.
 ## Response shape
 
 **`response` envelope.** Every API response is wrapped in a top-level `response`
-object. The client unwraps it: `list()` returns `response`; a `200` whose body
-lacks the `response` envelope is surfaced as a `ReiseParseError` rather than
-masked as an empty success.
+object. The client unwraps it: `list()` returns `response`. A `200` whose body
+is not such an envelope (`null`, `{}`, another API's JSON, a `response` that is
+not an object) is surfaced as a `ReiseParseError` (exit `1`) on `list`,
+`countries` **and** `get`, rather than masked as an empty success or reported as
+"not found".
 
 **`lastModified`.** An envelope member (a Unix-epoch timestamp, in
 **seconds**) carried alongside the country entries — nominally when the dataset

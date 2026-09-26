@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ReisewarnungenClient } from "../src/client/client.js";
-import { ReiseApiError, ReiseNetworkError, ReiseNotFoundError } from "../src/client/errors.js";
+import {
+  ReiseApiError,
+  ReiseNetworkError,
+  ReiseNotFoundError,
+  ReiseParseError,
+} from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse } from "./helpers.js";
 
 function clientWith(mt: ReturnType<typeof makeMockTransport>): ReisewarnungenClient {
@@ -73,9 +78,27 @@ test("get throws ReiseNotFoundError when the 200 response has no object entry", 
   );
 });
 
-test("get throws ReiseNotFoundError when the response is an empty envelope", async () => {
-  const mt = makeMockTransport(() => jsonResponse({}));
-  await assert.rejects(() => clientWith(mt).get("226768"), ReiseNotFoundError);
+test("get and list reject a body that is not the response envelope (ReiseParseError)", async () => {
+  // null, {}, another API's JSON, a response array: a broken or wrong-API answer,
+  // never "not found" (exit 4) nor an untyped TypeError.
+  for (const body of [null, {}, { data: { items: [] } }, { response: [1, 2] }, [1], "x"]) {
+    const mt = makeMockTransport(() => jsonResponse(body));
+    await assert.rejects(
+      () => clientWith(mt).get("226768"),
+      (err: unknown) =>
+        err instanceof ReiseParseError &&
+        err.message ===
+          'Unexpected response shape from /opendata/travelwarning/226768: expected a JSON object with a "response" object.',
+      JSON.stringify(body),
+    );
+    await assert.rejects(
+      () => clientWith(mt).list(),
+      (err: unknown) =>
+        err instanceof ReiseParseError &&
+        /^Unexpected response shape from \/opendata\/travelwarning: expected a JSON object/.test(err.message),
+      JSON.stringify(body),
+    );
+  }
 });
 
 test("get does NOT return the wrong country when the response is ambiguous (multi-entry)", async () => {
