@@ -271,6 +271,15 @@ test("--timeout accepts up to the largest timer Node supports", async () => {
   assert.match(over.err.join("\n"), /Must be <= 2147483647/);
 });
 
+test("--max-retries is bounded to 0..10", async () => {
+  const ok = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["--max-retries", "10", "list"], ok.deps), 0);
+  const over = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["--max-retries", "11", "list"], over.deps), 1);
+  assert.equal(over.mt.calls.length, 0);
+  assert.match(over.err.join("\n"), /Must be <= 10/);
+});
+
 test("--max-redirects is parsed and passed through to the client", async () => {
   let seen: number | undefined;
   const deps: CliDeps = {

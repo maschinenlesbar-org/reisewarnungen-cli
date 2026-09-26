@@ -68,7 +68,7 @@ one whose entries sit under other keys throws `ReiseParseError` rather than gues
 new ReisewarnungenClient({
   baseUrl: "https://www.auswaertiges-amt.de",
   timeoutMs: 15_000,
-  maxRetries: 3,              // 429 / 503 are retried with linear backoff
+  maxRetries: 3,              // 429 / 503: waits Retry-After (<= 30 s), else linear backoff
   maxResponseBytes: 50 << 20, // abort responses larger than 50 MiB (0 = unlimited)
   userAgent: "my-app/1.0",
   transport: customTransport, // inject your own HTTP transport
@@ -152,7 +152,10 @@ failure/timeout), `ReiseParseError` (bad JSON, or a 2xx body that is not the
 errors to `1`.
 
 **Retry / backoff.** Transient `429` (rate limited) and `503` responses are
-retried automatically with linear backoff (`--max-retries`, default `2`).
+retried automatically (`--max-retries`, `0`–`10`, default `2`). Each retry waits
+the response's `Retry-After` (delay-seconds or an IMF-fixdate, parsed strictly by the
+exported `parseRetryAfter`); without a usable one the delay is `retryDelayMs * attempt`.
+A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s) is not retried: the error surfaces at once.
 `ReiseApiError` exposes `isRetryable` (true for `429`/`503`).
 
 **maxResponseBytes.** A hard cap on the response body size (default 100 MiB;

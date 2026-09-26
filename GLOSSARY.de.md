@@ -140,8 +140,10 @@ vorhanden, erscheint also in Ergebnissen von `get`, nicht bei `list` /
 Schlüssel, Token oder Login. Der Client liest nur; er schreibt nichts.
 
 **Retry / Backoff.** Vorübergehende Antworten `429` (Rate-Limit) und `503` werden
-automatisch mit linearem Backoff wiederholt (`--max-retries`, Standard `2`; die
-Grundwartezeit wächst mit jedem Versuch).
+automatisch wiederholt (`--max-retries`, `0`–`10`, Standard `2`). Jede Wiederholung wartet
+das `Retry-After` des Servers ab (Sekunden oder ein HTTP-Datum); ohne verwertbaren Wert
+wächst die Wartezeit linear (200 ms, 400 ms, …). Ein `Retry-After` über 30 s wird nicht
+abgewartet: Der Fehler wird sofort gemeldet.
 
 **Weiterleitungen.** Die Engine folgt bis zu `maxRedirects` (Standard `5`)
 HTTP-Weiterleitungen (`301/302/303/307/308`) und löst `Location` relativ zur aktuellen

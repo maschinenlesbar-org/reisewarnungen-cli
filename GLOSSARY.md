@@ -141,8 +141,10 @@ single-warning endpoint, so it appears on `get` results, not on `list` /
 or login. The client only reads; it issues no writes.
 
 **Retry / backoff.** Transient `429` (rate limited) and `503` responses are
-retried automatically with linear backoff (`--max-retries`, default `2`;
-base delay grows with each attempt).
+retried automatically (`--max-retries`, `0`–`10`, default `2`). Each retry waits
+the server's `Retry-After` (seconds or an HTTP date); without a usable one the
+delay grows linearly (200 ms, 400 ms, …). A `Retry-After` above 30 s is not
+waited out: the error is reported at once.
 
 **Redirects.** The engine follows up to `maxRedirects` (default `5`) HTTP
 redirects (`301/302/303/307/308`), resolving `Location` relative to the current
