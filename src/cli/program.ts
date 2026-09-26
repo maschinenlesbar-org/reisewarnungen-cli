@@ -49,7 +49,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .option("--base-url <url>", "API base URL", parseBaseUrl, "https://www.auswaertiges-amt.de")
     .option(
       "--timeout <ms>",
-      "time limit per request in milliseconds, whole response included",
+      "time limit per request in milliseconds, whole response included (0 = no limit; default 30000)",
       parseBoundedInt(0, MAX_TIMEOUT_MS),
     )
     .option("--user-agent <ua>", "User-Agent header value (non-blank, Latin-1, no control characters)", parseHeaderValue)

@@ -353,6 +353,12 @@ test("--max-retries is bounded to 0..10", async () => {
   assert.match(over.err.join("\n"), /Must be <= 10/);
 });
 
+test("--help says that --timeout 0 means no limit", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["--help"], cli.deps), 0);
+  assert.match(cli.out.join("\n").replace(/\s+/g, " "), /--timeout <ms> .*\(0 = no limit; default 30000\)/);
+});
+
 test("--max-redirects is parsed and passed through to the client", async () => {
   let seen: number | undefined;
   const deps: CliDeps = {
