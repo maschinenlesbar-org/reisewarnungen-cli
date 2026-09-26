@@ -44,8 +44,9 @@ export class ReiseApiError extends ReiseError {
 
 /**
  * A requested entry was not present in an otherwise successful (2xx) response.
- * The upstream may answer `200` with an empty or differently-keyed envelope
+ * The upstream may answer `200` with an envelope holding no country entry
  * instead of a `404`; this surfaces that absence as a typed, observable error.
+ * (An envelope whose entries sit under other keys is a ReiseParseError instead.)
  * Carries a synthetic `status` of 404 so the CLI maps it to the same exit code
  * as a real upstream 404.
  */

@@ -62,12 +62,19 @@ test("get builds the per-id path and unwraps the matching entry", async () => {
   assert.equal(warning.content, "<p>hi</p>");
 });
 
-test("get falls back to a sole entry when the id key is absent", async () => {
+test("get never returns a sole entry keyed by another id (a different country)", async () => {
   const mt = makeMockTransport(() =>
-    jsonResponse({ response: { lastModified: 1, "999": { countryName: "Y" } } }),
+    jsonResponse({
+      response: { lastModified: 1, "999": { countryName: "OtherCountry" }, contentList: ["999"] },
+    }),
   );
-  const warning = await clientWith(mt).get("226768");
-  assert.equal(warning.countryName, "Y");
+  await assert.rejects(
+    () => clientWith(mt).get("226768"),
+    (err: unknown) =>
+      err instanceof ReiseParseError &&
+      err.message ===
+        'Unexpected response shape from /opendata/travelwarning/226768: expected the entry for content id "226768", got country entries under other keys only.',
+  );
 });
 
 test("get throws ReiseNotFoundError when the 200 response has no object entry", async () => {
@@ -101,9 +108,7 @@ test("get and list reject a body that is not the response envelope (ReiseParseEr
   }
 });
 
-test("get does NOT return the wrong country when the response is ambiguous (multi-entry)", async () => {
-  // The id is absent and there is more than one object entry: the old eager
-  // firstEntry fallback would hand back an unrelated country; now it is a miss.
+test("get does NOT return the wrong country when the response holds several other entries", async () => {
   const mt = makeMockTransport(() =>
     jsonResponse({
       response: {
@@ -113,7 +118,7 @@ test("get does NOT return the wrong country when the response is ambiguous (mult
       },
     }),
   );
-  await assert.rejects(() => clientWith(mt).get("226768"), ReiseNotFoundError);
+  await assert.rejects(() => clientWith(mt).get("226768"), ReiseParseError);
 });
 
 test("get returns the matching entry even when other entries are present", async () => {

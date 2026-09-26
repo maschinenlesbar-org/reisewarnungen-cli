@@ -154,14 +154,16 @@ URL. On a **cross-origin** redirect it strips sensitive headers
 `0` disables it) that aborts the request if exceeded, defending against memory
 exhaustion from a hostile or buggy endpoint.
 
-**Sole-entry tolerance.** On `get`, the single-warning endpoint normally keys its
-one entry under the requested content id. As a tolerance for that key ever
-differing, a *sole* non-`lastModified` object entry is accepted as the result;
-but an ambiguous (multi-entry) or empty response is treated as **not found**
-rather than risk returning a different country than requested.
+**Entry lookup on `get`.** The single-warning endpoint keys its one entry under
+the requested content id, and `get` returns **only** that entry. An envelope with
+no country entry at all is **not found** (`ReiseNotFoundError`, exit `4`); one
+whose country entries sit under other keys is a broken answer (`ReiseParseError`,
+exit `1`), never read as the requested country — a travel-safety tool must not
+answer with a different country. (Earlier versions accepted a *sole* entry under
+any key.)
 
 ---
 
 > **Library & internals.** Terms for the TypeScript client and its internals —
 > `ReisewarnungenClient`, the request engine, transport, retry/backoff, error
-> types, sole-entry tolerance — now live in **[DEVELOPING.md](DEVELOPING.md)**.
+> types, the `get` entry lookup — now live in **[DEVELOPING.md](DEVELOPING.md)**.

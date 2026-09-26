@@ -123,6 +123,16 @@ test("get on a body without the response envelope is a parse error (exit 1), not
   }
 });
 
+test("get on an envelope keyed by another id exits 1 and prints no country", async () => {
+  const cli = makeCli(() =>
+    jsonResponse({ response: { "999": { countryName: "OtherCountry" }, contentList: ["999"] } }),
+  );
+  const code = await run(["get", "100"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(cli.out.length, 0);
+  assert.match(cli.err.join("\n"), /expected the entry for content id "100"/);
+});
+
 test("a network failure maps to exit code 1", async () => {
   const cli = makeCli(() => {
     throw new ReiseNetworkError("connection reset");

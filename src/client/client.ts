@@ -71,41 +71,24 @@ export class ReisewarnungenClient {
    *
    * Throws {@link ReiseParseError} when the body is not the `{ "response": {...} }`
    * envelope, and {@link ReiseNotFoundError} when the (2xx) envelope contains no
-   * entry for `contentId`, so an absent country is observable rather than masked as an
-   * empty success. The single-warning endpoint keys its one entry under the
-   * content id; as a tolerance for that key ever differing, a *sole* non-
-   * `lastModified` object entry is accepted as the result, but an ambiguous
-   * (multi-entry) response is treated as not-found rather than risk returning a
-   * different country than requested.
+   * country entry at all, so an absent country is observable rather than masked as
+   * an empty success. Only the entry keyed by `contentId` is ever returned: an
+   * envelope whose country entries sit under other keys is a wrong answer
+   * (ReiseParseError), never read as the requested country.
    */
   async get(contentId: string): Promise<TravelWarning> {
     const path = `${PATH}/${enc(contentId)}`;
     const response = unwrap(await this.engine.getJson<unknown>(path), path);
 
-    const direct = response[contentId];
-    if (direct && typeof direct === "object" && !Array.isArray(direct)) {
-      return direct as TravelWarning;
+    const direct = Object.hasOwn(response, contentId) ? response[contentId] : undefined;
+    if (isObject(direct)) return direct as TravelWarning;
+
+    if (Object.values(response).some(isObject)) {
+      throw shapeError(
+        path,
+        `the entry for content id "${contentId}", got country entries under other keys only`,
+      );
     }
-
-    const sole = this.soleEntry(response);
-    if (sole) return sole as TravelWarning;
-
     throw new ReiseNotFoundError(contentId);
-  }
-
-  /**
-   * The single non-`lastModified` object entry of a response, or `undefined`
-   * when there is none or more than one (an ambiguous match is not returned).
-   */
-  private soleEntry(response: JsonObject): JsonObject | undefined {
-    let found: JsonObject | undefined;
-    for (const [key, value] of Object.entries(response)) {
-      if (key === "lastModified") continue;
-      if (value && typeof value === "object" && !Array.isArray(value)) {
-        if (found) return undefined; // more than one entry -> ambiguous
-        found = value;
-      }
-    }
-    return found;
   }
 }

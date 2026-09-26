@@ -52,16 +52,15 @@ try {
   await client.get("does-not-exist");
 } catch (err) {
   // Upstream may answer with a 404 (ReiseApiError) or a 200 whose envelope holds
-  // no matching entry (ReiseNotFoundError). Both signal "not found".
+  // no country entry (ReiseNotFoundError). Both signal "not found".
   if (err instanceof ReiseApiError) console.error(err.status, err.detail);
   if (err instanceof ReiseNotFoundError) console.error("not found:", err.contentId);
 }
 ```
 
-`get(contentId)` resolves to the matching entry, tolerating the single-warning
-endpoint keying its sole entry under a different id, but it **never** returns a
-different country than requested: an ambiguous (multi-entry) or empty response
-throws `ReiseNotFoundError` rather than guessing.
+`get(contentId)` resolves to the entry keyed by `contentId` and **never** to a
+different country: an envelope with no country entry throws `ReiseNotFoundError`,
+one whose entries sit under other keys throws `ReiseParseError` rather than guessing.
 
 ### Client options
 
@@ -160,11 +159,13 @@ retried automatically with linear backoff (`--max-retries`, default `2`).
 `0` disables it) that aborts the request if exceeded, defending against memory
 exhaustion from a hostile or buggy endpoint.
 
-**Sole-entry tolerance.** On `get`, the single-warning endpoint normally keys its
-one entry under the requested content id. As a tolerance for that key ever
-differing, a *sole* non-`lastModified` object entry is accepted as the result;
-but an ambiguous (multi-entry) or empty response is treated as **not found**
-rather than risk returning a different country than requested.
+**Entry lookup on `get`.** The single-warning endpoint keys its one entry under
+the requested content id, and `get` returns **only** that entry. An envelope with
+no country entry at all is **not found** (`ReiseNotFoundError`, exit `4`); one
+whose country entries sit under other keys is a broken answer (`ReiseParseError`,
+exit `1`), never read as the requested country — a travel-safety tool must not
+answer with a different country. (Earlier versions accepted a *sole* entry under
+any key.)
 
 **Query builder.** [`buildQueryString`](src/client/query.ts) — a dependency-free
 serialiser: omits `undefined`/`null`, repeats keys for arrays, renders booleans
@@ -179,7 +180,7 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`query.test.ts`** — query-string serialisation.
 - **`http.test.ts`** — the default transport against a real loopback `http.createServer`.
 - **`engine.test.ts`** — URL building, JSON decoding, error mapping, 429/503 retry, redirects — mocked transport.
-- **`client.test.ts`** — response unwrapping, the flattened `summaries()` view, the `get` sole-entry tolerance and its not-found / ambiguous-match handling — mocked transport.
+- **`client.test.ts`** — response unwrapping, the flattened `summaries()` view, the `get` entry lookup (not-found vs. entries under other keys) — mocked transport.
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, and exit codes (network/parse → 1, not-found → 4) — mocked client.
 
 ## Continuous integration

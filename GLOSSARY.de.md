@@ -153,14 +153,16 @@ URL auf. Bei einer Weiterleitung auf einen **anderen Origin** entfernt sie sensi
 100 MiB; `0` schaltet sie ab), bei deren Überschreiten die Anfrage abgebrochen wird – zum
 Schutz vor Speichererschöpfung durch einen feindseligen oder fehlerhaften Endpoint.
 
-**Toleranz für Einzeleinträge.** Bei `get` legt der Einzel-Endpoint seinen einen Eintrag
-normalerweise unter der angefragten Content-ID ab. Für den Fall, dass dieser Schlüssel
-einmal abweicht, wird ein *einziger* Objekteintrag außer `lastModified` als Ergebnis
-akzeptiert; eine mehrdeutige (mehrere Einträge) oder leere Antwort gilt dagegen als
-**nicht gefunden**, statt womöglich ein anderes Land als das angefragte zurückzugeben.
+**Eintragssuche bei `get`.** Der Einzel-Endpoint legt seinen einen Eintrag unter der
+angefragten Content-ID ab, und `get` liefert **nur** diesen Eintrag. Ein Envelope ganz ohne
+Ländereintrag gilt als **nicht gefunden** (`ReiseNotFoundError`, Exit `4`); einer, dessen
+Ländereinträge unter anderen Schlüsseln stehen, ist eine fehlerhafte Antwort
+(`ReiseParseError`, Exit `1`) und wird nie als das angefragte Land gelesen – ein Werkzeug
+für Reisesicherheit darf nicht mit einem anderen Land antworten. (Frühere Versionen
+akzeptierten einen *einzigen* Eintrag unter beliebigem Schlüssel.)
 
 ---
 
 > **Bibliothek & Interna.** Begriffe zum TypeScript-Client und seinen Interna –
 > `ReisewarnungenClient`, die Request-Engine, Transport, Retry/Backoff, Fehlertypen,
-> Toleranz für Einzeleinträge – finden Sie jetzt in **[DEVELOPING.md](DEVELOPING.md)** (englisch).
+> die Eintragssuche bei `get` – finden Sie jetzt in **[DEVELOPING.md](DEVELOPING.md)** (englisch).
