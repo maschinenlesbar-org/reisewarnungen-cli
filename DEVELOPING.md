@@ -49,7 +49,7 @@ const warned = countries.filter((c) => c.warning);
 const detail = await client.get(countries[0]!.id);   // full warning incl. HTML content
 
 try {
-  await client.get("does-not-exist");
+  await client.get("999999999");
 } catch (err) {
   // Upstream may answer with a 404 (ReiseApiError) or a 200 whose envelope holds
   // no country entry (ReiseNotFoundError). Both signal "not found".
@@ -58,7 +58,8 @@ try {
 }
 ```
 
-`get(contentId)` resolves to the entry keyed by `contentId` and **never** to a
+`get(contentId)` rejects a `contentId` that is not all ASCII digits (`ReiseError`,
+no request; the check is exported as `assertContentId`) and resolves to the entry keyed by `contentId` and **never** to a
 different country: an envelope with no country entry throws `ReiseNotFoundError`,
 one whose entries sit under other keys throws `ReiseParseError` rather than guessing.
 

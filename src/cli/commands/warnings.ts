@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import type { CliDeps } from "../io.js";
 import { action, renderJson } from "../shared.js";
 import { ReiseApiError, ReiseError } from "../../client/errors.js";
+import { assertContentId } from "../../client/client.js";
 
 /**
  * Exit code 4 means "country not found". The list endpoint has no country in its
@@ -60,11 +61,7 @@ export function registerWarningCommands(program: Command, deps: CliDeps): void {
         // a *leading* integer — so `get 226768x` would otherwise silently return
         // 226768's country. Rejecting non-numeric ids keeps that consistent
         // (every malformed id is a usage error, not a surprise hit or a 404).
-        if (!/^\d+$/.test(id ?? "")) {
-          throw new ReiseError(
-            `Invalid contentId "${id ?? ""}". Expected a numeric content id (e.g. 226768).`,
-          );
-        }
+        assertContentId(id ?? "");
         renderJson(deps, global, await client.get(id!));
       }),
     );

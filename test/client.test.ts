@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { ReisewarnungenClient } from "../src/client/client.js";
 import {
   ReiseApiError,
+  ReiseError,
   ReiseNetworkError,
   ReiseNotFoundError,
   ReiseParseError,
@@ -139,7 +140,21 @@ test("get returns the matching entry even when other entries are present", async
 test("a 404 raises ReiseApiError with status 404", async () => {
   const mt = makeMockTransport(() => jsonResponse({}, 404));
   await assert.rejects(
-    () => clientWith(mt).get("nope"),
+    () => clientWith(mt).get("999999"),
     (err) => err instanceof ReiseApiError && err.status === 404,
   );
+});
+
+test("get rejects a non-numeric content id before any request (no dot segments)", async () => {
+  for (const id of ["..", ".", "", " 1", "226768x", "%2e%2e", "__proto__", "１２"]) {
+    const mt = makeMockTransport(() => jsonResponse({ response: {} }));
+    await assert.rejects(
+      () => clientWith(mt).get(id),
+      (err: unknown) =>
+        err instanceof ReiseError &&
+        err.message === `Invalid contentId ${JSON.stringify(id)}. Expected a numeric content id (e.g. 226768).`,
+      id,
+    );
+    assert.equal(mt.calls.length, 0, id);
+  }
 });

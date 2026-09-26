@@ -6,11 +6,26 @@
 //   client.get("226768")     // one country's full warning (HTML content)
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
-import { ReiseNotFoundError, ReiseParseError } from "./errors.js";
+import { ReiseError, ReiseNotFoundError, ReiseParseError } from "./errors.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
 
 const PATH = "/opendata/travelwarning";
 const enc = encodeURIComponent;
+
+/**
+ * Check a content id before it becomes a path segment. Content ids are numeric (the
+ * keys of `list()`, the `id` of `summaries()`), so only ASCII digits pass: `""`,
+ * `"."` and `".."` would otherwise reach the list endpoint or its parent directory
+ * (URL dot-segment normalisation), and the upstream reads a *leading* integer
+ * leniently (`226768x` returns 226768's country). Throws ReiseError.
+ */
+export function assertContentId(contentId: string): void {
+  if (typeof contentId !== "string" || !/^\d+$/.test(contentId)) {
+    throw new ReiseError(
+      `Invalid contentId ${JSON.stringify(String(contentId))}. Expected a numeric content id (e.g. 226768).`,
+    );
+  }
+}
 
 /** A non-null, non-array JSON object. */
 function isObject(value: unknown): value is JsonObject {
@@ -74,9 +89,11 @@ export class ReisewarnungenClient {
    * country entry at all, so an absent country is observable rather than masked as
    * an empty success. Only the entry keyed by `contentId` is ever returned: an
    * envelope whose country entries sit under other keys is a wrong answer
-   * (ReiseParseError), never read as the requested country.
+   * (ReiseParseError), never read as the requested country. A `contentId` that is
+   * not all ASCII digits is rejected with a ReiseError before any request.
    */
   async get(contentId: string): Promise<TravelWarning> {
+    assertContentId(contentId);
     const path = `${PATH}/${enc(contentId)}`;
     const response = unwrap(await this.engine.getJson<unknown>(path), path);
 

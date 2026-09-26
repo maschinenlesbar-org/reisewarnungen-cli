@@ -83,8 +83,9 @@ von `summaries()` – die abgeflachte Array-Ansicht der Liste.
 **Content-ID (`contentId`).** Der numerische String-Schlüssel, unter dem der Eintrag
 eines Landes in der `response`-Zuordnung liegt (z. B. `226768`). Er ist das Feld `id`
 eines `CountryEntry` und das Pflichtargument von `get <contentId>`. Er ist *kein*
-ISO-Ländercode. Eine leere Content-ID wird als Aufruffehler abgelehnt, statt an die
-Quelle gesendet zu werden.
+ISO-Ländercode. Alles außer ASCII-Ziffern (leer, `226768x`, `..`) wird vor jeder Anfrage
+abgelehnt – von der CLI wie vom `get()` der Bibliothek –, statt an die Quelle gesendet zu
+werden, die eine führende Zahl großzügig liest oder `..` zu einem anderen Pfad auflöst.
 
 **countryCode.** Der zweibuchstabige Ländercode nach ISO 3166-1 alpha-2, z. B. `TH`,
 `JO`. Kosovo, das keinen offiziellen ISO-Code hat, trägt `XK`.

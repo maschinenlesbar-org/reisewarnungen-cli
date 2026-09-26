@@ -1,6 +1,6 @@
 // Public entry point for the API client library.
 
-export { ReisewarnungenClient } from "./client.js";
+export { ReisewarnungenClient, assertContentId } from "./client.js";
 export { RequestEngine, DEFAULT_BASE_URL, MAX_RETRY_AFTER_MS, parseRetryAfter } from "./engine.js";
 export type { EngineOptions, RawResponse } from "./engine.js";
 export { MAX_TIMEOUT_MS, nodeHttpTransport } from "./http.js";
