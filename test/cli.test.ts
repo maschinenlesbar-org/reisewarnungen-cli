@@ -104,6 +104,19 @@ test("a 404 from the API maps to exit code 4", async () => {
   assert.equal(code, 4);
 });
 
+test("a 404 on list/countries is exit 1 (the endpoint is missing), not 4 (country not found)", async () => {
+  for (const command of ["list", "countries"]) {
+    const cli = makeCli(() => jsonResponse({}, 404));
+    const code = await run([command], cli.deps);
+    assert.equal(code, 1, command);
+    assert.equal(
+      cli.err.join("\n"),
+      "Error: HTTP 404 for GET https://www.auswaertiges-amt.de/opendata/travelwarning " +
+        "(the travel-warning list itself was not found: a wrong --base-url, or the API moved)",
+    );
+  }
+});
+
 test("get on a 200-but-empty envelope maps to exit code 4 (not-found)", async () => {
   const cli = makeCli(() => jsonResponse({ response: { lastModified: 1 } }));
   const code = await run(["get", "226768"], cli.deps);

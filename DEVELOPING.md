@@ -148,8 +148,9 @@ carries `status`/`detail`), `ReiseNotFoundError` (a 2xx response with no matchin
 entry; synthetic `status` 404), `ReiseNetworkError` (transport
 failure/timeout), `ReiseParseError` (bad JSON, or a 2xx body that is not the
 `{ "response": { … } }` envelope — on `list` and `get` alike), all extending
-`ReiseError`. The CLI maps a `404` (real or synthetic) to exit code `4`, other
-errors to `1`.
+`ReiseError`. The CLI maps a `404` (real or synthetic) on `get` to exit code `4`,
+other errors to `1` — including a `404` on `list`/`countries`, where it means the
+endpoint itself is missing, not a country.
 
 **Retry / backoff.** Transient `429` (rate limited) and `503` responses are
 retried automatically (`--max-retries`, `0`–`10`, default `2`). Each retry waits

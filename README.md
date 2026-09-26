@@ -138,7 +138,7 @@ do the same thing.
 | Code | Meaning |
 | --- | --- |
 | `0` | success (also `--help` / `--version`) |
-| `4` | country not found — upstream `404` or a `get` whose response holds no country entry |
+| `4` | country not found — `get` got an upstream `404` or a response holding no country entry (a `404` on `list`/`countries` means the endpoint itself is missing: exit `1`) |
 | `1` | any other error — including bad usage / invalid arguments |
 
 ## Troubleshooting

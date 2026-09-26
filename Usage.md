@@ -163,6 +163,6 @@ traversal guard (you own your shell). An existing file is **not** overwritten
 unless you pass `--force`; a directory is refused with `"<path>" is a directory;
 give a file path to --output.` (exit 1).
 
-Exit codes: `0` success, `4` when a country is not found, `1` for any other
-error; usage errors use commander's own non-zero code, while `--help` /
+Exit codes: `0` success, `4` when `get` finds no such country, `1` for any other
+error (a `404` on `list`/`countries` is `1`: the endpoint itself is missing); usage errors use commander's own non-zero code, while `--help` /
 `--version` exit `0`.

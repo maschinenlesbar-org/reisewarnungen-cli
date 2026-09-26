@@ -1,7 +1,27 @@
 import type { Command } from "commander";
 import type { CliDeps } from "../io.js";
 import { action, renderJson } from "../shared.js";
-import { ReiseError } from "../../client/errors.js";
+import { ReiseApiError, ReiseError } from "../../client/errors.js";
+
+/**
+ * Exit code 4 means "country not found". The list endpoint has no country in its
+ * path, so a 404 there means the endpoint itself is missing (a wrong --base-url, or
+ * the API moved): report it as a plain error (exit 1) instead of letting run() map
+ * the 404 to 4.
+ */
+async function listRequest<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (err) {
+    if (err instanceof ReiseApiError && err.status === 404) {
+      throw new ReiseError(
+        `${err.message} (the travel-warning list itself was not found: a wrong --base-url, or the API moved)`,
+        { cause: err },
+      );
+    }
+    throw err;
+  }
+}
 
 export function registerWarningCommands(program: Command, deps: CliDeps): void {
   program
@@ -9,7 +29,7 @@ export function registerWarningCommands(program: Command, deps: CliDeps): void {
     .description("All travel warnings, keyed by content id (raw response)")
     .action(
       action(deps, async ({ client, global }) => {
-        renderJson(deps, global, await client.list());
+        renderJson(deps, global, await listRequest(() => client.list()));
       }),
     );
 
@@ -19,7 +39,7 @@ export function registerWarningCommands(program: Command, deps: CliDeps): void {
     .option("--warned-only", "only countries with a warning of any kind in force")
     .action(
       action(deps, async ({ client, global, opts }) => {
-        let entries = await client.summaries();
+        let entries = await listRequest(() => client.summaries());
         if (opts["warnedOnly"]) {
           entries = entries.filter(
             (e) => e.warning || e.partialWarning || e.situationWarning || e.situationPartWarning,
