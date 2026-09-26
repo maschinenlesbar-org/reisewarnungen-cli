@@ -53,6 +53,15 @@ test("summaries flattens to an array with ids and drops lastModified", async () 
   assert.equal(entries.find((e) => e.id === "100")?.countryName, "Atlantis");
 });
 
+test("summaries keeps the map key as id even when an entry carries its own id field", async () => {
+  const mt = makeMockTransport(() =>
+    jsonResponse({ response: { "100": { countryName: "A", id: "555" } } }),
+  );
+  const entries = await clientWith(mt).summaries();
+  assert.deepEqual(entries, [{ id: "100", countryName: "A" }]);
+  assert.deepEqual(Object.keys(entries[0]!), ["id", "countryName"]); // id stays first
+});
+
 test("get builds the per-id path and unwraps the matching entry", async () => {
   const mt = makeMockTransport(() =>
     jsonResponse({ response: { lastModified: 1, "226768": { countryName: "X", content: "<p>hi</p>" } } }),

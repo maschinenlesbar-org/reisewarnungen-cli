@@ -75,7 +75,10 @@ export class ReisewarnungenClient {
       // than relying on the (incidental) object-vs-array shape check below.
       if (id === "lastModified" || id === "contentList") continue;
       if (value && typeof value === "object" && !Array.isArray(value)) {
-        entries.push({ id, ...(value as TravelWarning) });
+        // The map key is the content id (what get() accepts): an `id` field inside
+        // the entry must not replace it. It stays the first key of the entry.
+        const { id: _entryId, ...fields } = value as TravelWarning & { id?: unknown };
+        entries.push({ id, ...fields });
       }
     }
     return entries;
