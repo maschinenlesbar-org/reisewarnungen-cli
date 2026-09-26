@@ -325,6 +325,25 @@ test("--timeout accepts up to the largest timer Node supports", async () => {
   assert.match(over.err.join("\n"), /Must be <= 2147483647/);
 });
 
+test("--user-agent rejects blank, control and non-Latin-1 values before any request", async () => {
+  const cases: [string, RegExp][] = [
+    ["", /Expected a non-empty value\./],
+    ["   ", /Expected a non-empty value\./],
+    ["a" + String.fromCharCode(0x0d, 0x0a) + "X-Evil: 1", /Value contains control characters\./],
+    ["agent \u2603", /Value contains characters outside Latin-1 \(above U\+00FF\)\./],
+  ];
+  for (const [ua, message] of cases) {
+    const cli = makeCli(() => jsonResponse(listBody));
+    const code = await run(["--user-agent", ua, "list"], cli.deps);
+    assert.equal(code, 1, JSON.stringify(ua));
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), message);
+  }
+  const ok = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["--user-agent", "my-app/1.0\tü", "list"], ok.deps), 0);
+  assert.equal(ok.mt.last().headers?.["User-Agent"], "my-app/1.0\tü");
+});
+
 test("--max-retries is bounded to 0..10", async () => {
   const ok = makeCli(() => jsonResponse(listBody));
   assert.equal(await run(["--max-retries", "10", "list"], ok.deps), 0);
