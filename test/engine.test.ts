@@ -52,6 +52,17 @@ test("the constructor rejects a malformed base URL with a clear, base-only messa
   );
 });
 
+test("the constructor rejects a base URL with a query or fragment", () => {
+  for (const baseUrl of ["https://example.test/?x=1", "https://example.test/a#f"]) {
+    assert.throws(
+      () => new RequestEngine({ baseUrl }),
+      (err: unknown) =>
+        err instanceof ReiseNetworkError &&
+        err.message === `Base URL must not contain a query or fragment: ${baseUrl.replace(/\/+$/, "")}`,
+    );
+  }
+});
+
 test("the constructor rejects a non-http(s) base URL before any request", () => {
   // A library consumer may inject its own transport, which need not check the
   // scheme; the engine itself must never hand it a file:/ftp: base URL.

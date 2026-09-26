@@ -283,6 +283,20 @@ test("--base-url rejects a non-http(s) scheme at parse time, never fetching", as
   assert.match(cli.err.join("\n"), /base URLs are supported|is invalid/);
 });
 
+test("--base-url rejects a query or fragment at parse time", async () => {
+  for (const url of ["http://127.0.0.1:1/ok#frag", "http://127.0.0.1:1/ok?x=1", "http://h/?"]) {
+    const cli = makeCli(() => jsonResponse(listBody));
+    const code = await run(["--base-url", url, "list"], cli.deps);
+    assert.equal(code, 1, url);
+    assert.equal(cli.mt.calls.length, 0);
+    assert.match(cli.err.join("\n"), /A base URL cannot have a query \(\?\) or fragment \(#\)\./);
+  }
+  // a path prefix (a mirror) still works
+  const ok = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["--base-url", "http://mirror.test/aa/", "list"], ok.deps), 0);
+  assert.equal(ok.mt.last().url, "http://mirror.test/aa/opendata/travelwarning");
+});
+
 test("--base-url rejects a malformed URL at parse time", async () => {
   const cli = makeCli(() => jsonResponse(listBody));
   const code = await run(["--base-url", "notaurl", "list"], cli.deps);

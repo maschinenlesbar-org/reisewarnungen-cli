@@ -132,6 +132,12 @@ function assertHttpScheme(baseUrl: string): void {
       `Unsupported protocol "${url.protocol}" in base URL: ${baseUrl}`,
     );
   }
+  // Request paths are appended to the base URL as a string, so a `?` or `#` in it
+  // would swallow every path: `http://h/?x=1` requests `/?x=1/opendata/...` and
+  // `http://h/#f` requests `/`.
+  if (/[?#]/.test(baseUrl)) {
+    throw new ReiseNetworkError(`Base URL must not contain a query or fragment: ${baseUrl}`);
+  }
 }
 
 const realSleep = (ms: number): Promise<void> =>
