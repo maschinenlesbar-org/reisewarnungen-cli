@@ -19,7 +19,7 @@ body, the `id`-less `get` result) so Claude doesn't rediscover them each time.
 |---|---|---|
 | **reisewarnungen-trip-check** | Resolves a country name to its content id, classifies the warning level, and distils the long HTML advisory into a plain-language briefing. | "is it safe to travel to Thailand?", "travel warning for Egypt?", "I'm going to Kenya and Tanzania — any warnings?" |
 | **reisewarnungen-warned-overview** | Pulls every warned country and ranks/groups it by severity (full → regional), optionally filtered to a region. | "which countries have a travel warning?", "list all full travel warnings", "warned countries in Africa" |
-| **reisewarnungen-watch** | Saves dated snapshots and diffs two to surface newly-warned, lifted, and freshly-updated countries; or a freshness view from one snapshot. | "what warnings changed since last week?", "which advisories were updated recently?", "diff today against this snapshot" |
+| **reisewarnungen-watch** | Saves dated snapshots and diffs two to surface newly-warned, escalated (regional → full), downgraded, lifted and freshly-updated countries; or a freshness view from one snapshot. | "what warnings changed since last week?", "which advisories were updated recently?", "diff today against this snapshot" |
 
 ## Requirements
 

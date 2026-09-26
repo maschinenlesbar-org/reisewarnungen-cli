@@ -7,7 +7,8 @@ description: >
   "which countries had their advice updated recently?", "alert me to new travel
   warnings", "did the warning for X change?", or wants monitoring / a snapshot
   diff rather than a one-off lookup. Saves a dated snapshot and compares two to
-  surface newly-warned, lifted, and freshly-updated countries.
+  surface newly-warned, escalated, downgraded, lifted and freshly-updated
+  countries.
 compatibility: >
   Requires the `reisewarnungen` CLI (npm package
   @maschinenlesbar.org/reisewarnungen-cli) on PATH, installed by the user; the
@@ -55,25 +56,36 @@ For a freshness-only view (no prior snapshot) you can skip straight to Step 3.
 
 ## Step 2 — Diff two snapshots
 
-Given an old and a new snapshot, key both by `id` and compare. Three change classes:
+Given an old and a new snapshot, key both by `id` and compare. Each country has a
+warning **level**: `full` (`warning`), `partial` (`partialWarning`, or one of the
+situational flags `situationWarning` / `situationPartWarning`), or `none`. The change
+classes:
 
-- **Newly warned** — a country whose warned-status flipped to true (any of `warning`,
-  `partialWarning`, `situationWarning`, `situationPartWarning` went `false → true`), or a
-  country that escalated `partialWarning → warning`.
-- **Warning lifted / downgraded** — warned-status flipped to false, or `warning →
-  partialWarning`.
-- **Advisory updated** — flags unchanged but `lastModified` increased (the text was
-  revised).
+- **Newly warned** — level went from `none` (or the country was absent) to `partial`/`full`.
+- **Escalated** — both warned, level went up: `partial → full`.
+- **Downgraded** — both warned, level went down: `full → partial`.
+- **Lifted** — level went from `partial`/`full` to `none`, or the country left the
+  catalogue (`gone: true`).
+- **Flags changed, same level** — e.g. `partialWarning → situationPartWarning`; report it,
+  it is not a text-only edit.
+- **Advisory updated** — all four flags unchanged but `lastModified` increased (the text
+  was revised).
 
 ```bash
 # new vs old, both produced by Step 1
 jq -n --slurpfile old reisewarnungen-2026-06-04.json --slurpfile new reisewarnungen-2026-06-11.json '
   ($old[0] | map({key:.id, value:.}) | from_entries) as $o
   | ($new[0] | map({key:.id, value:.}) | from_entries) as $n
-  | def warned(c): (c.warning or c.partialWarning or c.situationWarning or c.situationPartWarning);
-  { newlyWarned: [ $n[] | select(warned(.) and (($o[.id]|.==null) or (warned($o[.id])|not))) | {id,countryName,countryCode} ],
-    lifted:      [ $o[] | select(warned(.) and (($n[.id]|.==null) or (warned($n[.id])|not))) | {id,countryName,countryCode} ],
-    updated:     [ $n[] | select($o[.id] != null and .lastModified > $o[.id].lastModified) | {id,countryName,lastModified} ] }'
+  | def level(c): if c == null then 0 elif c.warning == true then 2
+        elif (c.partialWarning or c.situationWarning or c.situationPartWarning) == true then 1 else 0 end;
+    def lname(l): ["none", "partial", "full"][l];
+    def flags(c): [c.warning, c.partialWarning, c.situationWarning, c.situationPartWarning] | map(. == true);
+  { newlyWarned:  [ $n[] | select(level(.) > 0 and level($o[.id]) == 0) | {id,countryName,countryCode,level:lname(level(.))} ],
+    escalated:    [ $n[] | select(level($o[.id]) > 0 and level(.) > level($o[.id])) | {id,countryName,countryCode,from:lname(level($o[.id])),to:lname(level(.))} ],
+    downgraded:   [ $n[] | select(level(.) > 0 and level($o[.id]) > level(.)) | {id,countryName,countryCode,from:lname(level($o[.id])),to:lname(level(.))} ],
+    lifted:       [ $o[] | select(level(.) > 0 and level($n[.id]) == 0) | {id,countryName,countryCode,from:lname(level(.)),gone:($n[.id] == null)} ],
+    flagsChanged: [ $n[] | select($o[.id] != null and level(.) == level($o[.id]) and flags(.) != flags($o[.id])) | {id,countryName,countryCode} ],
+    updated:      [ $n[] | select($o[.id] != null and flags(.) == flags($o[.id]) and .lastModified > $o[.id].lastModified) | {id,countryName,lastModified} ] }'
 ```
 
 > **Traps.**
@@ -83,6 +95,10 @@ jq -n --slurpfile old reisewarnungen-2026-06-04.json --slurpfile new reisewarnun
 >   `× 1000` for `Date`; a bare value like `1780665504` is June 2026.
 > - A pure `lastModified` bump means the advisory text changed but the warning *level* may
 >   not have — class it as "updated", not "new warning".
+> - Don't test only "warned or not" (any flag true): a `partial → full` escalation or a
+>   `full → partial` downgrade keeps that the same, and usually comes with a
+>   `lastModified` bump, so it would read as a same-level text update. Compare the
+>   **level** (and the four flags for "updated"), as the program above does.
 
 ## Step 3 — Freshness view (single snapshot, no diff)
 
@@ -104,23 +120,29 @@ change since DATE?", filter `select(.lastModified > (DATE|fromdate))`.
 ```
 Travel-warning changes, 4 Jun → 11 Jun 2026
 
-🆕 Newly warned (2)
+🆕 Newly warned (1)
    🟠 Peru (PE · 224…)        regional warning added
-   🔴 Mali (ML · 208258)      escalated: regional → full
 
-✅ Lifted / downgraded (1)
-   Tunesien (TN · …)          warning lifted → advice only
+⬆️  Escalated (1)
+   🔴 Mali (ML · 208258)      regional → full
+
+⬇️  Downgraded (1)
+   🟠 Tunesien (TN · …)       full → regional
+
+✅ Lifted (1)
+   Kenia (KE · …)             regional warning lifted → advice only
 
 ✏️  Advisory updated, same level (6)
    Thailand, Israel, Kenia, Guatemala, Botsuana, Palästinensische Gebiete*
 ```
 
 Rules:
-- **Lead with the escalations** (🆕 newly warned, and partial→full upgrades) — those are
-  what someone monitoring this cares about most.
-- Separate **level changes** (new / lifted / up- / downgraded) from **text-only updates**
-  (`lastModified` bumped, same flags). Don't let a routine editorial edit read as a new
-  warning.
+- **Lead with the escalations** (🆕 `newlyWarned`, then `escalated` partial → full) — those
+  are what someone monitoring this cares about most.
+- Separate **level changes** (`newlyWarned` / `escalated` / `downgraded` / `lifted`, plus
+  `flagsChanged`) from **text-only updates** (`updated`: `lastModified` bumped, same
+  flags). Don't let a routine editorial edit read as a new warning, and don't let a level
+  change read as a routine edit.
 - Give the German name + ISO code + content id so the user can drill in
   (`reisewarnungen get <id>`, or hand off to `reisewarnungen-trip-check`).
 - For a recurring watch, suggest saving today's `countries --compact` snapshot (Step 1)
