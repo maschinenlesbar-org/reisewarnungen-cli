@@ -92,6 +92,13 @@ boundary (different scheme, host, or port), the engine strips sensitive headers
 `WWW-Authenticate`) before following it, so any credentials set via custom
 headers are never forwarded to another host.
 
+**Redirects not followed.** Only `301/302/303/307/308` with a parseable `Location`
+are followed (up to `maxRedirects`; https->http and non-http(s) targets are refused
+with a `ReiseNetworkError`). Any other 3xx, a missing or malformed `Location`, and a
+hop past the limit throw a `ReiseApiError` whose `location` field and message name
+the target: `redirect to <url> not followed`, with `(stopped after N redirects)` when
+the limit stopped it, or `redirect not followed (no Location header)`.
+
 ## Architecture
 
 ```

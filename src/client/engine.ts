@@ -35,7 +35,11 @@ export interface EngineOptions {
   maxRetries?: number;
   /** Base backoff between retries in milliseconds (grows linearly); used without a Retry-After. */
   retryDelayMs?: number;
-  /** Number of HTTP redirects (301/302/303/307/308) to follow. Defaults to 5. */
+  /**
+   * Number of HTTP redirects (301/302/303/307/308) to follow. Defaults to 5. Any
+   * other 3xx, one with a missing or malformed Location, and one past this limit
+   * surface as a ReiseApiError naming the target.
+   */
   maxRedirects?: number;
   /**
    * Hard cap on response body size in bytes (defends against memory exhaustion
@@ -81,6 +85,13 @@ export function parseRetryAfter(
   const when = Date.parse(value);
   return Number.isNaN(when) ? undefined : Math.max(0, when - now);
 }
+
+/**
+ * The redirect statuses the engine follows. 300 (a choice for the user), 304 (a
+ * cache answer to a conditional request this client never sends) and 305/306
+ * (deprecated) are not redirects to follow; they surface as a ReiseApiError.
+ */
+const FOLLOWED_REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
 /** Headers stripped on a cross-origin redirect (lower-cased for comparison). */
 const SENSITIVE_HEADERS = new Set([
@@ -212,52 +223,58 @@ export class RequestEngine {
       }
 
       // Follow redirects, resolving the Location relative to the current URL.
-      if (status >= 300 && status < 400 && redirects < this.maxRedirects) {
-        const location = response.headers["location"];
-        if (typeof location === "string" && location.length > 0) {
-          const from = new URL(url);
-          const to = new URL(location, url);
-          // Enforce the http(s)-only allowlist for the redirect target in the
-          // engine itself, not only in the default transport. The CLI always uses
-          // nodeHttpTransport (which also rejects non-http(s) schemes), but
-          // Transport is a public injection seam: a library consumer supplying a
-          // custom transport must not be handed a file:/data:/ftp: URL taken from
-          // an attacker-controllable Location header.
-          if (to.protocol !== "https:" && to.protocol !== "http:") {
-            throw new ReiseNetworkError(
-              `Refusing to follow a redirect to an unsupported protocol "${to.protocol}": ${to.toString()}`,
-            );
-          }
-          // Refuse to follow a redirect that downgrades the connection security
-          // from https to http. `new URL(location, url)` would happily accept an
-          // absolute `http://...` Location, and the rest of the exchange would
-          // then proceed in cleartext even though the user targeted an https URL
-          // — letting an on-path attacker tamper the (safety-relevant)
-          // travel-warning data. Fail closed with a typed error instead.
-          if (from.protocol === "https:" && to.protocol === "http:") {
-            throw new ReiseNetworkError(
-              `Refusing to follow an insecure https->http redirect to ${to.toString()}`,
-            );
-          }
-          // Credential-strip guard: on a cross-origin redirect, drop any
-          // sensitive headers so credentials are never leaked to another host.
-          // The default headers (Accept, User-Agent) carry nothing sensitive,
-          // but this future-proofs against an Authorization/Cookie header being
-          // added by a consumer or subclass.
-          if (to.origin !== from.origin) {
-            for (const name of Object.keys(headers)) {
-              if (SENSITIVE_HEADERS.has(name.toLowerCase())) delete headers[name];
-            }
-          }
-          url = to.toString();
-          redirects += 1;
-          continue;
-        }
+      const location = response.headers["location"];
+      const next = FOLLOWED_REDIRECTS.has(status) ? resolveLocation(location, url) : undefined;
+      if (next !== undefined && redirects >= this.maxRedirects) {
+        // A loop (or a long chain): say how far it got rather than a bare 3xx.
+        // (With maxRedirects 0 nothing was followed; the plain text says enough.)
+        throw this.toApiError(method, url, status, response.body, location, redirects || undefined);
       }
+      if (next !== undefined) {
+        const from = new URL(url);
+        const to = next;
+        // Enforce the http(s)-only allowlist for the redirect target in the
+        // engine itself, not only in the default transport. The CLI always uses
+        // nodeHttpTransport (which also rejects non-http(s) schemes), but
+        // Transport is a public injection seam: a library consumer supplying a
+        // custom transport must not be handed a file:/data:/ftp: URL taken from
+        // an attacker-controllable Location header.
+        if (to.protocol !== "https:" && to.protocol !== "http:") {
+          throw new ReiseNetworkError(
+            `Refusing to follow a redirect to an unsupported protocol "${to.protocol}": ${to.toString()}`,
+          );
+        }
+        // Refuse to follow a redirect that downgrades the connection security
+        // from https to http. `new URL(location, url)` would happily accept an
+        // absolute `http://...` Location, and the rest of the exchange would
+        // then proceed in cleartext even though the user targeted an https URL
+        // — letting an on-path attacker tamper the (safety-relevant)
+        // travel-warning data. Fail closed with a typed error instead.
+        if (from.protocol === "https:" && to.protocol === "http:") {
+          throw new ReiseNetworkError(
+            `Refusing to follow an insecure https->http redirect to ${to.toString()}`,
+          );
+        }
+        // Credential-strip guard: on a cross-origin redirect, drop any
+        // sensitive headers so credentials are never leaked to another host.
+        // The default headers (Accept, User-Agent) carry nothing sensitive,
+        // but this future-proofs against an Authorization/Cookie header being
+        // added by a consumer or subclass.
+        if (to.origin !== from.origin) {
+          for (const name of Object.keys(headers)) {
+            if (SENSITIVE_HEADERS.has(name.toLowerCase())) delete headers[name];
+          }
+        }
+        url = to.toString();
+        redirects += 1;
+        continue;
+      }
+      // Any other 3xx — not a followed status, or no usable Location — falls
+      // through and surfaces as a ReiseApiError naming the target.
 
       const contentType = String(response.headers["content-type"] ?? "");
       if (status < 200 || status >= 300) {
-        throw this.toApiError(method, url, status, response.body);
+        throw this.toApiError(method, url, status, response.body, location);
       }
 
       return { data: response.body, contentType, status };
@@ -275,7 +292,14 @@ export class RequestEngine {
     }
   }
 
-  private toApiError(method: string, url: string, status: number, body: Buffer): ReiseApiError {
+  private toApiError(
+    method: string,
+    url: string,
+    status: number,
+    body: Buffer,
+    locationHeader?: string,
+    redirectsFollowed?: number,
+  ): ReiseApiError {
     const text = body.toString("utf8");
     let detail: string | undefined;
     try {
@@ -288,6 +312,38 @@ export class RequestEngine {
     // `detail` came from the response body; strip control characters so a hostile
     // endpoint cannot inject terminal escape sequences via the stderr error message.
     if (detail !== undefined) detail = sanitizeServerText(detail);
-    return new ReiseApiError({ status, url, method, body: text, detail });
+    // Name the target of a redirect that was not followed.
+    const location =
+      status >= 300 && status < 400 && locationHeader ? redirectTarget(url, locationHeader) : undefined;
+    return new ReiseApiError({
+      status,
+      url,
+      method,
+      body: text,
+      detail,
+      ...(location !== undefined ? { location } : {}),
+      ...(redirectsFollowed !== undefined ? { redirectsFollowed } : {}),
+    });
   }
+}
+
+/** Resolve a Location header against the current URL; undefined if missing or malformed. */
+function resolveLocation(location: string | undefined, base: string): URL | undefined {
+  if (location === undefined || location === "") return undefined;
+  try {
+    return new URL(location, base);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The absolute, printable form of a `Location` header: resolved against the request
+ * URL, control characters stripped (it is server text bound for stderr). An
+ * unparseable value is shown sanitised as it came.
+ */
+function redirectTarget(requestUrl: string, location: string): string | undefined {
+  const resolved = resolveLocation(location, requestUrl);
+  const clean = sanitizeServerText(resolved ? resolved.href : location).trim();
+  return clean === "" ? undefined : clean;
 }

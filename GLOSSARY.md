@@ -150,7 +150,11 @@ waited out: the error is reported at once.
 redirects (`301/302/303/307/308`), resolving `Location` relative to the current
 URL. On a **cross-origin** redirect it strips sensitive headers
 (`Authorization`, `Cookie`, `X-API-Key`, `Proxy-Authorization`,
-`WWW-Authenticate`) so credentials are never leaked to another host.
+`WWW-Authenticate`) so credentials are never leaked to another host. Any other
+3xx (`300`, `304`, …), a missing or malformed `Location`, and a redirect past the
+limit are not followed: the error names the target, e.g. `HTTP 302 for GET …:
+redirect to https://… not followed (stopped after 5 redirects)` or `redirect not
+followed (no Location header)` (exit `1`).
 
 **maxResponseBytes.** A hard cap on the response body size (default 100 MiB;
 `0` disables it) that aborts the request if exceeded, defending against memory

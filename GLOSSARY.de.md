@@ -149,7 +149,11 @@ abgewartet: Der Fehler wird sofort gemeldet.
 HTTP-Weiterleitungen (`301/302/303/307/308`) und löst `Location` relativ zur aktuellen
 URL auf. Bei einer Weiterleitung auf einen **anderen Origin** entfernt sie sensible Header
 (`Authorization`, `Cookie`, `X-API-Key`, `Proxy-Authorization`,
-`WWW-Authenticate`), damit Zugangsdaten nie an einen anderen Host gelangen.
+`WWW-Authenticate`), damit Zugangsdaten nie an einen anderen Host gelangen. Andere
+3xx-Antworten (`300`, `304`, …), ein fehlender oder ungültiger `Location`-Header und eine
+Weiterleitung über das Limit hinaus werden nicht verfolgt: Die Fehlermeldung nennt das Ziel,
+z. B. `HTTP 302 for GET …: redirect to https://… not followed (stopped after 5 redirects)`
+oder `redirect not followed (no Location header)` (Exit `1`).
 
 **maxResponseBytes.** Eine feste Obergrenze für die Größe des Antwortkörpers (Standard
 100 MiB; `0` schaltet sie ab), bei deren Überschreiten die Anfrage abgebrochen wird – zum

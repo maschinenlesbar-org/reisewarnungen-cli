@@ -291,15 +291,64 @@ test("exceeding maxRedirects surfaces a ReiseApiError instead of looping", async
     transport: mt.transport,
     maxRedirects: 2,
   });
-  await assert.rejects(() => e.getJson("/start"), ReiseApiError);
+  await assert.rejects(
+    () => e.getJson("/start"),
+    (err: unknown) =>
+      err instanceof ReiseApiError &&
+      err.location === "https://a.test/loop" &&
+      err.message ===
+        "HTTP 302 for GET https://a.test/loop: redirect to https://a.test/loop not followed (stopped after 2 redirects)",
+  );
   // initial request + 2 followed redirects = 3 transport calls, then it stops.
   assert.equal(mt.calls.length, 3);
+});
+
+test("with maxRedirects 0 a redirect is named but not called a loop", async () => {
+  const mt = makeMockTransport(() => redirectResponse("/next", 301));
+  const e = new RequestEngine({ baseUrl: "https://a.test", transport: mt.transport, maxRedirects: 0 });
+  await assert.rejects(
+    () => e.getJson("/start"),
+    (err: unknown) =>
+      err instanceof ReiseApiError &&
+      err.message === "HTTP 301 for GET https://a.test/start: redirect to https://a.test/next not followed",
+  );
+  assert.equal(mt.calls.length, 1);
+});
+
+test("a malformed Location surfaces as a ReiseApiError naming it, not a TypeError", async () => {
+  const mt = makeMockTransport(() => redirectResponse("http://[bad"));
+  const e = new RequestEngine({ baseUrl: "https://a.test", transport: mt.transport });
+  await assert.rejects(
+    () => e.getJson("/start"),
+    (err: unknown) =>
+      err instanceof ReiseApiError &&
+      err.message === "HTTP 302 for GET https://a.test/start: redirect to http://[bad not followed",
+  );
+  assert.equal(mt.calls.length, 1);
+});
+
+test("300, 304 and 305 are not followed", async () => {
+  for (const status of [300, 304, 305]) {
+    const mt = makeMockTransport(() => redirectResponse("https://a.test/other", status));
+    const e = new RequestEngine({ baseUrl: "https://a.test", transport: mt.transport });
+    await assert.rejects(
+      () => e.getJson("/start"),
+      (err: unknown) => err instanceof ReiseApiError && err.status === status,
+    );
+    assert.equal(mt.calls.length, 1, String(status));
+  }
 });
 
 test("a 3xx without a Location header is surfaced, not followed forever", async () => {
   const mt = makeMockTransport(() => redirectWithoutLocation());
   const e = new RequestEngine({ baseUrl: "https://a.test", transport: mt.transport });
-  await assert.rejects(() => e.getJson("/start"), ReiseApiError);
+  await assert.rejects(
+    () => e.getJson("/start"),
+    (err: unknown) =>
+      err instanceof ReiseApiError &&
+      err.location === undefined &&
+      err.message === "HTTP 302 for GET https://a.test/start: redirect not followed (no Location header)",
+  );
   assert.equal(mt.calls.length, 1);
 });
 

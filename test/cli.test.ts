@@ -146,6 +146,16 @@ test("get on an envelope keyed by another id exits 1 and prints no country", asy
   assert.match(cli.err.join("\n"), /expected the entry for content id "100"/);
 });
 
+test("a malformed redirect Location is a clean error (exit 1), not 'Unexpected error'", async () => {
+  const cli = makeCli(() => ({ status: 302, headers: { location: "http://[bad" }, body: Buffer.alloc(0) }));
+  const code = await run(["list"], cli.deps);
+  assert.equal(code, 1);
+  assert.equal(
+    cli.err.join("\n"),
+    "Error: HTTP 302 for GET https://www.auswaertiges-amt.de/opendata/travelwarning: redirect to http://[bad not followed",
+  );
+});
+
 test("a network failure maps to exit code 1", async () => {
   const cli = makeCli(() => {
     throw new ReiseNetworkError("connection reset");
