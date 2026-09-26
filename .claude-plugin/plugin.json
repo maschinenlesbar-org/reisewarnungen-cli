@@ -1,6 +1,6 @@
 {
   "name": "reisewarnungen",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Official German travel-warning intelligence skills powered by the reisewarnungen-cli (Auswärtiges Amt travel-warning API).",
   "author": {
     "name": "Sebastian Schürmann",
