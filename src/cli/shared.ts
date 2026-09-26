@@ -160,6 +160,7 @@ function writeOutputFile(deps: CliDeps, path: string, data: Buffer, force: boole
   try {
     deps.io.writeFile(path, data, force);
   } catch (cause) {
+    if (cause instanceof ReiseError) throw cause; // already a clean message (e.g. a directory)
     const code = (cause as { code?: unknown } | null)?.code;
     if (code === "EEXIST") {
       throw new ReiseError(

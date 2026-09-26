@@ -1,7 +1,8 @@
 // I/O seam for the CLI. Everything the CLI writes goes through a CliIO object so
 // tests can capture output instead of hitting the real stdout/stderr/filesystem.
 
-import { writeFileSync } from "node:fs";
+import { statSync, writeFileSync } from "node:fs";
+import { ReiseError } from "../client/errors.js";
 import type { ReisewarnungenClient } from "../client/client.js";
 import type { EngineOptions } from "../client/engine.js";
 
@@ -23,10 +24,29 @@ export interface CliDeps {
   createClient(options: EngineOptions): ReisewarnungenClient;
 }
 
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 export const defaultIO: CliIO = {
   out: (text) => process.stdout.write(text + "\n"),
   err: (text) => process.stderr.write(text + "\n"),
   // `wx` creates the file exclusively (errors if it already exists) unless the
   // caller opted into overwriting with --force, which uses the default `w` flag.
-  writeFile: (path, data, force) => writeFileSync(path, data, { flag: force ? "w" : "wx" }),
+  writeFile: (path, data, force) => {
+    try {
+      writeFileSync(path, data, { flag: force ? "w" : "wx" });
+    } catch (cause) {
+      const code = (cause as NodeJS.ErrnoException | undefined)?.code;
+      // `wx` answers EEXIST and `w` EISDIR for a directory; --force cannot help there.
+      if ((code === "EEXIST" || code === "EISDIR") && isDirectory(path)) {
+        throw new ReiseError(`"${path}" is a directory; give a file path to --output.`, { cause });
+      }
+      throw cause;
+    }
+  },
 };

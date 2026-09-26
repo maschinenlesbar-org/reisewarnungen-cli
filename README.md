@@ -168,6 +168,7 @@ These apply to every command and may be given before *or* after it:
 | `-h, --help` | Show help for the program or a command |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
 | `-o, --output <file>` | Write output to this file instead of stdout |
+| `--force` | Overwrite the `--output` file if it already exists |
 | `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`) |
 | `--timeout <ms>` | Time limit per request, reading the whole response included (default `30000`; at most `2147483647`) |
 | `--user-agent <ua>` | `User-Agent` header value |
@@ -176,7 +177,10 @@ These apply to every command and may be given before *or* after it:
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 
 The `-o/--output` path is **trusted input** — it is written verbatim with no
-traversal or overwrite guard (you own your shell).
+traversal guard (you own your shell). An existing file is **never overwritten**
+unless you pass `--force`: without it the CLI exits `1` with `Refusing to overwrite
+existing file …; pass --force to overwrite.` A path that is a directory exits `1`
+with `"<path>" is a directory; give a file path to --output.`
 
 ## Learn more
 

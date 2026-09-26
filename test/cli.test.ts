@@ -233,6 +233,23 @@ test("--output with --force overwrites an existing file", async () => {
   assert.notEqual(cli.files.get("out.json")?.toString(), "existing");
 });
 
+test("-o pointing at a directory says so (exit 1), not 'pass --force'", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { defaultIO } = await import("../src/cli/io.js");
+  const dir = mkdtempSync(join(tmpdir(), "reisewarnungen-cli-"));
+  try {
+    const cli = makeCli(() => jsonResponse(listBody));
+    cli.deps.io.writeFile = defaultIO.writeFile;
+    const code = await run(["-o", dir, "list"], cli.deps);
+    assert.equal(code, 1);
+    assert.equal(cli.err.join("\n"), `Error: "${dir}" is a directory; give a file path to --output.`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a failed --output write surfaces a clean error (exit 1), not 'Unexpected error'", async () => {
   const cli = makeCli(() => jsonResponse(listBody));
   cli.deps.io.writeFile = () => {
