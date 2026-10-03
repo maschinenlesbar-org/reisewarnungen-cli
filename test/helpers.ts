@@ -4,6 +4,9 @@
 
 import { mock } from "node:test";
 import type { Transport, HttpRequest, HttpResponse } from "../src/client/http.js";
+import type { CliDeps } from "../src/cli/io.js";
+import { run } from "../src/cli/run.js";
+import { defaultDeps } from "../src/cli/program.js";
 
 export function jsonResponse(body: unknown, status = 200): HttpResponse {
   return {
@@ -77,4 +80,58 @@ export function makeMockTransport(
 /** A transport that always returns the same JSON body. */
 export function constantJson(body: unknown, status = 200): MockTransport {
   return makeMockTransport(() => jsonResponse(body, status));
+}
+
+// ---- CLI <-> library parity ---------------------------------------------------
+
+/** What the CLI did with one input: exit code, captured output and requests. */
+export interface CliOutcome {
+  code: number;
+  out: string;
+  err: string;
+  requests: HttpRequest[];
+}
+
+/** What the library did with the same input: its value or error, and requests. */
+export type LibOutcome =
+  | { ok: true; value: unknown; requests: HttpRequest[] }
+  | { ok: false; error: unknown; requests: HttpRequest[] };
+
+/**
+ * Send one input through the CLI (`run(argv)` with the real client factory, on the
+ * mock transport) and through a library call (`call(transport)`, e.g.
+ * `(t) => new ReisewarnungenClient({ transport: t }).summaries()`), both on ONE
+ * recording mock transport. Returns both outcomes with the requests each side made,
+ * so a test can assert the same outcome: both reject with no request, or both send
+ * the identical request. A synchronous throw from the library call (constructor
+ * validation) is captured like a rejection. Files the CLI writes stay in memory.
+ */
+export async function parity(
+  argv: string[],
+  call: (transport: Transport) => unknown,
+  responder: (req: HttpRequest) => HttpResponse | Promise<HttpResponse> = () => jsonResponse({}),
+): Promise<{ cli: CliOutcome; lib: LibOutcome }> {
+  const mt = makeMockTransport(responder);
+  const out: string[] = [];
+  const err: string[] = [];
+  const deps: CliDeps = {
+    io: {
+      out: (s) => out.push(s),
+      err: (s) => err.push(s),
+      writeFile: () => {},
+    },
+    createClient: (opts) => defaultDeps.createClient({ ...opts, transport: mt.transport }),
+  };
+  const code = await run(argv, deps);
+  const cliRequests = mt.calls.slice();
+  const cli: CliOutcome = { code, out: out.join("\n"), err: err.join("\n"), requests: cliRequests };
+
+  let lib: LibOutcome;
+  try {
+    const value = await call(mt.transport);
+    lib = { ok: true, value, requests: mt.calls.slice(cliRequests.length) };
+  } catch (error) {
+    lib = { ok: false, error, requests: mt.calls.slice(cliRequests.length) };
+  }
+  return { cli, lib };
 }

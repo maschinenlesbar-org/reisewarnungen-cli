@@ -109,7 +109,8 @@ src/
     query.ts     # dependency-free query-string builder
     http.ts      # the Transport interface + default node:http/https transport
     engine.ts    # URL building, retry/backoff, redirects (cross-origin credential strip), JSON decoding, error mapping
-    errors.ts    # ReiseError / ReiseApiError / ReiseNetworkError / ReiseParseError
+    errors.ts    # ReiseError / ReiseApiError / ReiseNetworkError / ReiseParseError / ReiseValidationError
+    validate.ts  # input rules (Problem functions) + assertValid, shared with the CLI
     client.ts    # ReisewarnungenClient — list / summaries / get over the engine
   cli/
     io.ts        # injectable I/O seam (stdout/stderr/file)
@@ -155,10 +156,23 @@ mocked client and captured output — no subprocess.
 carries `status`/`detail`), `ReiseNotFoundError` (a 2xx response with no matching
 entry; synthetic `status` 404), `ReiseNetworkError` (transport
 failure/timeout), `ReiseParseError` (bad JSON, or a 2xx body that is not the
-`{ "response": { … } }` envelope — on `list` and `get` alike), all extending
-`ReiseError`. The CLI maps a `404` (real or synthetic) on `get` to exit code `4`,
-other errors to `1` — including a `404` on `list`/`countries`, where it means the
-endpoint itself is missing, not a country.
+`{ "response": { … } }` envelope — on `list` and `get` alike) and
+`ReiseValidationError` (an input the library rejects before any request), all
+extending `ReiseError`. The CLI maps a `404` (real or synthetic) on `get` to exit
+code `4`, other errors to `1` — including a `404` on `list`/`countries`, where it
+means the endpoint itself is missing, not a country, and a `ReiseValidationError`,
+which gets the same exit code commander gives a usage error.
+
+**Input validation.** Every rule about what a request may contain lives in the
+library, in [`validate.ts`](src/client/validate.ts) or next to the option it
+guards, as an exported `…Problem(value)` function that returns the reason a value
+is invalid (or `undefined`). The library enforces it with `assertValid(name,
+value, problem)`, which throws `ReiseValidationError` with the message
+`Invalid <name>: <reason>` before any request (methods that return a promise
+reject; constructors throw). The CLI's option parsers call the same functions and
+turn the reason into a usage error, so the CLI keeps no rules of its own. Tests
+check this with the `parity()` helper in `test/helpers.ts`, which sends one input
+through `run()` and through the library on one recording mock transport.
 
 **Retry / backoff.** Transient `429` (rate limited) and `503` responses are
 retried automatically (`--max-retries`, `0`–`10`, default `2`). Each retry waits
@@ -193,6 +207,7 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`http.test.ts`** — the default transport against a real loopback `http.createServer`.
 - **`engine.test.ts`** — URL building, JSON decoding, error mapping, 429/503 retry, redirects — mocked transport.
 - **`client.test.ts`** — response unwrapping, the flattened `summaries()` view, the `get` entry lookup (not-found vs. entries under other keys) — mocked transport.
+- **`validate.test.ts`** — `assertValid`, the `ReiseValidationError` exit-code mapping and the `parity()` helper.
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, and exit codes (network/parse → 1, not-found → 4) — mocked client.
 
 ## Continuous integration

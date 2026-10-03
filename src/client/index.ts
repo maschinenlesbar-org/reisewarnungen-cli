@@ -7,12 +7,15 @@ export { MAX_TIMEOUT_MS, nodeHttpTransport } from "./http.js";
 export type { Transport, HttpRequest, HttpResponse } from "./http.js";
 export { buildQueryString } from "./query.js";
 export type { QueryParams, QueryValue } from "./query.js";
+export { assertValid } from "./validate.js";
+export type { Problem } from "./validate.js";
 export {
   ReiseError,
   ReiseApiError,
   ReiseNotFoundError,
   ReiseNetworkError,
   ReiseParseError,
+  ReiseValidationError,
 } from "./errors.js";
 
 export * from "./types.js";

@@ -5,7 +5,7 @@
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import type { CliDeps } from "./io.js";
-import { ReiseApiError, ReiseError, ReiseNotFoundError } from "../client/errors.js";
+import { ReiseApiError, ReiseError, ReiseNotFoundError, ReiseValidationError } from "../client/errors.js";
 
 /**
  * Apply exitOverride + output redirection to every command in the tree.
@@ -57,6 +57,12 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
     if (err instanceof CommanderError) {
       // Help/version requests exit 0; genuine parse errors carry their own code.
       return err.exitCode;
+    }
+    if (err instanceof ReiseValidationError) {
+      // The library rejected an input before any request: a usage error, with the
+      // exit code commander gives a value its parsers reject (1).
+      deps.io.err(`Error: ${err.message}`);
+      return 1;
     }
     if (err instanceof ReiseApiError) {
       deps.io.err(`Error: ${err.message}`);
