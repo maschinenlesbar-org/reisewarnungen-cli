@@ -124,3 +124,38 @@ test("parity: in-range engine options send the identical request from CLI and li
   assert.deepEqual(cli.requests, lib.requests);
   assert.deepEqual(JSON.parse(cli.out), lib.value);
 });
+
+// ---- Finding #2 (PAT-5): the User-Agent value ----------------------------------
+
+const badUserAgents: Array<[string, RegExp]> = [
+  ["", /^Invalid userAgent: Expected a non-empty value\.$/],
+  ["   ", /^Invalid userAgent: Expected a non-empty value\.$/],
+  ["a\r\nX-Evil: 1", /^Invalid userAgent: Value contains control characters\.$/],
+  ["a\u0000b", /^Invalid userAgent: Value contains control characters\.$/],
+  ["a\u007f", /^Invalid userAgent: Value contains control characters\.$/],
+  ["€-agent", /^Invalid userAgent: Value contains characters outside Latin-1 \(above U\+00FF\)\.$/],
+];
+
+for (const [ua, message] of badUserAgents) {
+  test(`parity: User-Agent ${JSON.stringify(ua)} is rejected by CLI and library alike`, async () => {
+    const { cli, lib } = await parity(
+      ["--compact", "--user-agent", ua, "list"],
+      (transport) => new ReisewarnungenClient({ transport, userAgent: ua }).list(),
+      () => jsonResponse(listBody),
+    );
+    assertBothReject(cli, lib, message);
+  });
+}
+
+test("parity: a tab and Latin-1 in the User-Agent are sent identically by CLI and library", async () => {
+  const ua = "my-app/1.0\tü";
+  const { cli, lib } = await parity(
+    ["--compact", "--user-agent", ua, "list"],
+    (transport) => new ReisewarnungenClient({ transport, userAgent: ua }).list(),
+    () => jsonResponse(listBody),
+  );
+  assert.equal(cli.code, 0, cli.err);
+  assert.ok(lib.ok);
+  assert.deepEqual(cli.requests, lib.requests);
+  assert.equal(lib.requests[0]!.headers?.["User-Agent"], ua);
+});

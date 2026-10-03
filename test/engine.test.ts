@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_RETRIES, MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter } from "../src/client/engine.js";
+import {
+  MAX_RETRIES,
+  MAX_RETRY_AFTER_MS,
+  RequestEngine,
+  assertHeaderValue,
+  parseRetryAfter,
+} from "../src/client/engine.js";
 import { MAX_TIMEOUT_MS } from "../src/client/http.js";
 import { ReiseApiError, ReiseNetworkError, ReiseParseError, ReiseValidationError } from "../src/client/errors.js";
 import {
@@ -388,4 +394,23 @@ test("the constructor range-checks the numeric options before any request", () =
   // 0 keeps its documented meaning (no timeout, no retries, no backoff, no redirects, no cap).
   new RequestEngine({ timeoutMs: 0, maxRetries: 0, retryDelayMs: 0, maxRedirects: 0, maxResponseBytes: 0 });
   new RequestEngine({ timeoutMs: MAX_TIMEOUT_MS, maxRetries: MAX_RETRIES, maxRedirects: 50 });
+});
+
+test("the constructor rejects an unsendable userAgent before any request", () => {
+  for (const [userAgent, reason] of [
+    ["", "Expected a non-empty value."],
+    ["  ", "Expected a non-empty value."],
+    ["a\r\nb", "Value contains control characters."],
+    ["a\u007f", "Value contains control characters."],
+    ["€", "Value contains characters outside Latin-1 (above U+00FF)."],
+  ] as const) {
+    const mt = makeMockTransport(() => jsonResponse({}));
+    assert.throws(
+      () => new RequestEngine({ transport: mt.transport, userAgent }),
+      (err: unknown) => err instanceof ReiseValidationError && (err as Error).message === `Invalid userAgent: ${reason}`,
+      JSON.stringify(userAgent),
+    );
+    assert.equal(mt.calls.length, 0);
+  }
+  assert.equal(assertHeaderValue("userAgent", "my-app/1.0\tü"), "my-app/1.0\tü");
 });

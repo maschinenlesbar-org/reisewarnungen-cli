@@ -5,7 +5,7 @@
 import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import { ReiseApiError, ReiseNetworkError, ReiseParseError } from "./errors.js";
-import { assertValid, intInRangeProblem } from "./validate.js";
+import { assertValid, headerValueProblem, intInRangeProblem } from "./validate.js";
 
 export const DEFAULT_BASE_URL = "https://www.auswaertiges-amt.de";
 
@@ -24,7 +24,10 @@ export interface EngineOptions {
   baseUrl?: string;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
   transport?: Transport;
-  /** Value of the User-Agent header. */
+  /**
+   * Value of the User-Agent header: non-blank Latin-1 without control characters
+   * (tab allowed). Defaults to "reisewarnungen-cli".
+   */
   userAgent?: string;
   /**
    * Time limit per request in milliseconds, covering the whole response body, not
@@ -163,6 +166,14 @@ function assertHttpScheme(baseUrl: string): void {
 }
 
 /**
+ * Check a value bound for an HTTP header (headerValueProblem) and return it, or
+ * throw a ReiseValidationError (`Invalid <name>: Value contains control characters.`).
+ */
+export function assertHeaderValue(name: string, value: string): string {
+  return assertValid(name, value, headerValueProblem);
+}
+
+/**
  * A numeric engine option: `fallback` when undefined, else an integer in 0..max, or
  * a ReiseValidationError (`Invalid <name>: ...`). A negative, NaN or fractional
  * value would otherwise silently disable the timeout or the size cap, and NaN or
@@ -190,7 +201,10 @@ export class RequestEngine {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     assertHttpScheme(this.baseUrl);
     this.transport = options.transport ?? nodeHttpTransport;
-    this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
+    // Only undefined selects the default; a blank or unsendable value is refused
+    // here rather than sent blank or failing late with Node's raw TypeError.
+    this.userAgent =
+      options.userAgent === undefined ? DEFAULT_USER_AGENT : assertHeaderValue("userAgent", options.userAgent);
     // Range-check the numeric options before any request (see intOption).
     const anyInt = Number.MAX_SAFE_INTEGER;
     this.timeoutMs = intOption("timeoutMs", options.timeoutMs, MAX_TIMEOUT_MS, 30_000);

@@ -96,3 +96,11 @@ test("enforces maxResponseBytes", async () => {
     },
   );
 });
+
+test("an unsendable header value rejects with ReiseNetworkError, not Node's raw TypeError", async () => {
+  // Node checks header values synchronously, before connecting, so no server is needed.
+  await assert.rejects(
+    nodeHttpTransport({ method: "GET", url: "http://127.0.0.1:9/", headers: { "User-Agent": "a\r\nb" } }),
+    (err: unknown) => err instanceof ReiseNetworkError && /^Invalid request: /.test((err as Error).message),
+  );
+});

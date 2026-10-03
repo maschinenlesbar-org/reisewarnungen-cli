@@ -85,6 +85,15 @@ fractional value would otherwise switch the timeout or the size cap off, and `Na
 `Infinity` would leave retries or redirects unbounded. The rule is the exported
 `intOption` / `intInRangeProblem`; the CLI's flags use the same one.
 
+`userAgent` goes into an HTTP header, so the constructor checks it too
+(`assertHeaderValue` / `headerValueProblem`): a blank value, a C0 control character
+other than tab (CR/LF included), DEL, or a character above U+00FF throws
+`ReiseValidationError` (`Invalid userAgent: Value contains control characters.`)
+instead of being sent blank, passed to a custom transport as is, or failing late
+with Node's raw `TypeError`. Only an omitted `userAgent` selects the default
+(`reisewarnungen-cli`). The default transport also turns any header Node refuses
+into a `ReiseNetworkError` (`Invalid request: …`).
+
 ### Methods
 
 `client.list()` (raw `response` map), `client.summaries()` (flattened array with ids),
