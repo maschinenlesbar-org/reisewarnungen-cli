@@ -76,6 +76,15 @@ new ReisewarnungenClient({
 });
 ```
 
+The constructor range-checks the numeric options before any request and throws
+`ReiseValidationError` (`Invalid maxRetries: Must be <= 10.`) for anything else:
+`timeoutMs` an integer `0`..`MAX_TIMEOUT_MS` (2^31 - 1), `maxRetries` `0`..`MAX_RETRIES`
+(10), and `maxRedirects`, `maxResponseBytes` and `retryDelayMs` non-negative integers.
+`undefined` keeps the default and `0` its documented meaning. A negative, `NaN` or
+fractional value would otherwise switch the timeout or the size cap off, and `NaN` or
+`Infinity` would leave retries or redirects unbounded. The rule is the exported
+`intOption` / `intInRangeProblem`; the CLI's flags use the same one.
+
 ### Methods
 
 `client.list()` (raw `response` map), `client.summaries()` (flattened array with ids),
@@ -184,7 +193,7 @@ check this with the `parity()` helper in `test/helpers.ts`, which sends one inpu
 through `run()` and through the library on one recording mock transport.
 
 **Retry / backoff.** Transient `429` (rate limited) and `503` responses are
-retried automatically (`--max-retries`, `0`–`10`, default `2`). Each retry waits
+retried automatically (`--max-retries` / `maxRetries`, `0`–`MAX_RETRIES` (10), default `2`). Each retry waits
 the response's `Retry-After` (delay-seconds or an IMF-fixdate, parsed strictly by the
 exported `parseRetryAfter`); without a usable one the delay is `retryDelayMs * attempt`.
 A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s) is not retried: the error surfaces at once.

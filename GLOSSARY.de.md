@@ -144,7 +144,8 @@ vorhanden, erscheint also in Ergebnissen von `get`, nicht bei `list` /
 Schlüssel, Token oder Login. Der Client liest nur; er schreibt nichts.
 
 **Retry / Backoff.** Vorübergehende Antworten `429` (Rate-Limit) und `503` werden
-automatisch wiederholt (`--max-retries`, `0`–`10`, Standard `2`). Jede Wiederholung wartet
+automatisch wiederholt (`--max-retries` / `maxRetries`, `0`–`10` (`MAX_RETRIES`),
+Standard `2`). Jede Wiederholung wartet
 das `Retry-After` des Servers ab (Sekunden oder ein HTTP-Datum); ohne verwertbaren Wert
 wächst die Wartezeit linear (200 ms, 400 ms, …). Ein `Retry-After` über 30 s wird nicht
 abgewartet: Der Fehler wird sofort gemeldet.
@@ -162,6 +163,13 @@ oder `redirect not followed (no Location header)` (Exit `1`).
 **maxResponseBytes.** Eine feste Obergrenze für die Größe des Antwortkörpers (Standard
 100 MiB; `0` schaltet sie ab), bei deren Überschreiten die Anfrage abgebrochen wird – zum
 Schutz vor Speichererschöpfung durch einen feindseligen oder fehlerhaften Endpoint.
+
+**Engine-Grenzen prüft die Bibliothek.** `timeoutMs` (`0`–`MAX_TIMEOUT_MS`),
+`maxRetries` (`0`–`MAX_RETRIES`) sowie `maxRedirects`, `maxResponseBytes` und
+`retryDelayMs` (nicht negativ) müssen ganze Zahlen sein. Der Client-Konstruktor lehnt
+jeden anderen Wert – negativ, gebrochen, `NaN`, `Infinity`, über der Obergrenze – vor
+jeder Anfrage mit einem `ReiseValidationError` ab, sodass ein falscher Wert nie eine
+Grenze abschaltet. Die Flags der CLI wenden dieselbe Regel an.
 
 **Eintragssuche bei `get`.** Der Einzel-Endpoint legt seinen einen Eintrag unter der
 angefragten Content-ID ab, und `get` liefert **nur** diesen Eintrag. Ein Envelope ganz ohne

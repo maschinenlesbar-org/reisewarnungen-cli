@@ -146,7 +146,8 @@ single-warning endpoint, so it appears on `get` results, not on `list` /
 or login. The client only reads; it issues no writes.
 
 **Retry / backoff.** Transient `429` (rate limited) and `503` responses are
-retried automatically (`--max-retries`, `0`–`10`, default `2`). Each retry waits
+retried automatically (`--max-retries` / `maxRetries`, `0`–`10` (`MAX_RETRIES`),
+default `2`). Each retry waits
 the server's `Retry-After` (seconds or an HTTP date); without a usable one the
 delay grows linearly (200 ms, 400 ms, …). A `Retry-After` above 30 s is not
 waited out: the error is reported at once.
@@ -164,6 +165,13 @@ followed (no Location header)` (exit `1`).
 **maxResponseBytes.** A hard cap on the response body size (default 100 MiB;
 `0` disables it) that aborts the request if exceeded, defending against memory
 exhaustion from a hostile or buggy endpoint.
+
+**Engine limits are checked by the library.** `timeoutMs` (`0`–`MAX_TIMEOUT_MS`),
+`maxRetries` (`0`–`MAX_RETRIES`), and `maxRedirects`, `maxResponseBytes` and
+`retryDelayMs` (non-negative) must be integers. The client constructor rejects any
+other value — negative, fractional, `NaN`, `Infinity`, above the cap — with a
+`ReiseValidationError` before any request, so a bad value can never switch a limit
+off. The CLI's flags apply the same rule.
 
 **Entry lookup on `get`.** The single-warning endpoint keys its one entry under
 the requested content id, and `get` returns **only** that entry. An envelope with

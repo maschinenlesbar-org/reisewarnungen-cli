@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter } from "../src/client/engine.js";
-import { ReiseApiError, ReiseNetworkError, ReiseParseError } from "../src/client/errors.js";
+import { MAX_RETRIES, MAX_RETRY_AFTER_MS, RequestEngine, parseRetryAfter } from "../src/client/engine.js";
+import { MAX_TIMEOUT_MS } from "../src/client/http.js";
+import { ReiseApiError, ReiseNetworkError, ReiseParseError, ReiseValidationError } from "../src/client/errors.js";
 import {
   makeMockTransport,
   jsonResponse,
@@ -358,4 +359,33 @@ test("the User-Agent and Accept headers are sent", async () => {
   await e.getJson("/x");
   assert.equal(mt.last().headers?.["User-Agent"], "ua/1");
   assert.equal(mt.last().headers?.["Accept"], "application/json");
+});
+
+test("the constructor range-checks the numeric options before any request", () => {
+  for (const [options, message] of [
+    [{ timeoutMs: -1 }, "Invalid timeoutMs: Must be >= 0."],
+    [{ timeoutMs: NaN }, "Invalid timeoutMs: Expected an integer."],
+    [{ timeoutMs: MAX_TIMEOUT_MS + 1 }, `Invalid timeoutMs: Must be <= ${MAX_TIMEOUT_MS}.`],
+    [{ maxRetries: MAX_RETRIES + 1 }, `Invalid maxRetries: Must be <= ${MAX_RETRIES}.`],
+    [{ maxRetries: Infinity }, "Invalid maxRetries: Expected an integer."],
+    [{ maxRetries: 1.5 }, "Invalid maxRetries: Expected an integer."],
+    [{ maxRedirects: NaN }, "Invalid maxRedirects: Expected an integer."],
+    [{ maxRedirects: -1 }, "Invalid maxRedirects: Must be >= 0."],
+    [{ retryDelayMs: -5 }, "Invalid retryDelayMs: Must be >= 0."],
+    [{ retryDelayMs: Infinity }, "Invalid retryDelayMs: Expected an integer."],
+    [{ maxResponseBytes: 0.5 }, "Invalid maxResponseBytes: Expected an integer."],
+    [{ maxResponseBytes: -1 }, "Invalid maxResponseBytes: Must be >= 0."],
+  ] as const) {
+    const mt = makeMockTransport(() => jsonResponse({}));
+    assert.throws(
+      () => new RequestEngine({ ...options, transport: mt.transport }),
+      (err: unknown) => err instanceof ReiseValidationError && (err as Error).message === message,
+      JSON.stringify(options),
+    );
+    assert.equal(mt.calls.length, 0);
+  }
+  assert.equal(MAX_RETRIES, 10);
+  // 0 keeps its documented meaning (no timeout, no retries, no backoff, no redirects, no cap).
+  new RequestEngine({ timeoutMs: 0, maxRetries: 0, retryDelayMs: 0, maxRedirects: 0, maxResponseBytes: 0 });
+  new RequestEngine({ timeoutMs: MAX_TIMEOUT_MS, maxRetries: MAX_RETRIES, maxRedirects: 50 });
 });

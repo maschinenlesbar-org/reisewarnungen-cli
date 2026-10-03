@@ -29,3 +29,17 @@ export function assertValid<T>(name: string, value: T, problem: Problem<T>): T {
 /** A boolean option: only `true` or `false` (a truthy string such as "false" is not one). */
 export const booleanProblem: Problem = (value) =>
   typeof value === "boolean" ? undefined : "Expected true or false.";
+
+/**
+ * An integer in `min..max` (inclusive): a safe integer, so NaN, Infinity and
+ * fractions are rejected ("Expected an integer."), then the bounds
+ * ("Must be >= 0.", "Must be <= 10.").
+ */
+export function intInRangeProblem(min: number, max: number = Number.MAX_SAFE_INTEGER): Problem {
+  return (value) => {
+    if (typeof value !== "number" || !Number.isSafeInteger(value)) return "Expected an integer.";
+    if (value < min) return `Must be >= ${min}.`;
+    if (value > max) return `Must be <= ${max}.`;
+    return undefined;
+  };
+}

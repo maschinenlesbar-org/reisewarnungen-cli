@@ -5,6 +5,7 @@ import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
 import { ReiseError } from "../client/errors.js";
+import { intInRangeProblem } from "../client/validate.js";
 import type { EngineOptions } from "../client/engine.js";
 
 /**
@@ -28,12 +29,17 @@ export function parseIntArg(value: string): number {
   return n;
 }
 
-/** Build a commander value-parser for a base-10 integer constrained to [min, max]. */
+/**
+ * Build a commander value-parser for a base-10 integer constrained to [min, max].
+ * The range rule is the library's own `intInRangeProblem`; this only converts the
+ * string and turns the reason into a usage error.
+ */
 export function parseBoundedInt(min: number, max: number): (value: string) => number {
+  const problem = intInRangeProblem(min, max);
   return (value: string) => {
     const n = parseIntArg(value);
-    if (n < min) throw new InvalidArgumentError(`Must be >= ${min}.`);
-    if (n > max) throw new InvalidArgumentError(`Must be <= ${max}.`);
+    const reason = problem(n);
+    if (reason !== undefined) throw new InvalidArgumentError(reason);
     return n;
   };
 }
