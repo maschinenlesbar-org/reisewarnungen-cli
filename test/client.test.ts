@@ -30,7 +30,7 @@ test("the client rejects a non-http(s) base URL even with a custom transport", (
     assert.throws(
       () => new ReisewarnungenClient({ baseUrl, transport: mt.transport }),
       (err: unknown) =>
-        err instanceof ReiseNetworkError && /Unsupported protocol/.test(err.message),
+        err instanceof ReiseValidationError && !(err instanceof ReiseNetworkError),
     );
     assert.equal(mt.calls.length, 0);
   }

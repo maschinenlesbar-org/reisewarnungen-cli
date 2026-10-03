@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ReisewarnungenClient } from "../src/client/client.js";
-import { ReiseValidationError } from "../src/client/errors.js";
+import { ReiseNetworkError, ReiseValidationError } from "../src/client/errors.js";
 import type { EngineOptions } from "../src/client/engine.js";
 import { parity, jsonResponse, type CliOutcome, type LibOutcome } from "./helpers.js";
 
@@ -159,3 +159,41 @@ test("parity: a tab and Latin-1 in the User-Agent are sent identically by CLI an
   assert.deepEqual(cli.requests, lib.requests);
   assert.equal(lib.requests[0]!.headers?.["User-Agent"], ua);
 });
+
+// ---- Finding #4 (PAT-2): the base URL ------------------------------------------
+
+const badBaseUrls: Array<[string, string]> = [
+  ["ftp://h.example", 'Only "http:" and "https:" base URLs are supported.'],
+  ["https://h.example/?q=1", "A base URL cannot have a query (?) or fragment (#)."],
+  ["https://h.example/#f", "A base URL cannot have a query (?) or fragment (#)."],
+  ["", "Expected a valid absolute URL (e.g. https://host)."],
+  ["http://", "Expected a valid absolute URL (e.g. https://host)."],
+  ["notaurl", "Expected a valid absolute URL (e.g. https://host)."],
+];
+
+for (const [baseUrl, reason] of badBaseUrls) {
+  test(`parity: base URL ${JSON.stringify(baseUrl)} is rejected by CLI and library with one message`, async () => {
+    const { cli, lib } = await parity(
+      ["--compact", "--base-url", baseUrl, "list"],
+      (transport) => new ReisewarnungenClient({ baseUrl, transport }).list(),
+      () => jsonResponse(listBody),
+    );
+    const escaped = reason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assertBothReject(cli, lib, new RegExp(`^Invalid baseUrl: ${escaped}$`));
+    assert.ok(!(!lib.ok && lib.error instanceof ReiseNetworkError), "not a network error");
+    assert.ok(cli.err.includes(reason), cli.err);
+  });
+}
+
+for (const baseUrl of ["https://h.example//", "https://h.example/pre"]) {
+  test(`parity: base URL ${JSON.stringify(baseUrl)} sends the identical request from CLI and library`, async () => {
+    const { cli, lib } = await parity(
+      ["--compact", "--base-url", baseUrl, "list"],
+      (transport) => new ReisewarnungenClient({ baseUrl, transport }).list(),
+      () => jsonResponse(listBody),
+    );
+    assert.equal(cli.code, 0, cli.err);
+    assert.ok(lib.ok);
+    assert.deepEqual(cli.requests, lib.requests);
+  });
+}

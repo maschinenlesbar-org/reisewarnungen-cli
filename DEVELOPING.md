@@ -85,6 +85,14 @@ fractional value would otherwise switch the timeout or the size cap off, and `Na
 `Infinity` would leave retries or redirects unbounded. The rule is the exported
 `intOption` / `intInRangeProblem`; the CLI's flags use the same one.
 
+`baseUrl` must be an absolute `http:`/`https:` URL without a query or fragment (a
+path prefix is fine; trailing slashes are dropped). The constructor checks the raw
+value with the exported `validateBaseUrl` / `baseUrlProblem` and throws
+`ReiseValidationError` (`Invalid baseUrl: Only "http:" and "https:" base URLs are
+supported.`), a configuration error rather than a `ReiseNetworkError`, so retry
+logic for outages never retries it. The CLI's `--base-url` uses the same rule and
+messages.
+
 `userAgent` goes into an HTTP header, so the constructor checks it too
 (`assertHeaderValue` / `headerValueProblem`): a blank value, a C0 control character
 other than tab (CR/LF included), DEL, or a character above U+00FF throws
@@ -182,7 +190,8 @@ mocked client and captured output — no subprocess.
 **Error types.** [`errors.ts`](src/client/errors.ts): `ReiseApiError` (non-2xx,
 carries `status`/`detail`), `ReiseNotFoundError` (a 2xx response with no matching
 entry; synthetic `status` 404), `ReiseNetworkError` (transport
-failure/timeout), `ReiseParseError` (bad JSON, or a 2xx body that is not the
+failure/timeout, a redirect to a refused target, or a request Node refuses —
+never a bad configuration value), `ReiseParseError` (bad JSON, or a 2xx body that is not the
 `{ "response": { … } }` envelope — on `list` and `get` alike) and
 `ReiseValidationError` (an input the library rejects before any request), all
 extending `ReiseError`. The CLI maps a `404` (real or synthetic) on `get` to exit

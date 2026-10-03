@@ -6,7 +6,9 @@ import {
   RequestEngine,
   assertHeaderValue,
   parseRetryAfter,
+  validateBaseUrl,
 } from "../src/client/engine.js";
+import { baseUrlProblem } from "../src/client/validate.js";
 import { MAX_TIMEOUT_MS } from "../src/client/http.js";
 import { ReiseApiError, ReiseNetworkError, ReiseParseError, ReiseValidationError } from "../src/client/errors.js";
 import {
@@ -52,8 +54,9 @@ test("the constructor rejects a malformed base URL with a clear, base-only messa
   assert.throws(
     () => new RequestEngine({ baseUrl: "notaurl" }).buildUrl("/opendata/travelwarning"),
     (err: unknown) =>
-      err instanceof ReiseNetworkError &&
-      /Invalid base URL: "notaurl"/.test(err.message) &&
+      err instanceof ReiseValidationError &&
+      !(err instanceof ReiseNetworkError) &&
+      err.message === "Invalid baseUrl: Expected a valid absolute URL (e.g. https://host)." &&
       // the diagnostic must NOT carry the request path (which read as if at fault)
       !/travelwarning/.test(err.message),
   );
@@ -64,8 +67,8 @@ test("the constructor rejects a base URL with a query or fragment", () => {
     assert.throws(
       () => new RequestEngine({ baseUrl }),
       (err: unknown) =>
-        err instanceof ReiseNetworkError &&
-        err.message === `Base URL must not contain a query or fragment: ${baseUrl.replace(/\/+$/, "")}`,
+        err instanceof ReiseValidationError &&
+        err.message === "Invalid baseUrl: A base URL cannot have a query (?) or fragment (#).",
     );
   }
 });
@@ -78,9 +81,28 @@ test("the constructor rejects a non-http(s) base URL before any request", () => 
     assert.throws(
       () => new RequestEngine({ baseUrl, transport: mt.transport }),
       (err: unknown) =>
-        err instanceof ReiseNetworkError && /Unsupported protocol/.test(err.message),
+        err instanceof ReiseValidationError &&
+        err.message === 'Invalid baseUrl: Only "http:" and "https:" base URLs are supported.',
     );
     assert.equal(mt.calls.length, 0);
+  }
+});
+
+test("validateBaseUrl returns the URL without trailing slashes, or throws ReiseValidationError", () => {
+  assert.equal(validateBaseUrl("https://h.example//"), "https://h.example");
+  assert.equal(validateBaseUrl("https://h.example/pre/"), "https://h.example/pre");
+  for (const [raw, reason] of [
+    ["", "Expected a valid absolute URL (e.g. https://host)."],
+    ["http://", "Expected a valid absolute URL (e.g. https://host)."],
+    ["ftp://h.example", 'Only "http:" and "https:" base URLs are supported.'],
+    ["https://h.example/?q=1", "A base URL cannot have a query (?) or fragment (#)."],
+  ] as const) {
+    assert.throws(
+      () => validateBaseUrl(raw),
+      (err: unknown) => err instanceof ReiseValidationError && (err as Error).message === `Invalid baseUrl: ${reason}`,
+      raw,
+    );
+    assert.equal(baseUrlProblem(raw), reason);
   }
 });
 

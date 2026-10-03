@@ -61,3 +61,25 @@ export const headerValueProblem: Problem = (value) => {
   }
   return undefined;
 };
+
+/**
+ * A base URL: an absolute `http:`/`https:` URL with no query or fragment. Request
+ * paths are appended to the base URL as a string, so a `?` or `#` in it would
+ * swallow every path (`http://h/?x=1` requests `/?x=1/opendata/...`, `http://h/#f`
+ * requests `/`). A malformed value (`notaurl`, `""`, `http://`) fails the parse.
+ */
+export const baseUrlProblem: Problem = (value) => {
+  const malformed = "Expected a valid absolute URL (e.g. https://host).";
+  if (typeof value !== "string") return malformed;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return malformed;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return 'Only "http:" and "https:" base URLs are supported.';
+  }
+  if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
+  return undefined;
+};

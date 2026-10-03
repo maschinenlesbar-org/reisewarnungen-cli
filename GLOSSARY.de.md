@@ -164,6 +164,12 @@ oder `redirect not followed (no Location header)` (Exit `1`).
 100 MiB; `0` schaltet sie ab), bei deren Überschreiten die Anfrage abgebrochen wird – zum
 Schutz vor Speichererschöpfung durch einen feindseligen oder fehlerhaften Endpoint.
 
+**Basis-URL.** `--base-url` / `baseUrl` muss eine absolute `http:`/`https:`-URL ohne
+Query und Fragment sein (ein Pfadpräfix ist erlaubt). Die Bibliothek prüft sie beim
+Erzeugen des Clients (`validateBaseUrl`) und wirft einen `ReiseValidationError`, also
+einen Konfigurationsfehler und keinen Netzwerkfehler; die CLI meldet dieselbe Nachricht
+als Bedienfehler (Exit `1`).
+
 **Engine-Grenzen prüft die Bibliothek.** `timeoutMs` (`0`–`MAX_TIMEOUT_MS`),
 `maxRetries` (`0`–`MAX_RETRIES`) sowie `maxRedirects`, `maxResponseBytes` und
 `retryDelayMs` (nicht negativ) müssen ganze Zahlen sein. Der Client-Konstruktor lehnt

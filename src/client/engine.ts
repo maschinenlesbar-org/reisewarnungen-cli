@@ -5,7 +5,7 @@
 import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
 import { ReiseApiError, ReiseNetworkError, ReiseParseError } from "./errors.js";
-import { assertValid, headerValueProblem, intInRangeProblem } from "./validate.js";
+import { assertValid, baseUrlProblem, headerValueProblem, intInRangeProblem } from "./validate.js";
 
 export const DEFAULT_BASE_URL = "https://www.auswaertiges-amt.de";
 
@@ -138,31 +138,15 @@ function sanitizeServerText(text: string): string {
 }
 
 /**
- * Reject a base URL whose scheme is not http(s). The default transport already
- * gates this per hop, but the engine is exported as a library and may be handed a
- * custom transport that does no such check, so gate the configured base URL here
- * too (a `file:`/`ftp:` base URL fails fast with a typed error). A malformed base
- * URL (e.g. a stray `notaurl`) fails here as well, with a message naming the
- * offending value rather than an opaque "Invalid URL" carrying a request path.
+ * Check a base URL against the library's rules (baseUrlProblem: an absolute
+ * http(s) URL, no query or fragment) and return it without trailing slashes.
+ * Throws ReiseValidationError `Invalid baseUrl: …`: a configuration mistake, not
+ * a ReiseNetworkError. The RequestEngine constructor calls it on the raw value, so
+ * a custom transport never sees a bad base URL; the default transport still
+ * re-checks the scheme on every hop.
  */
-function assertHttpScheme(baseUrl: string): void {
-  let url: URL;
-  try {
-    url = new URL(baseUrl);
-  } catch {
-    throw new ReiseNetworkError(`Invalid base URL: ${JSON.stringify(baseUrl)}`);
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new ReiseNetworkError(
-      `Unsupported protocol "${url.protocol}" in base URL: ${baseUrl}`,
-    );
-  }
-  // Request paths are appended to the base URL as a string, so a `?` or `#` in it
-  // would swallow every path: `http://h/?x=1` requests `/?x=1/opendata/...` and
-  // `http://h/#f` requests `/`.
-  if (/[?#]/.test(baseUrl)) {
-    throw new ReiseNetworkError(`Base URL must not contain a query or fragment: ${baseUrl}`);
-  }
+export function validateBaseUrl(raw: string): string {
+  return assertValid("baseUrl", raw, baseUrlProblem).replace(/\/+$/, "");
 }
 
 /**
@@ -198,8 +182,7 @@ export class RequestEngine {
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(options: EngineOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
-    assertHttpScheme(this.baseUrl);
+    this.baseUrl = validateBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
     this.transport = options.transport ?? nodeHttpTransport;
     // Only undefined selects the default; a blank or unsendable value is refused
     // here rather than sent blank or failing late with Node's raw TypeError.

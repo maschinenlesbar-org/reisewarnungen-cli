@@ -166,6 +166,12 @@ followed (no Location header)` (exit `1`).
 `0` disables it) that aborts the request if exceeded, defending against memory
 exhaustion from a hostile or buggy endpoint.
 
+**Base URL.** `--base-url` / `baseUrl` must be an absolute `http:`/`https:` URL
+without a query or fragment (a path prefix is fine). The library checks it when
+the client is built (`validateBaseUrl`) and throws a `ReiseValidationError`, a
+configuration error rather than a network error; the CLI reports the same message
+as a usage error (exit `1`).
+
 **Engine limits are checked by the library.** `timeoutMs` (`0`–`MAX_TIMEOUT_MS`),
 `maxRetries` (`0`–`MAX_RETRIES`), and `maxRedirects`, `maxResponseBytes` and
 `retryDelayMs` (non-negative) must be integers. The client constructor rejects any

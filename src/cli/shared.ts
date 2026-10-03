@@ -5,7 +5,7 @@ import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import type { CliDeps } from "./io.js";
 import { ReiseError } from "../client/errors.js";
-import { headerValueProblem, intInRangeProblem } from "../client/validate.js";
+import { baseUrlProblem, headerValueProblem, intInRangeProblem } from "../client/validate.js";
 import type { EngineOptions } from "../client/engine.js";
 
 /**
@@ -45,27 +45,14 @@ export function parseBoundedInt(min: number, max: number): (value: string) => nu
 }
 
 /**
- * commander value-parser for `--base-url`: accept only a well-formed absolute
- * `http:`/`https:` URL. Rejecting at parse time yields commander's usage error
- * (exit 2) with a clear message, and forecloses a non-http(s) scheme up front —
- * defense in depth ahead of the transport's own request-time allowlist. `--base-url`
- * is self-chosen input, so this is a usability/contract guard, not a trust boundary.
+ * commander value-parser for `--base-url`: the library's baseUrlProblem rule (an
+ * absolute http(s) URL, no query or fragment), reported at parse time as
+ * commander's usage error (exit 1). The engine enforces the same rule when the
+ * client is built, and the transport still gates the scheme on every hop.
  */
 export function parseBaseUrl(value: string): string {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new InvalidArgumentError("Expected a valid absolute URL (e.g. https://host).");
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new InvalidArgumentError('Only "http:" and "https:" base URLs are supported.');
-  }
-  // Paths are appended to the base URL as a string, so a query or fragment would
-  // swallow every request path ("http://h/#f" requests "/" for every command).
-  if (/[?#]/.test(value)) {
-    throw new InvalidArgumentError("A base URL cannot have a query (?) or fragment (#).");
-  }
+  const reason = baseUrlProblem(value);
+  if (reason !== undefined) throw new InvalidArgumentError(reason);
   return value;
 }
 
