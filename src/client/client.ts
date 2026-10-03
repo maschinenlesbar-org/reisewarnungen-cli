@@ -3,10 +3,12 @@
 //
 //   client.list()            // all countries, keyed by content id
 //   client.summaries()       // the same, flattened to an array with ids
+//   client.summaries({ warnedOnly: true })  // only countries with a warning in force
 //   client.get("226768")     // one country's full warning (HTML content)
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import { ReiseError, ReiseNotFoundError, ReiseParseError } from "./errors.js";
+import { assertValid, booleanProblem } from "./validate.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
 
 const PATH = "/opendata/travelwarning";
@@ -25,6 +27,31 @@ export function assertContentId(contentId: string): void {
       `Invalid contentId ${JSON.stringify(String(contentId))}. Expected a numeric content id (e.g. 226768).`,
     );
   }
+}
+
+/**
+ * Whether a country counts as "warned": true when **any** of the four warning flags
+ * (`warning`, `partialWarning`, `situationWarning`, `situationPartWarning`) is
+ * `true`. Only a real boolean `true` counts, so a malformed upstream value such as
+ * the string `"false"` or the number `1` is not read as a warning. This is the rule
+ * behind `summaries({ warnedOnly: true })` and the CLI's `countries --warned-only`.
+ */
+export function isWarned(entry: TravelWarning): boolean {
+  return (
+    entry.warning === true ||
+    entry.partialWarning === true ||
+    entry.situationWarning === true ||
+    entry.situationPartWarning === true
+  );
+}
+
+/** Options for {@link ReisewarnungenClient.summaries}. */
+export interface SummariesOptions {
+  /**
+   * Keep only the countries with a warning of any kind in force ({@link isWarned}).
+   * Defaults to `false` (every country).
+   */
+  warnedOnly?: boolean;
 }
 
 /** A non-null, non-array JSON object. */
@@ -63,9 +90,13 @@ export class ReisewarnungenClient {
 
   /**
    * The list flattened to an array of country entries (each carrying its content
-   * `id`), with the `lastModified` envelope key dropped.
+   * `id`), with the `lastModified` envelope key dropped. With `warnedOnly: true`,
+   * only the countries {@link isWarned} accepts (any of the four flags `true`).
+   * A `warnedOnly` that is not a boolean is rejected with a ReiseValidationError
+   * before any request.
    */
-  async summaries(): Promise<CountryEntry[]> {
+  async summaries(options: SummariesOptions = {}): Promise<CountryEntry[]> {
+    if (options.warnedOnly !== undefined) assertValid("warnedOnly", options.warnedOnly, booleanProblem);
     const response = await this.list();
     const entries: CountryEntry[] = [];
     for (const [id, value] of Object.entries(response)) {
@@ -81,7 +112,7 @@ export class ReisewarnungenClient {
         entries.push({ id, ...fields });
       }
     }
-    return entries;
+    return options.warnedOnly === true ? entries.filter(isWarned) : entries;
   }
 
   /**

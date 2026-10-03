@@ -25,3 +25,7 @@ export function assertValid<T>(name: string, value: T, problem: Problem<T>): T {
   if (reason !== undefined) throw new ReiseValidationError(`Invalid ${name}: ${reason}`);
   return value;
 }
+
+/** A boolean option: only `true` or `false` (a truthy string such as "false" is not one). */
+export const booleanProblem: Problem = (value) =>
+  typeof value === "boolean" ? undefined : "Expected true or false.";

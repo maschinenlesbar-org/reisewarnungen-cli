@@ -45,7 +45,7 @@ import {
 const client = new ReisewarnungenClient(); // defaults to https://www.auswaertiges-amt.de
 
 const countries = await client.summaries();          // CountryEntry[]
-const warned = countries.filter((c) => c.warning);
+const warned = await client.summaries({ warnedOnly: true }); // any of the four flags (isWarned)
 const detail = await client.get(countries[0]!.id);   // full warning incl. HTML content
 
 try {
@@ -80,6 +80,15 @@ new ReisewarnungenClient({
 
 `client.list()` (raw `response` map), `client.summaries()` (flattened array with ids),
 `client.get(contentId)` (one full warning).
+
+`summaries({ warnedOnly: true })` keeps only the countries with a warning of any
+kind in force: the exported `isWarned(entry)` is true when **any** of `warning`,
+`partialWarning`, `situationWarning` or `situationPartWarning` is `true` (a real
+boolean, so a malformed `"false"` or `1` does not count). It is the same rule the
+CLI's `countries --warned-only` applies, because the CLI calls this method. A
+`warnedOnly` that is not a boolean is rejected with `ReiseValidationError` before
+any request. Filtering on `c.warning` alone would miss partial and situation
+warnings.
 
 ## Authentication internals
 

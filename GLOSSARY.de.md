@@ -101,7 +101,10 @@ werden, die eine führende Zahl großzügig liest oder `..` zu einem anderen Pfa
 
 Die vier booleschen Felder, die der Client liefert, nach zunehmender Spezifität. Ein
 Land gilt als „mit Warnung“ (Filter `countries --warned-only`), wenn **eines** davon
-true ist.
+`true` ist. Die Regel gehört der Bibliothek: Sie exportiert sie als
+`isWarned(entry)` und wendet sie in `summaries({ warnedOnly: true })` an, das die
+CLI aufruft. Nur ein echtes boolesches `true` zählt; ein fehlerhafter Wert wie
+`"false"` oder `1` ist keine Warnung.
 
 **warning.** Für das ganze Land gilt eine vollständige Reisewarnung – der stärkste
 Rat des AA, von Reisen abzusehen.

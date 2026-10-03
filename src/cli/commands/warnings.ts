@@ -40,13 +40,8 @@ export function registerWarningCommands(program: Command, deps: CliDeps): void {
     .option("--warned-only", "only countries with a warning of any kind in force")
     .action(
       action(deps, async ({ client, global, opts }) => {
-        let entries = await listRequest(() => client.summaries());
-        if (opts["warnedOnly"]) {
-          entries = entries.filter(
-            (e) => e.warning || e.partialWarning || e.situationWarning || e.situationPartWarning,
-          );
-        }
-        renderJson(deps, global, entries);
+        const warnedOnly = opts["warnedOnly"] === true;
+        renderJson(deps, global, await listRequest(() => client.summaries({ warnedOnly })));
       }),
     );
 

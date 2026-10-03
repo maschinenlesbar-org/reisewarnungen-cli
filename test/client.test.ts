@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ReisewarnungenClient } from "../src/client/client.js";
+import { ReisewarnungenClient, isWarned } from "../src/client/client.js";
+import type { TravelWarning } from "../src/client/types.js";
 import {
   ReiseApiError,
   ReiseError,
   ReiseNetworkError,
   ReiseNotFoundError,
   ReiseParseError,
+  ReiseValidationError,
 } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse } from "./helpers.js";
 
@@ -166,4 +168,56 @@ test("get rejects a non-numeric content id before any request (no dot segments)"
     );
     assert.equal(mt.calls.length, 0, id);
   }
+});
+
+// ---- isWarned / summaries({ warnedOnly }) ---------------------------------------
+
+const WARNING_FLAGS = ["warning", "partialWarning", "situationWarning", "situationPartWarning"] as const;
+
+for (const flag of WARNING_FLAGS) {
+  test(`isWarned is true for an entry warned only via ${flag}`, () => {
+    assert.equal(isWarned({ [flag]: true }), true);
+  });
+
+  test(`summaries({ warnedOnly: true }) keeps a country warned only via ${flag}`, async () => {
+    const mt = makeMockTransport(() =>
+      jsonResponse({
+        response: {
+          lastModified: 1,
+          "100": { countryName: "Flagged", [flag]: true },
+          "200": { countryName: "Clear", warning: false },
+        },
+      }),
+    );
+    const entries = await clientWith(mt).summaries({ warnedOnly: true });
+    assert.deepEqual(entries.map((e) => e.countryName), ["Flagged"]);
+  });
+}
+
+test("isWarned is false when no flag is true, and only a real `true` counts", () => {
+  assert.equal(isWarned({}), false);
+  assert.equal(
+    isWarned({ warning: false, partialWarning: false, situationWarning: false, situationPartWarning: false }),
+    false,
+  );
+  // Malformed upstream values: a string "false" or a number 1 is not a warning.
+  assert.equal(isWarned({ warning: "false" } as unknown as TravelWarning), false);
+  assert.equal(isWarned({ warning: 1 } as unknown as TravelWarning), false);
+});
+
+test("summaries() and summaries({ warnedOnly: false }) return every country", async () => {
+  const mt = makeMockTransport(() => jsonResponse(listBody));
+  assert.equal((await clientWith(mt).summaries()).length, 2);
+  assert.equal((await clientWith(mt).summaries({ warnedOnly: false })).length, 2);
+});
+
+test("summaries rejects a non-boolean warnedOnly before any request", async () => {
+  const mt = makeMockTransport(() => jsonResponse(listBody));
+  await assert.rejects(
+    clientWith(mt).summaries({ warnedOnly: "yes" as unknown as boolean }),
+    (err: unknown) =>
+      err instanceof ReiseValidationError &&
+      err.message === "Invalid warnedOnly: Expected true or false.",
+  );
+  assert.equal(mt.calls.length, 0);
 });
