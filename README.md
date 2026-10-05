@@ -27,7 +27,7 @@ advisory text — as clean JSON you can pipe straight into
 npm i -g @maschinenlesbar.org/reisewarnungen-cli
 ```
 
-This installs the **`reisewarnungen`** command. Requires **Node.js 20+**.
+This installs the **`reisewarnungen`** command. Requires **Node.js 22.12+**.
 
 Check it works:
 
@@ -148,7 +148,7 @@ with exit `0`; a failed run keeps its exit code even when nothing reads its stde
 ## Troubleshooting
 
 - **`command not found: reisewarnungen`** — the global npm bin directory isn't on
-  your `PATH`. Run `npm bin -g` to find it and add it, or run via
+  your `PATH`. Run `npm prefix -g` to find the prefix and add its `bin` directory, or run via
   `npx @maschinenlesbar.org/reisewarnungen-cli …`.
 - **Exit `4` / "not found"** — the content id doesn't exist or the advisory has
   been removed. Re-fetch it from a fresh `countries` result; ids can change as
