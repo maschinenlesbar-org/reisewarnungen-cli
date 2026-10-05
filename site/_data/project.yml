@@ -12,6 +12,7 @@ de:
     Terminal abrufen. `reisewarnungen` ist ein kleines Kommandozeilen-Tool für die
     [Open-Data-API des Auswärtigen Amts zu
     Reisewarnungen](https://www.auswaertiges-amt.de/opendata/travelwarning): alle Länder
-    auflisten, auf Länder mit aktiven Warnungen filtern und den vollständigen Hinweistext
-    abrufen – als sauberes JSON, das Sie direkt an [`jq`](https://jqlang.github.io/jq/)
+    auflisten, auf Länder mit aktiven Warnungen filtern, den vollständigen Hinweistext
+    abrufen und die Sätze herausziehen, die von Reisen abraten – auch wo kein Warn-Flag
+    gesetzt ist –, als sauberes JSON, das Sie direkt an [`jq`](https://jqlang.github.io/jq/)
     weitergeben können.

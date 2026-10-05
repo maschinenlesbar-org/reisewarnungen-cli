@@ -9,8 +9,9 @@
 Check Germany's official **travel and safety warnings** by country from your
 terminal. `reisewarnungen` is a small command-line tool over the
 [Auswärtiges Amt travel-warning open-data API](https://www.auswaertiges-amt.de/opendata/travelwarning)
-— list all countries, filter to those with active warnings, and fetch the full
-advisory text — as clean JSON you can pipe straight into
+— list all countries, filter to those with active warnings, fetch the full
+advisory text, and pull out the sentences that advise against travel even where
+no warning flag is set — as clean JSON you can pipe straight into
 [`jq`](https://jqlang.github.io/jq/).
 
 - **Works out of the box** — no account, no API key, no configuration. Install and run.
