@@ -154,7 +154,7 @@ Real flags only, from `reisewarnungen --help`:
 | `--max-redirects <n>` | HTTP redirects to follow (`0` = none; default `5`) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
-| `-o, --output <file>` | Write output to this file instead of stdout |
+| `-o, --output <file>` | Write output to this file instead of stdout; `-o -` means stdout (no file named `-`) |
 | `--force` | Overwrite the `--output` file if it already exists |
 | `-h, --help` | Display help for a command |
 

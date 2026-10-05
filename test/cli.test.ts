@@ -372,3 +372,12 @@ test("--max-redirects is parsed and passed through to the client", async () => {
   assert.equal(code, 0);
   assert.equal(seen, 0);
 });
+
+test("-o - writes to stdout and creates no file named '-' (P12)", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  const code = await run(["--compact", "countries", "-o", "-"], cli.deps);
+  assert.equal(code, 0);
+  assert.equal(cli.files.size, 0);
+  assert.equal((JSON.parse(cli.out.join("\n")) as unknown[]).length, 2);
+  assert.deepEqual(cli.err, []);
+});

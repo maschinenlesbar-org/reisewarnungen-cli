@@ -143,11 +143,12 @@ export function escapeControlChars(json: string): string {
 /**
  * Render a JSON value, pretty by default and compact with --compact. Writes to
  * the file given by --output (with a short confirmation on stderr so stdout stays
- * clean for piping) or to stdout otherwise.
+ * clean for piping) or to stdout otherwise. `-o -` means stdout, as in other CLIs: a
+ * script passing `-o "$OUT"` with `OUT=-` used to get a file named `-` and no output.
  */
 export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown): void {
   const text = escapeControlChars(global.compact ? JSON.stringify(value) : JSON.stringify(value, null, 2));
-  if (global.output) {
+  if (global.output !== undefined && global.output !== "-") {
     const data = Buffer.from(text + "\n", "utf8");
     writeOutputFile(deps, global.output, data, global.force === true);
   } else {

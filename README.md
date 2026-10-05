@@ -173,7 +173,7 @@ These apply to every command and may be given before *or* after it:
 | `-V, --version` | Print the version number |
 | `-h, --help` | Show help for the program or a command |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
-| `-o, --output <file>` | Write output to this file instead of stdout |
+| `-o, --output <file>` | Write output to this file instead of stdout; `-o -` means stdout (no file named `-`) |
 | `--force` | Overwrite the `--output` file if it already exists |
 | `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`, no surrounding whitespace). A `user:password@` in it is sent as HTTP Basic auth and never printed (`***`); write a literal `%` in it as `%25` |
 | `--timeout <ms>` | Time limit per request, reading the whole response included (default `30000`; at most `2147483647`; `0` = no limit, the request may wait forever) |
