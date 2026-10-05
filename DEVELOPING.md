@@ -76,7 +76,9 @@ new ReisewarnungenClient({
 });
 ```
 
-The constructor range-checks the numeric options before any request and throws
+The constructor rejects an unknown option key (`timeout` for `timeoutMs`, with a
+"did you mean" hint; a key set to `undefined` is fine) and range-checks the numeric
+options before any request; it throws
 `ReiseValidationError` (`Invalid maxRetries: Must be <= 10.`) for anything else:
 `timeoutMs` an integer `0`..`MAX_TIMEOUT_MS` (2^31 - 1), `maxRetries` `0`..`MAX_RETRIES`
 (10), `retryDelayMs` `0`..`MAX_RETRY_AFTER_MS` (30 000), and `maxRedirects` and
@@ -113,8 +115,9 @@ kind in force: the exported `isWarned(entry)` is true when **any** of `warning`,
 `partialWarning`, `situationWarning` or `situationPartWarning` is `true` (a real
 boolean, so a malformed `"false"` or `1` does not count). It is the same rule the
 CLI's `countries --warned-only` applies, because the CLI calls this method. A
-`warnedOnly` that is not a boolean is rejected with `ReiseValidationError` before
-any request. Filtering on `c.warning` alone would miss partial and situation
+`warnedOnly` that is not a boolean, options that are not an object, and an unknown key
+(a misspelt `warnedonly`, `__proto__`) are rejected with `ReiseValidationError` before
+any request — a JavaScript caller's typo no longer switches the filter off. Filtering on `c.warning` alone would miss partial and situation
 warnings.
 
 ## Authentication internals

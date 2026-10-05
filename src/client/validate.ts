@@ -100,3 +100,29 @@ export const baseUrlProblem: Problem = (value) => {
   }
   return undefined;
 };
+
+/**
+ * Check that `options` is a plain options object (or undefined) whose keys are all in
+ * `known`, and throw a ReiseValidationError otherwise. A JavaScript caller's typo
+ * (`warnedonly` for `warnedOnly`, `timeout` for `timeoutMs`) was ignored silently and the
+ * default applied; TypeScript catches it at compile time, JavaScript does not. A key set
+ * to `undefined` changes nothing and passes. `__proto__` and `constructor` are never
+ * option names.
+ */
+export function assertKnownKeys(name: string, options: unknown, known: readonly string[]): void {
+  if (options === undefined) return;
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new ReiseValidationError(`Invalid ${name}: Expected an object.`);
+  }
+  for (const key of Reflect.ownKeys(options)) {
+    const value = (options as Record<string | symbol, unknown>)[key];
+    if (typeof key === "string" && known.includes(key)) continue;
+    if (value === undefined && typeof key === "string" && key !== "__proto__") continue;
+    const label = typeof key === "string" ? JSON.stringify(key) : String(key);
+    const lower = typeof key === "string" ? key.toLowerCase() : "";
+    const hint = known.find((k) => k.toLowerCase() === lower || (lower !== "" && (k.toLowerCase().includes(lower) || lower.includes(k.toLowerCase()))));
+    throw new ReiseValidationError(
+      `Invalid ${name}: Unknown option ${label}` + (hint === undefined ? `; the options are ${known.join(", ")}.` : ` (did you mean ${hint}?).`),
+    );
+  }
+}

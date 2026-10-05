@@ -19,6 +19,7 @@ export type { Transport, HttpRequest, HttpResponse } from "./http.js";
 export { buildQueryString } from "./query.js";
 export type { QueryParams, QueryValue } from "./query.js";
 export {
+  assertKnownKeys,
   assertValid,
   baseUrlProblem,
   booleanProblem,

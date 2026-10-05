@@ -20,7 +20,7 @@ import {
   redactCredentials,
   redactUrl,
 } from "./errors.js";
-import { assertValid, baseUrlProblem, headerValueProblem, intInRangeProblem } from "./validate.js";
+import { assertKnownKeys, assertValid, baseUrlProblem, headerValueProblem, intInRangeProblem } from "./validate.js";
 
 export const DEFAULT_BASE_URL = "https://www.auswaertiges-amt.de";
 
@@ -81,6 +81,19 @@ export interface EngineOptions {
 }
 
 const DEFAULT_MAX_RESPONSE_BYTES = 100 * 1024 * 1024;
+
+/** Every EngineOptions key; any other key makes the constructor throw. */
+const ENGINE_OPTION_NAMES = [
+  "baseUrl",
+  "transport",
+  "userAgent",
+  "timeoutMs",
+  "maxRetries",
+  "retryDelayMs",
+  "maxRedirects",
+  "maxResponseBytes",
+  "sleep",
+] as const satisfies ReadonlyArray<keyof EngineOptions>;
 
 /**
  * Longest `Retry-After` the engine waits out before retrying a 429/503. When the
@@ -306,6 +319,9 @@ export class RequestEngine {
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(options: EngineOptions = {}) {
+    // A JavaScript caller may pass null for "no options"; treat it like undefined.
+    options = options ?? {};
+    assertKnownKeys("client options", options, ENGINE_OPTION_NAMES);
     const baseUrl = validateBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
     const parsed = new URL(baseUrl);
     this.#origin = parsed.origin;

@@ -8,7 +8,7 @@
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
 import { ReiseError, ReiseNotFoundError, ReiseParseError } from "./errors.js";
-import { assertValid, booleanProblem } from "./validate.js";
+import { assertKnownKeys, assertValid, booleanProblem } from "./validate.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
 
 const PATH = "/opendata/travelwarning";
@@ -154,10 +154,14 @@ export class ReisewarnungenClient {
    * The list flattened to an array of country entries (each carrying its content
    * `id`), with the `lastModified` envelope key dropped. With `warnedOnly: true`,
    * only the countries {@link isWarned} accepts (any of the four flags `true`).
-   * A `warnedOnly` that is not a boolean is rejected with a ReiseValidationError
-   * before any request.
+   * A `warnedOnly` that is not a boolean, options that are not an object, and an unknown
+   * option key (a misspelt `warnedonly`) are rejected with a ReiseValidationError before
+   * any request.
    */
   async summaries(options: SummariesOptions = {}): Promise<CountryEntry[]> {
+    // A misspelt key (`warnedonly`) used to be ignored, so a JavaScript caller's typo
+    // switched the filter off and returned every country.
+    assertKnownKeys("summaries options", options, ["warnedOnly"]);
     if (options.warnedOnly !== undefined) assertValid("warnedOnly", options.warnedOnly, booleanProblem);
     const response = await this.list();
     const entries: CountryEntry[] = [];
