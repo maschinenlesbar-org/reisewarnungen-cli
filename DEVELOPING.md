@@ -58,8 +58,8 @@ try {
 }
 ```
 
-`get(contentId)` rejects a `contentId` that is not all ASCII digits (`ReiseError`,
-no request; the check is exported as `assertContentId`) and resolves to the entry keyed by `contentId` and **never** to a
+`get(contentId)` rejects a `contentId` that is not a string of ASCII digits
+(`ReiseValidationError`, no request; the check is exported as `assertContentId`) and resolves to the entry keyed by `contentId` and **never** to a
 different country: an envelope with no country entry throws `ReiseNotFoundError`,
 one whose entries sit under other keys throws `ReiseParseError` rather than guessing.
 
@@ -242,8 +242,11 @@ entry; synthetic `status` 404), `ReiseNetworkError` (transport
 failure/timeout, a redirect to a refused target, or a request Node refuses —
 never a bad configuration value), `ReiseParseError` (bad JSON, or a 2xx body that is not the
 `{ "response": { … } }` envelope — on `list` and `get` alike) and
-`ReiseValidationError` (an input the library rejects before any request), all
-extending `ReiseError`. The CLI maps a `404` (real or synthetic) on `get` to exit
+`ReiseValidationError` (an input the library rejects before any request: a bad
+option, option key or type, content id, or `isWarned` argument — never a raw
+`TypeError`), all extending `ReiseError`. Server text in a message (an error
+`detail`, a redirect target, a transport's error text) and the URL it names are cut
+at 500 characters; `ReiseApiError.body` keeps the full body. The CLI maps a `404` (real or synthetic) on `get` to exit
 code `4`, other errors to `1` — including a `404` on `list`/`countries`, where it
 means the endpoint itself is missing, not a country, and a `ReiseValidationError`,
 which gets the same exit code commander gives a usage error.

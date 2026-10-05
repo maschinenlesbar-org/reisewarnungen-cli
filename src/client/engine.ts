@@ -16,6 +16,7 @@ import {
   ReiseError,
   ReiseNetworkError,
   ReiseParseError,
+  ReiseValidationError,
   credentialsIn,
   redactCredentials,
   redactUrl,
@@ -261,6 +262,14 @@ function sanitizeServerText(text: string): string {
   return out;
 }
 
+/** Longest server text (in characters) an error message keeps; `ReiseApiError.body` keeps all. */
+const MAX_DETAIL_LENGTH = 500;
+
+/** `text` cut at MAX_DETAIL_LENGTH characters, ending in "…" when cut. */
+function cutServerText(text: string): string {
+  return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
+}
+
 /**
  * Check a base URL against the library's rules (baseUrlProblem: an absolute
  * http(s) URL, no query or fragment) and return it without trailing slashes.
@@ -289,6 +298,19 @@ export function assertHeaderValue(name: string, value: string): string {
  */
 export function intOption(name: string, value: number | undefined, max: number, fallback: number): number {
   return value === undefined ? fallback : assertValid(name, value, intInRangeProblem(0, max));
+}
+
+/**
+ * Read a function option: `undefined` gives the default; anything else that is not a
+ * function is a ReiseValidationError. A string `transport` used to fail at the first request
+ * as a raw TypeError, and a bad `sleep` on the first retry.
+ */
+function functionOption<F extends (...args: never[]) => unknown>(name: string, value: F | undefined, fallback: F): F {
+  if (value === undefined) return fallback;
+  if (typeof value !== "function") {
+    throw new ReiseValidationError(`Invalid ${name}: Expected a function, got ${value === null ? "null" : typeof value}.`);
+  }
+  return value;
 }
 
 const realSleep = (ms: number): Promise<void> =>
@@ -337,7 +359,7 @@ export class RequestEngine {
         return [raw];
       }
     });
-    this.transport = options.transport ?? nodeHttpTransport;
+    this.transport = functionOption("transport", options.transport, nodeHttpTransport);
     // Only undefined selects the default; a blank or unsendable value is refused
     // here rather than sent blank or failing late with Node's raw TypeError.
     this.userAgent =
@@ -354,7 +376,7 @@ export class RequestEngine {
       anyInt,
       DEFAULT_MAX_RESPONSE_BYTES,
     );
-    this.sleep = options.sleep ?? realSleep;
+    this.sleep = functionOption("sleep", options.sleep, realSleep);
   }
 
   /** Build a fully-qualified URL from a path and optional query parameters. */
@@ -399,7 +421,7 @@ export class RequestEngine {
    * gave a bad answer), userinfo redacted.
    */
   private describe(url: string): string {
-    return redactUrl(url);
+    return cutServerText(redactUrl(url));
   }
 
   /**
@@ -480,7 +502,7 @@ export class RequestEngine {
         if (cause instanceof ReiseError && !(cause instanceof ReiseNetworkError)) throw cause;
         const reason = cause instanceof Error ? cause.message : String(cause);
         throw new ReiseNetworkError(
-          `${method} ${this.describe(url)} failed: ${sanitizeServerText(this.scrub(reason))}`,
+          `${method} ${this.describe(url)} failed: ${cutServerText(sanitizeServerText(this.scrub(reason)))}`,
           { cause: this.scrubCause(cause) },
         );
       }
@@ -636,7 +658,7 @@ export class RequestEngine {
     }
     // `detail` came from the response body; strip control characters so a hostile
     // endpoint cannot inject terminal escape sequences via the stderr error message.
-    if (detail !== undefined) detail = sanitizeServerText(detail);
+    if (detail !== undefined) detail = cutServerText(sanitizeServerText(detail));
     // Name the target of a redirect that was not followed.
     const location =
       status >= 300 && status < 400 && locationHeader ? redirectTarget(url, locationHeader) : undefined;
@@ -716,6 +738,6 @@ function resolveLocation(location: string | undefined, base: string): URL | unde
 function redirectTarget(requestUrl: string, location: string): string | undefined {
   const resolved = resolveLocation(location, requestUrl);
   // A Location may carry credentials of its own (`https://bob:pw@other/`): never print them.
-  const clean = sanitizeServerText(redactUrl(resolved ? resolved.href : location)).trim();
+  const clean = cutServerText(sanitizeServerText(redactUrl(resolved ? resolved.href : location)).trim());
   return clean === "" ? undefined : clean;
 }

@@ -120,7 +120,9 @@ export class ReiseApiError extends ReiseError {
     // The URL is shown and kept without userinfo: a credential in a base URL must not leak
     // into a message, a log line or JSON.stringify(err).
     const url = redactUrl(args.url);
-    super(`HTTP ${args.status} for ${args.method} ${url}${detailPart}`);
+    // A 5000-digit content id makes a 5 KB URL: the message shows at most 500 characters.
+    const shown = url.length > 500 ? `${url.slice(0, 500)}…` : url;
+    super(`HTTP ${args.status} for ${args.method} ${shown}${detailPart}`);
     this.status = args.status;
     this.url = url;
     this.method = args.method;

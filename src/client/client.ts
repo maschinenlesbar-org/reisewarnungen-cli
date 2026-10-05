@@ -7,7 +7,7 @@
 //   client.get("226768")     // one country's full warning (HTML content)
 
 import { RequestEngine, type EngineOptions } from "./engine.js";
-import { ReiseError, ReiseNotFoundError, ReiseParseError } from "./errors.js";
+import { ReiseNotFoundError, ReiseParseError, ReiseValidationError } from "./errors.js";
 import { assertKnownKeys, assertValid, booleanProblem } from "./validate.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
 
@@ -19,13 +19,19 @@ const enc = encodeURIComponent;
  * keys of `list()`, the `id` of `summaries()`), so only ASCII digits pass: `""`,
  * `"."` and `".."` would otherwise reach the list endpoint or its parent directory
  * (URL dot-segment normalisation), and the upstream reads a *leading* integer
- * leniently (`226768x` returns 226768's country). Throws ReiseError.
+ * leniently (`226768x` returns 226768's country). Throws ReiseValidationError (a
+ * ReiseError), like every other rejected input; a number (`226768`) is refused with a
+ * message that says it must be a string. The echoed value is cut at 500 characters.
  */
 export function assertContentId(contentId: string): void {
-  if (typeof contentId !== "string" || !/^\d+$/.test(contentId)) {
-    throw new ReiseError(
-      `Invalid contentId ${JSON.stringify(String(contentId))}. Expected a numeric content id (e.g. 226768).`,
+  if (typeof contentId !== "string") {
+    throw new ReiseValidationError(
+      `Invalid contentId: Expected a string of digits (e.g. "226768"), got ${contentId === null ? "null" : typeof contentId}.`,
     );
+  }
+  if (!/^\d+$/.test(contentId)) {
+    const shown = JSON.stringify(contentId.length > 500 ? contentId.slice(0, 500) : contentId) + (contentId.length > 500 ? "…" : "");
+    throw new ReiseValidationError(`Invalid contentId ${shown}. Expected a numeric content id (e.g. 226768).`);
   }
 }
 
@@ -35,8 +41,10 @@ export function assertContentId(contentId: string): void {
  * `true`. Only a real boolean `true` counts, so a malformed upstream value such as
  * the string `"false"` or the number `1` is not read as a warning. This is the rule
  * behind `summaries({ warnedOnly: true })` and the CLI's `countries --warned-only`.
+ * Anything but an entry object is a ReiseValidationError.
  */
 export function isWarned(entry: TravelWarning): boolean {
+  if (!isObject(entry)) throw new ReiseValidationError("Invalid entry: Expected a country entry object.");
   return (
     entry.warning === true ||
     entry.partialWarning === true ||
@@ -190,7 +198,7 @@ export class ReisewarnungenClient {
    * an empty success. Only the entry keyed by `contentId` is ever returned: an
    * envelope whose country entries sit under other keys is a wrong answer
    * (ReiseParseError), never read as the requested country. A `contentId` that is
-   * not all ASCII digits is rejected with a ReiseError before any request.
+   * not all ASCII digits is rejected with a ReiseValidationError before any request.
    */
   async get(contentId: string): Promise<TravelWarning> {
     assertContentId(contentId);
