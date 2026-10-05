@@ -141,6 +141,10 @@ do the same thing.
 | `4` | country not found — `get` got an upstream `404` or a response holding no country entry (a `404` on `list`/`countries` means the endpoint itself is missing: exit `1`) |
 | `1` | any other error — including bad usage / invalid arguments |
 
+Output into a reader that stops early (`reisewarnungen list | head`) ends quietly
+with exit `0`; a failed run keeps its exit code even when nothing reads its stderr
+(`2>&1 | true`).
+
 ## Troubleshooting
 
 - **`command not found: reisewarnungen`** — the global npm bin directory isn't on
