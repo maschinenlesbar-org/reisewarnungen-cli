@@ -17,7 +17,7 @@ body, the `id`-less `get` result) so Claude doesn't rediscover them each time.
 
 | Skill | What it does | Ask it… |
 |---|---|---|
-| **reisewarnungen-trip-check** | Resolves a country name to its content id, classifies the warning level, and distils the long HTML advisory into a plain-language briefing. | "is it safe to travel to Thailand?", "travel warning for Egypt?", "I'm going to Kenya and Tanzania — any warnings?" |
+| **reisewarnungen-trip-check** | Resolves a country name to its content id, classifies the warning level — including advice against travel that no flag records — and distils the long HTML advisory into a plain-language briefing. | "is it safe to travel to Thailand?", "travel warning for Egypt?", "I'm going to Kenya and Tanzania — any warnings?" |
 | **reisewarnungen-warned-overview** | Pulls every warned country and ranks/groups it by severity (full → regional), optionally filtered to a region. | "which countries have a travel warning?", "list all full travel warnings", "warned countries in Africa" |
 | **reisewarnungen-watch** | Saves dated snapshots and diffs two to surface newly-warned, escalated (regional → full), downgraded, lifted and freshly-updated countries; or a freshness view from one snapshot. | "what warnings changed since last week?", "which advisories were updated recently?", "diff today against this snapshot" |
 
@@ -93,24 +93,31 @@ skills encode the non-obvious parts of this API, for example:
   must multiply by 1000;
 - **`get` results carry no `id` field** — unlike `countries`/`list` entries; the id is the
   key you queried by, so the skill remembers it itself;
-- **country names are German** (`Ägypten`, `Russische Föderation`, `Côte d'Ivoire`) — match
-  on `countryCode`/`iso3CountryCode` for English requests, and never hard-code a content id
+- **country names are the official German ones** (`Ägypten`, `Russische Föderation`,
+  `Côte d'Ivoire`) — match on `countryCode`/`iso3CountryCode` for English requests, map
+  everyday names (Russland, Weißrussland, Burma, Elfenbeinküste, …) to their ISO code, ask
+  when a name matches several countries (the two Kongos), and never hard-code a content id
   (ids can change as the catalogue updates);
 - the `content` field is a **40–60 KB HTML** advisory — extract its German section headings
   (`Aktuelles`, `Sicherheit`, `Terrorismus`, …) and summarise rather than dumping it;
 - only **`warning` and `partialWarning`** are set in current data; the `situation*` flags
   exist in the schema but are presently all `false` — don't claim a level the flags don't
   support, and read "all flags false" as "no formal warning", not "no data";
-- **the flags don't record advice against travel** („wird dringend abgeraten"): Jordanien
-  has all flags `false` while its advisory advises against travel to its border regions,
-  so a trip check reads the advisory text before calling a country advice-only;
+- **the flags don't record advice against travel**, and the text phrases it many ways
+  („wird dringend abgeraten", „Vermeiden Sie … Reisen", „Meiden Sie möglichst Reisen …",
+  „… sollte gemieden werden"): Türkei, Angola, Bangladesch and Jordanien have all flags
+  `false` while their advisories advise against travel to regions, so a trip check reads
+  the sentences `reisewarnungen advice <id>` extracts before calling a country
+  advice-only;
 - `list`'s top-level `lastModified` is a **stale dataset-level** value (2025-09-05 when
   checked on 2026-09-15); for change-tracking use the **per-country** `lastModified`
   instead;
 - `-o` **refuses to overwrite** an existing file (exit `1`) unless you pass `--force`, so
   a second snapshot on the same day needs a new name or the user's OK to overwrite;
-- a missing country makes `get` exit **`4`** (`HTTP 404`) — that's a wrong id, not a safe
-  country; an empty `--warned-only` array (exit `0`) means no warnings are in force.
+- a missing country makes `get`/`advice` exit **`4`** (`HTTP 404`) — that's a wrong id, not
+  a safe country; an answer holding no country, or with malformed flags, exits **`1`** —
+  never read it as "no warnings". An empty `--warned-only` array (exit `0`) means the list
+  came back and no country in it carries a formal warning flag.
 
 ## Contributing
 
