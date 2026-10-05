@@ -223,7 +223,10 @@ serialises queries, applies retry/backoff, follows redirects, decodes JSON
 responses and maps errors. Sits between the client and the transport.
 
 **RawResponse.** The result of `request()` — `{ data: Buffer, contentType,
-status }`, the raw bytes `getJson()` then decodes.
+status }`, the raw bytes `getJson()` then decodes: by the charset the Content-Type
+names (UTF-8 when it names none), a leading BOM dropped; an unknown charset label
+is a `ReiseParseError`, and so is a body that isn't JSON (naming a non-JSON
+Content-Type such as `text/html`, the usual maintenance page).
 
 **CliDeps / CliIO.** The dependency-injection seam for the CLI
 ([`io.ts`](src/cli/io.ts)): a client factory plus an I/O object

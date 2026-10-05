@@ -581,14 +581,21 @@ export class RequestEngine {
     }
   }
 
-  /** Perform a GET expecting JSON and parse it into `T`. */
+  /**
+   * Perform a GET expecting JSON and parse it into `T`. The body is decoded by the charset
+   * its Content-Type names (UTF-8 when it names none; see decodeBody).
+   */
   async getJson<T>(path: string, query?: QueryParams): Promise<T> {
     const res = await this.request("GET", path, { query, accept: "application/json" });
-    const text = res.data.toString("utf8");
+    const text = decodeBody(res.data, res.contentType, path);
     try {
       return JSON.parse(text) as T;
     } catch (cause) {
-      throw new ReiseParseError(`Failed to parse JSON response from ${path}`, { cause });
+      // An HTML maintenance or proxy page is the usual non-JSON answer: name its type, so it
+      // reads as an upstream problem rather than a client bug.
+      const type = res.contentType.split(";")[0]?.trim() ?? "";
+      const hint = type !== "" && !/json/i.test(type) ? `: expected JSON, got Content-Type "${sanitizeServerText(type)}"` : "";
+      throw new ReiseParseError(`Failed to parse JSON response from ${path}${hint}`, { cause });
     }
   }
 
@@ -628,6 +635,24 @@ export class RequestEngine {
       ...(hint !== undefined ? { hint } : {}),
     });
   }
+}
+
+/**
+ * Decode a response body by the charset its Content-Type names (UTF-8 when it names none).
+ * TextDecoder drops a leading byte order mark, which Buffer#toString keeps and JSON.parse
+ * then rejects, so a BOM added by a proxy cannot turn a valid answer into a parse error. A
+ * declared `charset=iso-8859-1` body used to come out as `T\uFFFDrkei`. An unknown charset
+ * label is a ReiseParseError.
+ */
+function decodeBody(body: Buffer, contentType: string, path: string): string {
+  const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1] ?? "utf-8";
+  let decoder: TextDecoder;
+  try {
+    decoder = new TextDecoder(charset);
+  } catch {
+    throw new ReiseParseError(`Unsupported response charset "${sanitizeServerText(charset)}" from ${path}.`);
+  }
+  return decoder.decode(body);
 }
 
 /** A userinfo part percent-decoded as Node decodes it for Basic auth (baseUrlProblem rules out bad escapes). */

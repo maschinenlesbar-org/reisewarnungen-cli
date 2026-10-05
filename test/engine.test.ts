@@ -112,6 +112,19 @@ test("getJson parses a JSON body", async () => {
   assert.deepEqual(await e.getJson("/x"), { ok: true });
 });
 
+test("getJson decodes the body by its declared charset, drops a BOM, refuses an unknown one", async () => {
+  const latin1 = Buffer.from(JSON.stringify({ name: "Türkei" }), "latin1");
+  const e1 = new RequestEngine({ transport: makeMockTransport(() => rawResponse(latin1, "application/json; charset=ISO-8859-1")).transport });
+  assert.deepEqual(await e1.getJson("/x"), { name: "Türkei" });
+  const bom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('{"a":1}')]);
+  const e2 = new RequestEngine({ transport: makeMockTransport(() => rawResponse(bom, "application/json")).transport });
+  assert.deepEqual(await e2.getJson("/x"), { a: 1 });
+  const e3 = new RequestEngine({ transport: makeMockTransport(() => rawResponse("{}", "application/json; charset=x-nope")).transport });
+  await assert.rejects(() => e3.getJson("/x"), (e: unknown) => e instanceof ReiseParseError && /x-nope/.test(e.message));
+  const e4 = new RequestEngine({ transport: makeMockTransport(() => rawResponse("<html>", "text/html")).transport });
+  await assert.rejects(() => e4.getJson("/x"), (e: unknown) => e instanceof ReiseParseError && /text\/html/.test(e.message));
+});
+
 test("getJson throws ReiseParseError on invalid JSON", async () => {
   const mt = makeMockTransport(() => rawResponse("not json", "application/json"));
   const e = new RequestEngine({ transport: mt.transport });
