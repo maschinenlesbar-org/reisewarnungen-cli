@@ -138,8 +138,20 @@ the userinfo replaced by `***`, a redirect target is shown the same way, and err
 bodies, details, transport error text and the `cause` chain are scrubbed of the
 userinfo (raw and percent-decoded) before they reach an error.
 
-**Cross-origin credential stripping.** On a redirect that crosses an origin
-boundary (different scheme, host, or port), the engine strips sensitive headers
+**Credentials across redirects.** The engine takes the userinfo off the base URL and
+sends it as a Basic `Authorization` header, attached per hop and only to requests on the
+base URL's origin (scheme, host and port): a same-origin redirect keeps it, whether its
+`Location` is relative or absolute; a redirect to another origin — another host or port,
+or `http:` → `https:` — drops it; userinfo a server writes into its `Location` is
+removed before the hop. A `401`/`403` after a redirect that dropped the credentials says
+so in the `ReiseApiError` message (for `http:` → `https:`: "use an https base URL"). A
+transport therefore never sees userinfo in `HttpRequest.url`, and it is told
+`redirect: "manual"`: it must not follow redirects itself (`fetch` does by default). A
+transport that reports a final `HttpResponse.url` on another origin than the request's
+makes the call fail with a `ReiseNetworkError`.
+
+**Cross-origin header stripping.** On a redirect that crosses an origin
+boundary (different scheme, host, or port), the engine also strips sensitive headers
 (`Authorization`, `Cookie`, `X-API-Key`, `Proxy-Authorization`,
 `WWW-Authenticate`) before following it, so any credentials set via custom
 headers are never forwarded to another host.

@@ -152,7 +152,13 @@ abgewartet: Der Fehler wird sofort gemeldet.
 
 **Weiterleitungen.** Die Engine folgt bis zu `maxRedirects` (Standard `5`)
 HTTP-Weiterleitungen (`301/302/303/307/308`) und löst `Location` relativ zur aktuellen
-URL auf. Bei einer Weiterleitung auf einen **anderen Origin** entfernt sie sensible Header
+URL auf. Die Zugangsdaten einer `--base-url` (`user:password@`) gehen nur an den Origin
+der Basis-URL (Schema, Host und Port), bei jedem Schritt: Eine Weiterleitung auf denselben
+Origin behält sie, eine auf einen anderen Host, Port oder ein anderes Schema (auch `http:`
+→ `https:`) lässt sie weg, und Zugangsdaten, die ein Server in seinen `Location`-Header
+schreibt, werden nie gesendet. Ein `401`/`403` nach einer solchen Weiterleitung sagt das
+(bei `http:` → `https:`: eine `https`-Basis-URL verwenden). Bei einer Weiterleitung auf
+einen **anderen Origin** entfernt sie außerdem sensible Header
 (`Authorization`, `Cookie`, `X-API-Key`, `Proxy-Authorization`,
 `WWW-Authenticate`), damit Zugangsdaten nie an einen anderen Host gelangen. Andere
 3xx-Antworten (`300`, `304`, …), ein fehlender oder ungültiger `Location`-Header und eine

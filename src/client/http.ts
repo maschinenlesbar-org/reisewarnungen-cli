@@ -27,12 +27,25 @@ export interface HttpRequest {
    * and enforces `maxResponseBytes` on the body it gets back, so neither limit depends on it.
    */
   signal?: AbortSignal;
+  /**
+   * Always `"manual"`: a transport must not follow redirects itself (`fetch(url, { redirect:
+   * request.redirect })`). The engine follows them, with its own rules for which hop gets the
+   * base URL's credentials. A transport that reports a final `url` on another origin anyway
+   * makes the call fail.
+   */
+  redirect?: "manual";
 }
 
 export interface HttpResponse {
   status: number;
   headers: http.IncomingHttpHeaders;
   body: Buffer;
+  /**
+   * The URL the response came from, if the transport knows it (fetch's `response.url`).
+   * When it is on another origin than the request's, the transport followed a redirect
+   * itself and the engine rejects the response.
+   */
+  url?: string;
 }
 
 export type Transport = (request: HttpRequest) => Promise<HttpResponse>;

@@ -99,9 +99,12 @@ export class ReiseApiError extends ReiseError {
     location?: string;
     /** Redirects already followed when the `maxRedirects` limit stopped this one. */
     redirectsFollowed?: number;
+    /** Extra context for the message (a redirect that dropped the base URL's credentials). */
+    hint?: string;
   }) {
     const parts: string[] = [];
     if (args.detail) parts.push(args.detail);
+    if (args.hint) parts.push(args.hint);
     if (args.status >= 300 && args.status < 400) {
       const limit =
         args.redirectsFollowed !== undefined && args.redirectsFollowed > 0

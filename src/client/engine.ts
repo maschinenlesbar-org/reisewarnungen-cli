@@ -274,6 +274,14 @@ export class RequestEngine {
   readonly #baseUrl: string;
   /** The base URL's userinfo, raw and percent-decoded, for scrubbing server and transport text. */
   readonly #credentials: string[];
+  /**
+   * The base URL's userinfo as a Basic `Authorization` value, or undefined. The engine attaches
+   * it per hop, only to requests on the base URL's origin; the URL a transport sees carries no
+   * userinfo.
+   */
+  readonly #authorization: string | undefined;
+  /** The base URL's origin (scheme, host and port). */
+  readonly #origin: string;
   private readonly transport: Transport;
   private readonly userAgent: string;
   private readonly timeoutMs: number;
@@ -285,7 +293,13 @@ export class RequestEngine {
 
   constructor(options: EngineOptions = {}) {
     const baseUrl = validateBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL);
-    this.#baseUrl = baseUrl;
+    const parsed = new URL(baseUrl);
+    this.#origin = parsed.origin;
+    this.#authorization =
+      parsed.username === "" && parsed.password === ""
+        ? undefined
+        : `Basic ${Buffer.from(`${decodeUserinfo(parsed.username)}:${decodeUserinfo(parsed.password)}`).toString("base64")}`;
+    this.#baseUrl = withoutUserinfo(baseUrl);
     this.#credentials = credentialsIn(baseUrl).flatMap((raw) => {
       try {
         return [raw, decodeURIComponent(raw)];
@@ -401,14 +415,23 @@ export class RequestEngine {
     const idempotent = /^(GET|HEAD)$/i.test(method);
     let attempt = 0;
     let redirects = 0;
+    // Why a 401/403 after a redirect may not be the credentials' fault, if it isn't.
+    let credentialsDropped: string | undefined;
     // attempts = initial try + maxRetries (redirects are counted separately)
     for (;;) {
+      // The base URL's credentials go only to its own origin, on every hop: a same-origin
+      // redirect (relative or absolute) keeps them, any other origin never sees them.
+      const hopHeaders =
+        this.#authorization !== undefined && new URL(url).origin === this.#origin
+          ? { ...headers, Authorization: this.#authorization }
+          : headers;
       let raw: HttpResponse;
       try {
         raw = await this.callTransport({
           method,
           url,
-          headers,
+          headers: hopHeaders,
+          redirect: "manual",
           timeoutMs: this.timeoutMs,
           ...(this.maxResponseBytes > 0 ? { maxResponseBytes: this.maxResponseBytes } : {}),
         });
@@ -438,6 +461,16 @@ export class RequestEngine {
       if (invalid !== undefined) {
         throw new ReiseNetworkError(
           `${method} ${this.describe(url)} failed: the transport returned an invalid response (${invalid}).`,
+        );
+      }
+      // A transport must not follow redirects itself (fetch does by default): one that did
+      // and reports a final URL on another origin has sent the request (and possibly the
+      // credentials) where the engine's redirect rules would not have.
+      const finalOrigin = originOf((raw as { url?: unknown }).url);
+      if (finalOrigin !== undefined && finalOrigin !== new URL(url).origin) {
+        throw new ReiseNetworkError(
+          `${method} ${this.describe(url)} failed: the transport followed a redirect to another origin ` +
+            `(${redactUrl(finalOrigin)}); transports must not follow redirects (HttpRequest.redirect is "manual").`,
         );
       }
       const status = Number(raw.status);
@@ -498,6 +531,16 @@ export class RequestEngine {
             if (SENSITIVE_HEADERS.has(name.toLowerCase())) delete headers[name];
           }
         }
+        // Credentials a server puts into its Location are never sent: only the base URL's
+        // own, and only to its origin (attached per hop above).
+        to.username = "";
+        to.password = "";
+        if (this.#authorization !== undefined && to.origin !== this.#origin) {
+          credentialsDropped =
+            from.protocol === "http:" && to.protocol === "https:" && from.host === to.host
+              ? "the server redirected http→https, and the base URL's credentials are only sent to its own origin; use an https base URL"
+              : `the redirect to ${to.origin} did not carry the base URL's credentials (they are only sent to ${redactUrl(this.#origin)})`;
+        }
         url = to.toString();
         redirects += 1;
         continue;
@@ -507,7 +550,8 @@ export class RequestEngine {
 
       const contentType = String(headerValue(responseHeaders["content-type"]) ?? "");
       if (status < 200 || status >= 300) {
-        throw this.toApiError(method, url, status, body, location);
+        const hint = (status === 401 || status === 403) && credentialsDropped !== undefined ? credentialsDropped : undefined;
+        throw this.toApiError(method, url, status, body, location, undefined, hint);
       }
 
       return { data: body, contentType, status };
@@ -532,6 +576,7 @@ export class RequestEngine {
     body: Buffer,
     locationHeader?: string,
     redirectsFollowed?: number,
+    hint?: string,
   ): ReiseApiError {
     // The body may echo the request URL; keep the base URL's credentials out of it.
     const text = this.scrub(body.toString("utf8"));
@@ -557,7 +602,35 @@ export class RequestEngine {
       detail,
       ...(location !== undefined ? { location } : {}),
       ...(redirectsFollowed !== undefined ? { redirectsFollowed } : {}),
+      ...(hint !== undefined ? { hint } : {}),
     });
+  }
+}
+
+/** A userinfo part percent-decoded as Node decodes it for Basic auth (baseUrlProblem rules out bad escapes). */
+function decodeUserinfo(part: string): string {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
+}
+
+/** `url` with its userinfo (`user:pw@`) cut out, the rest exactly as written. */
+function withoutUserinfo(url: string): string {
+  const [userinfo] = credentialsIn(url);
+  const start = url.indexOf("://") + 3;
+  if (userinfo === undefined || !url.startsWith(`${userinfo}@`, start)) return url;
+  return url.slice(0, start) + url.slice(start + userinfo.length + 1);
+}
+
+/** The origin of a URL a transport reported, or undefined when there is none or it doesn't parse. */
+function originOf(value: unknown): string | undefined {
+  if (typeof value !== "string" || value === "") return undefined;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
   }
 }
 

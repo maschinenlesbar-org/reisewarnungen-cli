@@ -154,7 +154,12 @@ waited out: the error is reported at once.
 
 **Redirects.** The engine follows up to `maxRedirects` (default `5`) HTTP
 redirects (`301/302/303/307/308`), resolving `Location` relative to the current
-URL. On a **cross-origin** redirect it strips sensitive headers
+URL. The credentials of a `--base-url` (`user:password@`) go only to the base URL's
+own origin (scheme, host and port), on every hop: a same-origin redirect keeps them,
+a redirect to another host, port or scheme (also `http:` → `https:`) drops them, and
+credentials a server writes into its `Location` are never sent. A `401`/`403` after
+such a redirect says so (for `http:` → `https:`: use an `https` base URL). On a
+**cross-origin** redirect the engine also strips sensitive headers
 (`Authorization`, `Cookie`, `X-API-Key`, `Proxy-Authorization`,
 `WWW-Authenticate`) so credentials are never leaked to another host. Any other
 3xx (`300`, `304`, …), a missing or malformed `Location`, and a redirect past the
