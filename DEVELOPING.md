@@ -196,14 +196,15 @@ src/
     types.ts     # TravelWarning / CountryEntry + the response envelope
     query.ts     # dependency-free query-string builder
     http.ts      # the Transport interface + default node:http/https transport
-    engine.ts    # URL building, retry/backoff, redirects (cross-origin credential strip), JSON decoding, error mapping
-    errors.ts    # ReiseError / ReiseApiError / ReiseNetworkError / ReiseParseError / ReiseValidationError
-    validate.ts  # input rules (Problem functions) + assertValid, shared with the CLI
-    client.ts    # ReisewarnungenClient — list / summaries / get over the engine
+    engine.ts    # URL building, retry/backoff, redirects (per-hop credentials), transport contract, charset decoding, error mapping
+    errors.ts    # ReiseError / ReiseApiError / ReiseNetworkError / ReiseParseError / ReiseValidationError + credential redaction
+    validate.ts  # input rules (Problem functions) + assertValid / assertKnownKeys, shared with the CLI
+    advice.ts    # adviceSentences: the advice-against-travel sentences of an advisory's HTML
+    client.ts    # ReisewarnungenClient — list / summaries / get / advice over the engine
   cli/
     io.ts        # injectable I/O seam (stdout/stderr/file)
     shared.ts    # option parsers, global-option resolver, JSON renderer
-    commands/    # list / countries / get
+    commands/    # list / countries / get / advice
     program.ts   # assembles the commander program from injectable deps
     run.ts       # parses argv -> exit code (no process.exit; testable)
     index.ts     # #! bin shim
@@ -332,7 +333,9 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`engine.test.ts`** — URL building, JSON decoding, error mapping, 429/503 retry, redirects — mocked transport.
 - **`client.test.ts`** — response unwrapping, the flattened `summaries()` view, the `get` entry lookup (not-found vs. entries under other keys) — mocked transport.
 - **`validate.test.ts`** — `assertValid`, the `ReiseValidationError` exit-code mapping and the `parity()` helper.
-- **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, and exit codes (network/parse → 1, not-found → 4) — mocked client.
+- **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, `-o -`, and exit codes (network/parse → 1, not-found → 4) — mocked client.
+- **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.
+- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options). Only their `adapter` block is repo-specific.
 
 ## Continuous integration
 
