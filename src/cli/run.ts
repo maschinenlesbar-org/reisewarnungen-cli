@@ -5,7 +5,55 @@
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import type { CliDeps } from "./io.js";
-import { ReiseApiError, ReiseError, ReiseNotFoundError, ReiseValidationError } from "../client/errors.js";
+import {
+  ReiseApiError,
+  ReiseError,
+  ReiseNotFoundError,
+  ReiseValidationError,
+  credentialsIn,
+  redactCredentials,
+} from "../client/errors.js";
+
+/**
+ * Replace the userinfo of every URL in `text` with `***`, the form `redactUrl` gives
+ * (`https://user:secret@host` becomes `https://***@host`). Text-based, so it also covers
+ * a URL that does not parse; the last `@` before the host ends the userinfo. A backstop
+ * behind the exact-string redaction of withRedactedOutput.
+ */
+export function redactUserinfo(text: string): string {
+  return text.replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#']*@/gi, "$1***@");
+}
+
+/**
+ * `deps` with an `io` that redacts the credentials of every argument from everything it
+ * prints. Commander echoes rejected values in its errors (`argument '<url>' is invalid`),
+ * the CLI's own messages name unknown commands and option values, and library errors name
+ * the request URL: whatever path a credential takes to stdout or stderr, the exact userinfo
+ * (as `credentialsIn` finds it, plus its JSON-quoted form) is replaced by `***`. A pattern
+ * alone can't delimit a password with spaces, quotes, `#`, `?` or `/`; the exact strings
+ * can. Without credentials the output passes through unchanged. Files written with
+ * `--output` are data and are not touched.
+ */
+export function withRedactedOutput(deps: CliDeps, argv: readonly string[]): CliDeps {
+  // An `--option=value` token is echoed as its value alone.
+  const values = argv.map((token) =>
+    token.startsWith("-") && token.includes("=") ? token.slice(token.indexOf("=") + 1) : token,
+  );
+  const secrets = new Set<string>();
+  for (const source of [...argv, ...values]) {
+    for (const secret of credentialsIn(source)) {
+      secrets.add(secret);
+      secrets.add(JSON.stringify(secret).slice(1, -1));
+    }
+  }
+  if (secrets.size === 0) return deps;
+  const list = [...secrets];
+  const redact = (text: string): string => redactUserinfo(redactCredentials(text, list));
+  return {
+    ...deps,
+    io: { ...deps.io, out: (text) => deps.io.out(redact(text)), err: (text) => deps.io.err(redact(text)) },
+  };
+}
 
 /**
  * Apply exitOverride + output redirection to every command in the tree.
@@ -22,6 +70,7 @@ function configureTree(command: Command, deps: CliDeps): void {
 }
 
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
+  deps = withRedactedOutput(deps, argv);
   const program = buildProgram(deps);
   configureTree(program, deps);
 

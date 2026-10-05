@@ -122,6 +122,15 @@ The Auswärtiges Amt travel-warning endpoint is **open data** — it requires no
 API key or token. The client issues unauthenticated `GET` requests. There is
 no `--api-key` flag, no env var, and nothing to configure.
 
+**Credentials in a base URL.** A mirror or proxy behind a login can be given as
+`--base-url https://user:password@host` (sent as HTTP Basic auth). The CLI never prints
+that password: `run()` wraps its output (`withRedactedOutput`) so every line — commander's
+usage errors that echo a rejected value, its own messages, library errors naming the
+request URL — has the exact userinfo of every argument replaced by `***`, whatever
+characters the password holds (`#`, `?`, `/`, spaces, quotes). The library exports the
+pieces: `redactUrl(url)`, `credentialsIn(value)` (the userinfo as written, also for a
+value that doesn't parse) and `redactCredentials(text, list)`.
+
 **Cross-origin credential stripping.** On a redirect that crosses an origin
 boundary (different scheme, host, or port), the engine strips sensitive headers
 (`Authorization`, `Cookie`, `X-API-Key`, `Proxy-Authorization`,
