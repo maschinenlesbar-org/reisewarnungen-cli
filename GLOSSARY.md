@@ -147,10 +147,11 @@ or login. The client only reads; it issues no writes.
 
 **Retry / backoff.** Transient `429` (rate limited) and `503` responses are
 retried automatically (`--max-retries` / `maxRetries`, `0`–`10` (`MAX_RETRIES`),
-default `2`). Each retry waits
-the server's `Retry-After` (seconds or an HTTP date); without a usable one the
-delay grows linearly (200 ms, 400 ms, …). A `Retry-After` above 30 s is not
-waited out: the error is reported at once.
+default `2`), and so are reset connections. The wait grows linearly for a `503`
+(200 ms, 400 ms, …) and starts at 1 s for a `429`, doubling per retry (at most
+30 s). The server's `Retry-After` (seconds or an HTTP date) can make a wait longer,
+never shorter: `Retry-After: 0` still waits. A `Retry-After` above 30 s is not
+waited out: the error is reported at once and names the requested wait.
 
 **Redirects.** The engine follows up to `maxRedirects` (default `5`) HTTP
 redirects (`301/302/303/307/308`), resolving `Location` relative to the current
@@ -180,8 +181,8 @@ configuration error rather than a network error; the CLI reports the same messag
 as a usage error (exit `1`).
 
 **Engine limits are checked by the library.** `timeoutMs` (`0`–`MAX_TIMEOUT_MS`),
-`maxRetries` (`0`–`MAX_RETRIES`), and `maxRedirects`, `maxResponseBytes` and
-`retryDelayMs` (non-negative) must be integers. The client constructor rejects any
+`maxRetries` (`0`–`MAX_RETRIES`), `retryDelayMs` (`0`–`30000`), and `maxRedirects`
+and `maxResponseBytes` (non-negative) must be integers. The client constructor rejects any
 other value — negative, fractional, `NaN`, `Infinity`, above the cap — with a
 `ReiseValidationError` before any request, so a bad value can never switch a limit
 off. The CLI's flags apply the same rule.

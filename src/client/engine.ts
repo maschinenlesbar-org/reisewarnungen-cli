@@ -51,15 +51,16 @@ export interface EngineOptions {
    */
   timeoutMs?: number;
   /**
-   * Number of automatic retries for transient (429/503) responses, an integer
-   * 0..`MAX_RETRIES` (10); defaults to 2. Each waits the response's `Retry-After`
-   * (up to `MAX_RETRY_AFTER_MS`; a longer one is not retried), or else
-   * `retryDelayMs * attempt`.
+   * Number of automatic retries for transient (429/503) responses and reset
+   * connections, an integer 0..`MAX_RETRIES` (10); defaults to 2. Each waits the
+   * backoff — `retryDelayMs * attempt`, or for a 429 at least 1 s, doubling per
+   * attempt (at most 30 s) — or longer when the response's `Retry-After` asks for
+   * it, never shorter. A `Retry-After` above `MAX_RETRY_AFTER_MS` is not retried.
    */
   maxRetries?: number;
   /**
-   * Base backoff between retries in milliseconds (grows linearly), a non-negative
-   * integer; used without a Retry-After. Defaults to 200.
+   * Base backoff between retries in milliseconds (grows linearly; a 429 waits at
+   * least 1 s, doubling), an integer 0..`MAX_RETRY_AFTER_MS` (30 000). Defaults to 200.
    */
   retryDelayMs?: number;
   /**
@@ -88,6 +89,19 @@ const DEFAULT_MAX_RESPONSE_BYTES = 100 * 1024 * 1024;
  * out, and a hostile value must not stall the CLI.
  */
 export const MAX_RETRY_AFTER_MS = 30_000;
+
+/** Shortest wait before retrying a 429. */
+const MIN_RATE_LIMIT_DELAY_MS = 1_000;
+
+/**
+ * The backoff before retry `attempt` of a 429: from 1 s (or retryDelayMs, if larger),
+ * doubling per attempt, at most MAX_RETRY_AFTER_MS. The linear 200/400 ms of a 503 barely
+ * backs off from a rate limit, and only adds load to a public service that has just asked
+ * for less.
+ */
+function rateLimitDelay(retryDelayMs: number, attempt: number): number {
+  return Math.min(Math.max(retryDelayMs, MIN_RATE_LIMIT_DELAY_MS) * 2 ** (attempt - 1), MAX_RETRY_AFTER_MS);
+}
 
 /** An IMF-fixdate (RFC 9110 §5.6.7), the one HTTP-date form senders must generate. */
 const IMF_FIXDATE =
@@ -316,7 +330,7 @@ export class RequestEngine {
     const anyInt = Number.MAX_SAFE_INTEGER;
     this.timeoutMs = intOption("timeoutMs", options.timeoutMs, MAX_TIMEOUT_MS, 30_000);
     this.maxRetries = intOption("maxRetries", options.maxRetries, MAX_RETRIES, 2);
-    this.retryDelayMs = intOption("retryDelayMs", options.retryDelayMs, anyInt, 200);
+    this.retryDelayMs = intOption("retryDelayMs", options.retryDelayMs, MAX_RETRY_AFTER_MS, 200);
     this.maxRedirects = intOption("maxRedirects", options.maxRedirects, anyInt, 5);
     this.maxResponseBytes = intOption(
       "maxResponseBytes",
@@ -485,15 +499,23 @@ export class RequestEngine {
       }
 
       const retryable = status === 429 || status === 503;
+      let retryHint: string | undefined;
       if (retryable && attempt < this.maxRetries) {
-        // Honour Retry-After; without a usable one, back off linearly. A Retry-After
-        // beyond MAX_RETRY_AFTER_MS is not retried: the error below surfaces at once.
-        const retryAfter = parseRetryAfter(responseHeaders["retry-after"]);
+        // Back off: doubling from 1 s for a 429, linear from retryDelayMs for a 503. A
+        // Retry-After can ask for longer, never for less: `Retry-After: 0` or a date in the
+        // past turned the retries into a zero-delay burst against a server that had just
+        // asked for less load. One beyond MAX_RETRY_AFTER_MS is not retried: the error below
+        // surfaces at once and names the wait.
+        const backoff = status === 429 ? rateLimitDelay(this.retryDelayMs, attempt + 1) : this.retryDelayMs * (attempt + 1);
+        const retryAfter = parseRetryAfter(headerValue(responseHeaders["retry-after"]));
         if (retryAfter === undefined || retryAfter <= MAX_RETRY_AFTER_MS) {
           attempt += 1;
-          await this.sleep(retryAfter ?? this.retryDelayMs * attempt);
+          await this.sleep(Math.max(retryAfter ?? 0, backoff));
           continue;
         }
+        retryHint =
+          `the server asked to wait ${Math.ceil(retryAfter / 1000)} s (Retry-After), longer than the ` +
+          `${MAX_RETRY_AFTER_MS / 1000} s the client waits, so it did not retry; retrying sooner won't help`;
       }
 
       // Follow redirects, resolving the Location relative to the current URL.
@@ -550,7 +572,8 @@ export class RequestEngine {
 
       const contentType = String(headerValue(responseHeaders["content-type"]) ?? "");
       if (status < 200 || status >= 300) {
-        const hint = (status === 401 || status === 403) && credentialsDropped !== undefined ? credentialsDropped : undefined;
+        const hint =
+          (status === 401 || status === 403) && credentialsDropped !== undefined ? credentialsDropped : retryHint;
         throw this.toApiError(method, url, status, body, location, undefined, hint);
       }
 

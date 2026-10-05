@@ -145,10 +145,11 @@ Schlüssel, Token oder Login. Der Client liest nur; er schreibt nichts.
 
 **Retry / Backoff.** Vorübergehende Antworten `429` (Rate-Limit) und `503` werden
 automatisch wiederholt (`--max-retries` / `maxRetries`, `0`–`10` (`MAX_RETRIES`),
-Standard `2`). Jede Wiederholung wartet
-das `Retry-After` des Servers ab (Sekunden oder ein HTTP-Datum); ohne verwertbaren Wert
-wächst die Wartezeit linear (200 ms, 400 ms, …). Ein `Retry-After` über 30 s wird nicht
-abgewartet: Der Fehler wird sofort gemeldet.
+Standard `2`), ebenso abgebrochene Verbindungen. Die Wartezeit wächst bei `503` linear
+(200 ms, 400 ms, …) und beginnt bei `429` mit 1 s, verdoppelt je Versuch (höchstens 30 s).
+Ein `Retry-After` des Servers (Sekunden oder ein HTTP-Datum) kann sie verlängern, nie
+verkürzen: `Retry-After: 0` wartet trotzdem. Ein `Retry-After` über 30 s wird nicht
+abgewartet: Der Fehler wird sofort gemeldet und nennt die verlangte Wartezeit.
 
 **Weiterleitungen.** Die Engine folgt bis zu `maxRedirects` (Standard `5`)
 HTTP-Weiterleitungen (`301/302/303/307/308`) und löst `Location` relativ zur aktuellen
@@ -179,8 +180,8 @@ einen Konfigurationsfehler und keinen Netzwerkfehler; die CLI meldet dieselbe Na
 als Bedienfehler (Exit `1`).
 
 **Engine-Grenzen prüft die Bibliothek.** `timeoutMs` (`0`–`MAX_TIMEOUT_MS`),
-`maxRetries` (`0`–`MAX_RETRIES`) sowie `maxRedirects`, `maxResponseBytes` und
-`retryDelayMs` (nicht negativ) müssen ganze Zahlen sein. Der Client-Konstruktor lehnt
+`maxRetries` (`0`–`MAX_RETRIES`), `retryDelayMs` (`0`–`30000`) sowie `maxRedirects`
+und `maxResponseBytes` (nicht negativ) müssen ganze Zahlen sein. Der Client-Konstruktor lehnt
 jeden anderen Wert – negativ, gebrochen, `NaN`, `Infinity`, über der Obergrenze – vor
 jeder Anfrage mit einem `ReiseValidationError` ab, sodass ein falscher Wert nie eine
 Grenze abschaltet. Die Flags der CLI wenden dieselbe Regel an.

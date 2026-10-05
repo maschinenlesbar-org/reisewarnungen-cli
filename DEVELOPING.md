@@ -69,7 +69,7 @@ one whose entries sit under other keys throws `ReiseParseError` rather than gues
 new ReisewarnungenClient({
   baseUrl: "https://www.auswaertiges-amt.de",
   timeoutMs: 15_000,
-  maxRetries: 3,              // 429 / 503: waits Retry-After (<= 30 s), else linear backoff
+  maxRetries: 3,              // 429 / 503 / resets: backoff, or longer if Retry-After asks (<= 30 s)
   maxResponseBytes: 50 << 20, // abort responses larger than 50 MiB (0 = unlimited)
   userAgent: "my-app/1.0",
   transport: customTransport, // inject your own HTTP transport
@@ -79,7 +79,8 @@ new ReisewarnungenClient({
 The constructor range-checks the numeric options before any request and throws
 `ReiseValidationError` (`Invalid maxRetries: Must be <= 10.`) for anything else:
 `timeoutMs` an integer `0`..`MAX_TIMEOUT_MS` (2^31 - 1), `maxRetries` `0`..`MAX_RETRIES`
-(10), and `maxRedirects`, `maxResponseBytes` and `retryDelayMs` non-negative integers.
+(10), `retryDelayMs` `0`..`MAX_RETRY_AFTER_MS` (30 000), and `maxRedirects` and
+`maxResponseBytes` non-negative integers.
 `undefined` keeps the default and `0` its documented meaning. A negative, `NaN` or
 fractional value would otherwise switch the timeout or the size cap off, and `NaN` or
 `Infinity` would leave retries or redirects unbounded. The rule is the exported
@@ -253,10 +254,14 @@ check this with the `parity()` helper in `test/helpers.ts`, which sends one inpu
 through `run()` and through the library on one recording mock transport.
 
 **Retry / backoff.** Transient `429` (rate limited) and `503` responses are
-retried automatically (`--max-retries` / `maxRetries`, `0`–`MAX_RETRIES` (10), default `2`). Each retry waits
-the response's `Retry-After` (delay-seconds or an IMF-fixdate, parsed strictly by the
-exported `parseRetryAfter`); without a usable one the delay is `retryDelayMs * attempt`.
-A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s) is not retried: the error surfaces at once.
+retried automatically (`--max-retries` / `maxRetries`, `0`–`MAX_RETRIES` (10), default `2`). The
+backoff is the floor: `retryDelayMs * attempt` for a `503` (and a reset connection), and for a
+`429` at least 1 s (or `retryDelayMs`, if larger), doubling per attempt, at most 30 s. A
+`Retry-After` (delay-seconds or an IMF-fixdate, parsed strictly by the exported
+`parseRetryAfter`) can lengthen a wait, never shorten it, so `Retry-After: 0` or a past date
+never makes a zero-delay burst. A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s) is not
+retried: the error surfaces at once, and its message names the requested wait and says that
+retrying sooner won't help. `retryDelayMs` is an integer `0`..`MAX_RETRY_AFTER_MS`.
 `ReiseApiError` exposes `isRetryable` (true for `429`/`503`).
 
 **maxResponseBytes.** A hard cap on the response body size (default 100 MiB;

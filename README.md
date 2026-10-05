@@ -172,7 +172,7 @@ These apply to every command and may be given before *or* after it:
 | `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`, no surrounding whitespace). A `user:password@` in it is sent as HTTP Basic auth and never printed (`***`); write a literal `%` in it as `%25` |
 | `--timeout <ms>` | Time limit per request, reading the whole response included (default `30000`; at most `2147483647`; `0` = no limit, the request may wait forever) |
 | `--user-agent <ua>` | `User-Agent` header value (non-blank, Latin-1, no control characters) |
-| `--max-retries <n>` | Retries for transient `429`/`503` responses (`0`–`10`, default `2`; each waits the server's `Retry-After`, up to 30 s) |
+| `--max-retries <n>` | Retries for transient `429`/`503` responses and reset connections (`0`–`10`, default `2`; each waits a backoff — 200 ms, 400 ms, … for a `503`, from 1 s doubling for a `429` — or longer if the server's `Retry-After` asks, up to 30 s; a longer `Retry-After` is not retried) |
 | `--max-redirects <n>` | HTTP redirects to follow (`0` = none; default `5`) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 

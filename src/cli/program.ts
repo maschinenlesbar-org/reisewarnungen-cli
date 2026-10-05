@@ -56,7 +56,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .option("--user-agent <ua>", "User-Agent header value (non-blank, Latin-1, no control characters)", parseHeaderValue)
     .option(
       "--max-retries <n>",
-      `retries for transient 429/503 responses (0..${MAX_RETRIES}; each waits the server's Retry-After, up to ${MAX_RETRY_AFTER_MS / 1000} s)`,
+      `retries for transient 429/503 responses and resets (0..${MAX_RETRIES}; each waits a backoff, or the server's longer Retry-After up to ${MAX_RETRY_AFTER_MS / 1000} s; see README)`,
       parseBoundedInt(0, MAX_RETRIES),
     )
     .option("--max-redirects <n>", "HTTP redirects to follow (0 = none; default 5)", parseIntArg)

@@ -149,10 +149,10 @@ test("a retried request that then succeeds resolves", async () => {
 
 // ---- Retry-After ----
 
-function retryingEngine(retryAfter: string | undefined, maxRetries = 2) {
+function retryingEngine(retryAfter: string | undefined, maxRetries = 2, status = 429) {
   const delays: number[] = [];
   const mt = makeMockTransport(() => ({
-    status: 429,
+    status,
     headers: {
       "content-type": "application/json",
       ...(retryAfter === undefined ? {} : { "retry-after": retryAfter }),
@@ -170,17 +170,27 @@ function retryingEngine(retryAfter: string | undefined, maxRetries = 2) {
 }
 
 test("a 429 with Retry-After in seconds waits that long before each retry", async () => {
-  const { engine, mt, delays } = retryingEngine("1");
+  const { engine, mt, delays } = retryingEngine("3");
   await assert.rejects(() => engine.getJson("/x"), (e: unknown) => e instanceof ReiseApiError && e.status === 429);
   assert.equal(mt.calls.length, 3);
-  assert.deepEqual(delays, [1000, 1000]);
+  assert.deepEqual(delays, [3000, 3000]);
 });
 
-test("without a usable Retry-After the retries back off linearly", async () => {
+test("a Retry-After shorter than the backoff waits the backoff", async () => {
+  // 429: from 1 s, doubling; Retry-After 1 s lengthens nothing.
+  assert.deepEqual((await failingDelays(retryingEngine("1"))), [1000, 2000]);
+  assert.deepEqual((await failingDelays(retryingEngine("0", 2, 503))), [200, 400]);
+});
+
+async function failingDelays(r: ReturnType<typeof retryingEngine>): Promise<number[]> {
+  await assert.rejects(() => r.engine.getJson("/x"));
+  return r.delays;
+}
+
+test("without a usable Retry-After a 429 backs off from 1 s, doubling, and a 503 linearly", async () => {
   for (const header of [undefined, "", "-1", "1.5", "soon", "1e3", "2026-09-26T10:00:00Z"]) {
-    const { engine, delays } = retryingEngine(header);
-    await assert.rejects(() => engine.getJson("/x"));
-    assert.deepEqual(delays, [200, 400], String(header));
+    assert.deepEqual(await failingDelays(retryingEngine(header)), [1000, 2000], String(header));
+    assert.deepEqual(await failingDelays(retryingEngine(header, 2, 503)), [200, 400], String(header));
   }
 });
 
@@ -190,6 +200,7 @@ test("a Retry-After above MAX_RETRY_AFTER_MS is not retried: the error surfaces 
     await assert.rejects(() => engine.getJson("/x"), (e: unknown) => e instanceof ReiseApiError && e.status === 429);
     assert.equal(mt.calls.length, 1, header);
     assert.deepEqual(delays, [], header);
+    await assert.rejects(() => engine.getJson("/x"), (e: unknown) => e instanceof Error && /Retry-After\), longer than the 30 s/.test(e.message));
   }
 });
 
