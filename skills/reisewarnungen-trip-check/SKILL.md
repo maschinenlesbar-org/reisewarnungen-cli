@@ -41,12 +41,44 @@ reisewarnungen countries --compact \
 ```
 
 Notes and traps:
-- **Country names are German** (`Ägypten`, `Vereinigtes Königreich`, `Russische Föderation`,
-  `Côte d'Ivoire`), with exceptions: the United States is `USA`, not "Vereinigte
-  Staaten". For an English request, match on `countryCode` (ISO-3166 alpha-2,
-  e.g. `TH`) or `iso3CountryCode` (alpha-3, e.g. `THA`) instead — those are stable:
-  `jq -r '.[] | select(.iso3CountryCode=="THA")'`. If a German exact match fails, fall
-  back to a case-insensitive substring match, or to the ISO code.
+- **Country names are the official German short names** (`Ägypten`, `Vereinigtes
+  Königreich`, `Russische Föderation`, `Côte d'Ivoire`), with exceptions: the United
+  States is `USA`, not "Vereinigte Staaten". For an English request, match on
+  `countryCode` (ISO-3166 alpha-2, e.g. `TH`) or `iso3CountryCode` (alpha-3, e.g. `THA`)
+  instead — those are stable: `jq -r '.[] | select(.iso3CountryCode=="THA")'`.
+- **Everyday and former German names don't match** — map them to the ISO code first.
+  Several of them name countries under a *full* warning, so a miss must never read as
+  "unknown" or "safe":
+
+  | Typed | Match on | Official `countryName` |
+  |---|---|---|
+  | Russland | `RU` | Russische Föderation |
+  | Weißrussland, Weissrussland | `BY` | Belarus |
+  | Palästina, Gaza, Westjordanland | `PS` | Palästinensische Gebiete* |
+  | Burma, Birma | `MM` | Myanmar |
+  | Elfenbeinküste | `CI` | Côte d'Ivoire |
+  | Großbritannien, England, Schottland, Wales, Nordirland | `GB` | Vereinigtes Königreich |
+  | Osttimor | `TL` | Timor-Leste |
+  | Swasiland | `SZ` | Eswatini |
+  | Kap Verde, Kapverden | `CV` | Cabo Verde |
+  | Vereinigte Staaten, Amerika | `US` | USA |
+  | Holland | `NL` | Niederlande |
+  | Tschechien | `CZ` | Tschechische Republik |
+  | Moldawien, Moldau | `MD` | Republik Moldau |
+  | Mazedonien | `MK` | Nordmazedonien |
+  | Emirate, VAE, Dubai | `AE` | Vereinigte Arabische Emirate |
+  | Vatikan | `VA` | Heiliger Stuhl / Vatikan |
+
+- **No exact match:** try the table, then a case-insensitive substring match with `test`
+  (it folds `Ä`/`Ö`/`Ü` too; jq's `ascii_downcase` does not, so `ägypten` would miss):
+  `jq -r --arg q "ägypten" '.[] | select(.countryName | test($q; "i")) | [.id,.countryName,.countryCode] | @tsv'`.
+- **Several matches** (`Kongo` → Demokratische Republik Kongo *and* Republik Kongo;
+  `Korea` → Nord- and Südkorea; `Guinea` → four countries; `Sudan` → Sudan and
+  Südsudan): prefer an exact `countryName` match; otherwise **ask the user** which one
+  they mean — the two Kongos carry different warnings — or brief each, clearly labelled.
+- **Still nothing:** say that the name wasn't found in the Auswärtiges Amt's list and ask
+  for another spelling or the ISO code. Never report a country you couldn't resolve as
+  "no warning".
 - **Content ids are not ISO codes** and **can change** as the catalogue updates — always
   resolve fresh from `countries`, never hard-code one.
 - Multiple countries (a multi-stop trip): resolve and brief each, then give a combined
