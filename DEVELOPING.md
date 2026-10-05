@@ -131,6 +131,13 @@ characters the password holds (`#`, `?`, `/`, spaces, quotes). The library expor
 pieces: `redactUrl(url)`, `credentialsIn(value)` (the userinfo as written, also for a
 value that doesn't parse) and `redactCredentials(text, list)`.
 
+The library keeps the password out of what a caller logs, too: the engine holds the base
+URL in a real `#private` field (so `console.log(client)`, `util.inspect` and
+`JSON.stringify` don't show it), `ReiseApiError.url` and its message carry the URL with
+the userinfo replaced by `***`, a redirect target is shown the same way, and error
+bodies, details, transport error text and the `cause` chain are scrubbed of the
+userinfo (raw and percent-decoded) before they reach an error.
+
 **Cross-origin credential stripping.** On a redirect that crosses an origin
 boundary (different scheme, host, or port), the engine strips sensitive headers
 (`Authorization`, `Cookie`, `X-API-Key`, `Proxy-Authorization`,

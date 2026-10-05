@@ -84,6 +84,7 @@ export class ReiseError extends Error {
 export class ReiseApiError extends ReiseError {
   readonly status: number;
   readonly detail: string | undefined;
+  /** The request URL, userinfo redacted (`https://***@host/…`). */
   readonly url: string;
   readonly method: string;
   readonly body: string;
@@ -113,9 +114,12 @@ export class ReiseApiError extends ReiseError {
       );
     }
     const detailPart = parts.length > 0 ? `: ${parts.join("; ")}` : "";
-    super(`HTTP ${args.status} for ${args.method} ${args.url}${detailPart}`);
+    // The URL is shown and kept without userinfo: a credential in a base URL must not leak
+    // into a message, a log line or JSON.stringify(err).
+    const url = redactUrl(args.url);
+    super(`HTTP ${args.status} for ${args.method} ${url}${detailPart}`);
     this.status = args.status;
-    this.url = args.url;
+    this.url = url;
     this.method = args.method;
     this.body = args.body;
     this.detail = args.detail;
