@@ -167,7 +167,9 @@ followed (no Location header)` (exit `1`).
 exhaustion from a hostile or buggy endpoint.
 
 **Base URL.** `--base-url` / `baseUrl` must be an absolute `http:`/`https:` URL
-without a query or fragment (a path prefix is fine). The library checks it when
+without a query or fragment, surrounding whitespace or control characters (a path
+prefix is fine); a `%` in its user name or password must be an escape (`%25` for a
+literal one). The library checks it when
 the client is built (`validateBaseUrl`) and throws a `ReiseValidationError`, a
 configuration error rather than a network error; the CLI reports the same message
 as a usage error (exit `1`).

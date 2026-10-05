@@ -147,7 +147,7 @@ Real flags only, from `reisewarnungen --help`:
 | Option | Description |
 | --- | --- |
 | `-V, --version` | Output the version number |
-| `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`) |
+| `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`, no surrounding whitespace). A `user:password@` in it is sent as HTTP Basic auth and never printed (`***`); write a literal `%` in it as `%25` |
 | `--timeout <ms>` | Time limit per request in milliseconds, whole response included (default `30000`; at most `2147483647`; `0` = no limit, the request may wait forever) |
 | `--user-agent <ua>` | `User-Agent` header value (non-blank, Latin-1, no control characters) |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses (`0`–`10`; each waits the server's `Retry-After`, up to 30 s) |

@@ -165,7 +165,9 @@ oder `redirect not followed (no Location header)` (Exit `1`).
 Schutz vor Speichererschöpfung durch einen feindseligen oder fehlerhaften Endpoint.
 
 **Basis-URL.** `--base-url` / `baseUrl` muss eine absolute `http:`/`https:`-URL ohne
-Query und Fragment sein (ein Pfadpräfix ist erlaubt). Die Bibliothek prüft sie beim
+Query und Fragment, ohne umgebende Leerzeichen und ohne Steuerzeichen sein (ein
+Pfadpräfix ist erlaubt); ein `%` in Benutzername oder Passwort muss ein Escape sein
+(`%25` für ein wörtliches `%`). Die Bibliothek prüft sie beim
 Erzeugen des Clients (`validateBaseUrl`) und wirft einen `ReiseValidationError`, also
 einen Konfigurationsfehler und keinen Netzwerkfehler; die CLI meldet dieselbe Nachricht
 als Bedienfehler (Exit `1`).

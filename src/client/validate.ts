@@ -67,6 +67,11 @@ export const headerValueProblem: Problem = (value) => {
  * paths are appended to the base URL as a string, so a `?` or `#` in it would
  * swallow every path (`http://h/?x=1` requests `/?x=1/opendata/...`, `http://h/#f`
  * requests `/`). A malformed value (`notaurl`, `""`, `http://`) fails the parse.
+ * A `%` in the user name or password must start a valid escape (`%25` for a literal
+ * one): the userinfo is decoded for the Authorization header, and Node failed at
+ * request time ("URI malformed") as a network error. Surrounding whitespace (U+00A0
+ * included) and control characters are rejected: `new URL()` trims or drops them
+ * silently, but the raw string is what the request URL is built from.
  */
 export const baseUrlProblem: Problem = (value) => {
   const malformed = "Expected a valid absolute URL (e.g. https://host).";
@@ -81,5 +86,17 @@ export const baseUrlProblem: Problem = (value) => {
     return 'Only "http:" and "https:" base URLs are supported.';
   }
   if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
+  for (const part of [url.username, url.password]) {
+    try {
+      decodeURIComponent(part);
+    } catch {
+      return 'The user name or password has a "%" that is not followed by two hex digits; write a literal "%" as %25.';
+    }
+  }
+  if (value !== value.trim()) return "A base URL cannot have surrounding whitespace.";
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c < 0x20 || c === 0x7f) return "A base URL cannot contain control characters.";
+  }
   return undefined;
 };
