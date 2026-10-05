@@ -46,6 +46,18 @@ export function registerWarningCommands(program: Command, deps: CliDeps): void {
     );
 
   program
+    .command("advice <contentId>")
+    .description(
+      "One country's warning flags plus every sentence of its advisory that warns or advises against travel (or anything else)",
+    )
+    .action(
+      action(deps, async ({ client, global }, [id]) => {
+        assertContentId(id ?? "");
+        renderJson(deps, global, await client.advice(id!));
+      }),
+    );
+
+  program
     .command("get <contentId>")
     .description("One country's full travel warning (with HTML content)")
     .action(

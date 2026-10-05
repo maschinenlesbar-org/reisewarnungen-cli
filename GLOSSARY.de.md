@@ -118,6 +118,16 @@ bestimmten Ereignis oder Umstand).
 **situationPartWarning.** Eine lagebezogene *Teil*warnung – lagebedingt und auf einen
 Teil des Landes beschränkt.
 
+**Abraten ohne Flag.** Unterhalb der formalen Stufen rät der Text des Hinweises von
+Reisen ab – ins ganze Land oder in Regionen –, ohne dass ein Flag gesetzt ist: „Von
+Reisen … wird (dringend) abgeraten", „Das Auswärtige Amt rät … ab", „Vermeiden Sie …
+Reisen", „Meiden Sie möglichst Reisen …", „… sollte … gemieden werden". Türkei, Angola,
+Bangladesch, Jordanien und Mexiko hatten am 06.10.2026 alle vier Flags `false` und
+solche Sätze im Text. „Kein Flag" heißt also „keine formale Warnung", nicht
+„unbedenklich". Der Befehl `advice` (Bibliothek: `client.advice`, `adviceSentences`)
+listet jeden Satz mit einer dieser Formulierungen samt Abschnitt; `travel: true`
+markiert die, die außerdem Reisen, einen Aufenthalt oder einen Landesteil nennen.
+
 ---
 
 ## Weitere Felder eines Eintrags

@@ -108,7 +108,24 @@ into a `ReiseNetworkError` (`Invalid request: …`).
 ### Methods
 
 `client.list()` (raw `response` map), `client.summaries()` (flattened array with ids),
-`client.get(contentId)` (one full warning).
+`client.get(contentId)` (one full warning), `client.advice(contentId)` (the flags plus the
+advice-against-travel sentences; the CLI's `advice`).
+
+`advice(contentId)` fetches the advisory with `get` (same errors) and returns its flags,
+`effective`/`lastModified` and `sentences` from the exported `adviceSentences(html)`
+([`advice.ts`](src/client/advice.ts)): every sentence that matches one of
+`ADVICE_PATTERNS` (abraten, warnen, Reisewarnung, (ver)meiden/gemieden/vermieden,
+verzichten, unterlassen/unterbleiben, aufgefordert, nicht … reisen/aufsuchen/besuchen;
+case-insensitive, Unicode word boundaries), with its heading path (`section`) and
+`travel` (`TRAVEL_PATTERN`: Reise, Aufenthalt, Region, Gebiet, Provinz, Grenze, Landesteil,
+…). The HTML is split at block elements (paragraphs, list items, headings, accordion
+buttons), entities decoded and soft hyphens dropped; sentences split at `.`/`!`/`?` before
+an upper-case start, but not after an abbreviation („z. B.", „o.g.", „bzw.", a one- or
+two-digit ordinal); a sentence that ends in `:` before a list carries the list's items. The
+flags record only the formal levels, so this is what keeps an all-false country from
+reading as "advice only" when its text says „Vermeiden Sie … Reisen" (Türkei), „Meiden Sie
+möglichst Reisen …" (Angola) or „… sollte … gemieden werden" (Bangladesch). An entry
+without `content` is a `ReiseParseError`, never "no advice".
 
 `summaries({ warnedOnly: true })` keeps only the countries with a warning of any
 kind in force: the exported `isWarned(entry)` is true when **any** of `warning`,

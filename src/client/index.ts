@@ -1,7 +1,9 @@
 // Public entry point for the API client library.
 
 export { ReisewarnungenClient, assertContentId, isWarned } from "./client.js";
-export type { SummariesOptions } from "./client.js";
+export type { SummariesOptions, TravelAdvice } from "./client.js";
+export { ADVICE_PATTERNS, TRAVEL_PATTERN, adviceSentences, isAdviceSentence, splitSentences } from "./advice.js";
+export type { AdviceSentence } from "./advice.js";
 export {
   RequestEngine,
   DEFAULT_BASE_URL,

@@ -15,7 +15,7 @@ advisory text — as clean JSON you can pipe straight into
 
 - **Works out of the box** — no account, no API key, no configuration. Install and run.
 - **Clean JSON output** — pretty-printed by default, `--compact` for one-line/scripting.
-- **Three focused commands** — `list`, `countries`, and `get`.
+- **Four focused commands** — `list`, `countries`, `get`, and `advice`.
 - **Save to file** — write output directly to a file with `-o/--output` instead of stdout.
 
 > Want to use this as a TypeScript library or understand how it's built?
@@ -68,9 +68,34 @@ reisewarnungen get 226768
 list                        all warnings, keyed by content id (raw response)
 countries [--warned-only]   flattened overview (id, country, warning flags)
 get <contentId>             one country's full warning (with HTML content)
+advice <contentId>          one country's flags + every advice-against-travel sentence
 ```
 
 The `<contentId>` is the numeric key from `list` / the `id` field from `countries`.
+
+### `advice`: the advice the flags don't carry
+
+The four flags record only the formal levels — Reisewarnung (`warning`) and
+Teilreisewarnung (`partialWarning`). Below them the Auswärtiges Amt advises
+against travel **in the advisory text alone**, and in many phrasings: „Von Reisen
+… wird (dringend) abgeraten", „Vermeiden Sie … Reisen" (Türkei), „Meiden Sie
+möglichst Reisen …" (Angola), „… sollte … gemieden werden" (Bangladesch). A
+country with all four flags `false` is therefore not necessarily "all clear".
+
+```bash
+reisewarnungen advice 201962 --compact | jq '.sentences[] | select(.travel)'
+```
+
+`advice` prints the country's flags, `effective`/`lastModified` and `sentences`:
+every sentence of the advisory that warns or advises against something
+(„abgeraten", „rät … ab", „gewarnt", „Reisewarnung", „meiden"/„vermeiden"/„gemieden",
+„verzichten", „unterlassen", „aufgefordert", „nicht … reisen/aufsuchen"), as whole
+sentences — not cut at „z. B." or „o.g.", and a sentence that introduces a list
+(„… wird abgeraten:") carries the list's items. Each has its `section` (the
+headings above it) and `travel: true` when it also mentions travel, a stay or a
+part of the country. Read those: some advise against travel to a region, others
+are about night driving or crowds. An all-false country with no `travel`
+sentence is advice only.
 
 ### `countries` options
 

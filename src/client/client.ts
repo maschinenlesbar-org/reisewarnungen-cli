@@ -10,6 +10,7 @@ import { RequestEngine, type EngineOptions } from "./engine.js";
 import { ReiseNotFoundError, ReiseParseError, ReiseValidationError } from "./errors.js";
 import { assertKnownKeys, assertValid, booleanProblem } from "./validate.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
+import { adviceSentences, type AdviceSentence } from "./advice.js";
 
 const PATH = "/opendata/travelwarning";
 const enc = encodeURIComponent;
@@ -51,6 +52,31 @@ export function isWarned(entry: TravelWarning): boolean {
     entry.situationWarning === true ||
     entry.situationPartWarning === true
   );
+}
+
+/** One country's flags plus the advice-against-travel sentences of its advisory ({@link ReisewarnungenClient.advice}). */
+export interface TravelAdvice {
+  /** The content id that was asked for. */
+  id: string;
+  countryName?: string;
+  countryCode?: string;
+  iso3CountryCode?: string;
+  /** The four warning flags, as in `get` (only `true` counts as a warning; see isWarned). */
+  warning?: boolean;
+  partialWarning?: boolean;
+  situationWarning?: boolean;
+  situationPartWarning?: boolean;
+  /** Unix seconds: when the current advice took effect / was last changed. */
+  effective?: number;
+  lastModified?: number;
+  /**
+   * Every sentence of the advisory that warns or advises against something (adviceSentences):
+   * „abgeraten", „rät … ab", „gewarnt", „Reisewarnung", „(ver)meiden"/„gemieden", „verzichten",
+   * „unterlassen", „aufgefordert", „nicht … reisen/aufsuchen". Those with `travel: true` may
+   * advise against travel to the country or a region; with all four flags false, only an
+   * advisory with no such sentence is "advice only".
+   */
+  sentences: AdviceSentence[];
 }
 
 /** Options for {@link ReisewarnungenClient.summaries}. */
@@ -200,6 +226,37 @@ export class ReisewarnungenClient {
    * (ReiseParseError), never read as the requested country. A `contentId` that is
    * not all ASCII digits is rejected with a ReiseValidationError before any request.
    */
+  /**
+   * One country's warning flags plus every sentence of its advisory that warns or advises
+   * against something (see {@link TravelAdvice}) — the part of the 40–70 KB HTML a
+   * travel-safety verdict depends on, because the flags record only the formal warning
+   * levels. Fetches the advisory with {@link get} (same errors, same id rule); an entry
+   * without `content` is a ReiseParseError, never an advisory without advice.
+   */
+  async advice(contentId: string): Promise<TravelAdvice> {
+    const entry = await this.get(contentId);
+    if (typeof entry.content !== "string" || entry.content.trim() === "") {
+      throw new ReiseParseError(
+        `The advisory for content id "${contentId}" has no content, so its advice can't be read.`,
+      );
+    }
+    const pick = <K extends keyof TravelWarning>(key: K): Partial<Pick<TravelWarning, K>> =>
+      entry[key] === undefined ? {} : ({ [key]: entry[key] } as Partial<Pick<TravelWarning, K>>);
+    return {
+      id: contentId,
+      ...pick("countryName"),
+      ...pick("countryCode"),
+      ...pick("iso3CountryCode"),
+      ...pick("warning"),
+      ...pick("partialWarning"),
+      ...pick("situationWarning"),
+      ...pick("situationPartWarning"),
+      ...pick("effective"),
+      ...pick("lastModified"),
+      sentences: adviceSentences(entry.content),
+    };
+  }
+
   async get(contentId: string): Promise<TravelWarning> {
     assertContentId(contentId);
     const path = `${PATH}/${enc(contentId)}`;

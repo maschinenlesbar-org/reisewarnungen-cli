@@ -14,7 +14,7 @@ npm i -g @maschinenlesbar.org/reisewarnungen-cli
 This installs the `reisewarnungen` bin. Without a global install you can run the
 built CLI directly with `node dist/src/cli/index.js`.
 
-All three subcommands are: `list`, `countries`, and `get`.
+The four subcommands are: `list`, `countries`, `get`, and `advice`.
 
 ## Use cases
 
@@ -68,6 +68,23 @@ reisewarnungen get 226768
 The `<contentId>` is the numeric key from `list` / the `id` field from
 `countries`. The returned entry includes the HTML `content`, `title`, and
 `effective`/`lastChanges` metadata.
+
+### 4a. Check whether the advisory advises against travel, flags or not
+
+Why: the flags record only the formal warning levels. „Von Reisen … wird
+abgeraten", „Vermeiden Sie … Reisen", „Meiden Sie möglichst Reisen …" or „… sollte
+gemieden werden" live in the text alone — a country with all four flags `false`
+can still advise against travel to a region (Türkei, Angola, Bangladesch, Jordanien
+…).
+
+```bash
+reisewarnungen advice 201962 --compact | jq -r '.sentences[] | select(.travel) | "[\(.section)] \(.text)"'
+```
+
+`advice` prints the flags plus every sentence that warns or advises against
+something, whole (not cut at „z. B."), with its `section` and `travel: true` when
+it mentions travel, a stay or a part of the country. Read the `travel` sentences:
+some advise against travel to a region, others are about night driving or crowds.
 
 ### 5. Find a country's content id by name, then fetch it
 

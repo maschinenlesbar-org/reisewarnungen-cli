@@ -6,8 +6,9 @@ description: >
   asks "is it safe to travel to X?", "travel warning for Thailand?", "what does
   the Foreign Office say about Egypt?", "I'm going to Kenya and Tanzania, any
   warnings?", or wants the German government's current advice for a trip. Resolves
-  country names to content ids, classifies the warning level, and distils the long
-  HTML advisory into the parts a traveller acts on — not the raw JSON.
+  country names to content ids, classifies the warning level — including advice
+  against travel that no flag records — and distils the long HTML advisory into the
+  parts a traveller acts on, not the raw JSON.
 compatibility: >
   Requires the `reisewarnungen` CLI (npm package
   @maschinenlesbar.org/reisewarnungen-cli) on PATH, installed by the user; the
@@ -27,7 +28,7 @@ This skill drives the `reisewarnungen` command. **Before anything else, validate
 
 This skill also filters JSON with `jq`. **Validate it too** — run `command -v jq`. If it is missing, inform the user that `jq` is not installed — installing it is their responsibility; never install it yourself — and carry on without it: filter the CLI output with `node -e` instead (Node is already on your PATH, since the CLI runs on it).
 
-The CLI is read-only, needs **no API key**, and wraps the open Auswärtiges Amt travel-warning API. Always pass `--compact` so output is one line, easy to pipe into `jq`. Bump `--timeout 60000` if `get` (which fetches a large HTML body) times out. A country that doesn't exist makes `get` exit **`4`** with `HTTP 404` — that means the id is wrong, not that the country is safe.
+The CLI is read-only, needs **no API key**, and wraps the open Auswärtiges Amt travel-warning API. Always pass `--compact` so output is one line, easy to pipe into `jq`. Bump `--timeout 60000` if `get` (which fetches a large HTML body) times out. A country that doesn't exist makes `get` and `advice` exit **`4`** with `HTTP 404` — that means the id is wrong, not that the country is safe.
 
 ## Step 1 — Resolve the country to a content id
 
@@ -62,43 +63,63 @@ advisory. In increasing concern:
 | `partialWarning` | Regional warning (Teilreisewarnung) — applies to specific regions | 🟠 **Regional warning** |
 | `situationWarning` | Situation-specific warning (event-driven) | 🟡 **Situation warning** |
 | `situationPartWarning` | Situation-specific, limited to part of the country | 🟡 **Partial situation warning** |
-| *(all false)* | No formal warning — but the advisory can still advise against travel (see trap) | 🟢 **Advice only**, once Step 3 finds no "abgeraten" |
+| *(all false)*, advisory advises against or says to avoid travel to the country or a region (Step 3) | No formal warning, but advice against travel in the text | 🟡 **Advice against travel** (no formal warning) |
+| *(all false)*, no such sentence (Step 3) | No formal warning, no advice against travel | 🟢 **Advice only** |
 
 > **Quirk.** In current live data only `warning` and `partialWarning` are ever set;
 > `situation*` flags exist in the schema but are presently all `false` across every
 > country. Don't claim a situation warning unless the flag is actually `true`.
 
-> **Trap — the flags don't carry the "abgeraten" level.** Below a formal warning, the
-> Auswärtiges Amt advises against travel in the text alone: „Von Reisen … wird dringend
-> abgeraten" or „Von nicht notwendigen Reisen … wird abgeraten". No flag records it.
-> Jordanien (`218008`) has all four flags `false`, yet its `Aktuelles` and `Sicherheit`
-> sections strongly advise against travel to the Syrian and Iraqi border regions and
-> against non-essential travel to the rest of the country. So an all-false entry is
-> **not** a verdict yet: always run the Step 3 check before saying 🟢.
+> **Trap — the flags don't carry advice against travel.** Below a formal warning, the
+> Auswärtiges Amt advises against travel in the text alone, and in many phrasings, not
+> only „abgeraten": „Von Reisen … wird dringend abgeraten", „Das Auswärtige Amt rät … ab",
+> „Vermeiden Sie alle nicht zwingend erforderlichen Reisen in die o.g. Grenzgebiete"
+> (Türkei), „Meiden Sie möglichst Reisen in die Provinzen …" (Angola), „Das Grenzgebiet
+> zu Myanmar sollte, wenn möglich, weiträumig gemieden werden" (Bangladesch). No flag
+> records any of them: Türkei, Angola, Bangladesch, Jordanien and Mexiko all have four
+> `false` flags. So an all-false entry is **not** a verdict yet: always run Step 3 before
+> saying 🟢.
 
 A country counts as "warned" if **any** flag is true — that's exactly what
 `countries --warned-only` filters on.
 
-## Step 3 — Fetch the full advisory for the briefing
+## Step 3 — Read the advice in the text (`advice`)
 
 The flags give a 🔴/🟠 verdict on their own, but an all-false country needs the text
-(see the trap above), and a real briefing needs it anyway:
+(see the trap above), and every briefing needs the regions it names. `advice` does the
+extraction — don't grep the HTML yourself (a keyword list of your own will miss
+phrasings, and full stops in „z. B." / „o.g." cut sentences):
+
+```bash
+reisewarnungen advice 201962 --compact \
+  | jq -r '.sentences[] | select(.travel) | "[\(.section)] \(.text)"'
+```
+
+`advice` prints the flags, `effective`/`lastModified` and `sentences`: **every** sentence
+of the advisory that warns or advises against something — „abgeraten", „rät … ab",
+„gewarnt", „Reisewarnung", „meiden"/„vermeiden"/„gemieden"/„vermieden", „verzichten",
+„unterlassen"/„unterbleiben", „aufgefordert", „nicht … reisen/aufsuchen/besuchen" — as
+whole sentences, with the `section` (headings) they stand under. A sentence that
+introduces a list („Von Reisen in folgende Regionen wird dringend abgeraten:") carries
+the list's items. `travel: true` marks the sentences that also mention travel, a stay or
+a part of the country.
+
+**Classify (all-false countries):** read every `travel: true` sentence and ask: does it
+advise against, or say to avoid, travel to (or stays in) the country or a named part of
+it — a border area, province, region, city district? Then the verdict is 🟡 **Advice
+against travel**, naming the regions. Sentences about crowds, demonstrations, night
+driving, hiking, the sun, customs or vaccinations are not that — use them as bullets at
+most. Only when **no** sentence advises against travel to the country or a region is 🟢
+advice-only the answer. When in doubt, quote the sentence and say what it covers; never
+drop it to reach 🟢. If `advice` fails (exit `1`/`4`), report the failure — never fall
+back to 🟢.
+
+For the rest of the briefing (entry rules, health, the full `Sicherheit` section) fetch
+the whole advisory:
 
 ```bash
 reisewarnungen get 201558 --compact
 ```
-
-To pull out the advice-against-travel sentences (warnings say „wird gewarnt", advice
-against travel says „wird abgeraten" or „dringend abgeraten"):
-
-```bash
-reisewarnungen get 218008 --compact \
-  | jq -r '.content | gsub("<[^>]*>"; " ") | [scan("[^.]*(?:abgeraten|gewarnt)[^.]*\\.") | gsub("\\s+"; " ") | ltrimstr(" ")] | unique[]'
-```
-
-Sentences can start with the section heading they follow (`Aktuelles Von Reisen …`), and
-unrelated ones match too (warnings about drugs, driving after dark). Read them and keep
-the ones about travelling to the country or its regions.
 
 Fields on a `get` result that matter:
 
@@ -141,7 +162,8 @@ Full advisory: reisewarnungen get 201558   (German, HTML)
 
 Rules:
 - **Lead with the level** (🔴/🟠/🟡/🟢) and name the German term (Reisewarnung /
-  Teilreisewarnung) — that's the load-bearing fact.
+  Teilreisewarnung, or „rät ab" / „meiden" for 🟡 advice against travel) — that's the
+  load-bearing fact.
 - For a 🔴 full warning, say so plainly first ("Foreign Office advises against all travel
   to …") before any detail.
 - Pull 3–6 bullets from the advisory's security sections (`Sicherheit`, `Aktuelles`,
@@ -154,7 +176,10 @@ Rules:
 - Always note this is the **German** Foreign Office's advice (in German) and offer the
   `get <id>` command for the full text.
 - Never soften or invent a level the flags don't support — and never read "all flags
-  false" as "no data". It means there is no formal warning. If the advisory says
-  „abgeraten", lead with that („Das Auswärtige Amt rät von Reisen in … dringend ab"),
-  naming the regions, and don't call it a warning. Only when the text has no such
-  sentence is advice-only the valid, reassuring answer.
+  false" as "no data". It means there is no formal warning. If `advice` shows a sentence
+  that advises against or says to avoid travel to the country or a region („abgeraten",
+  „Vermeiden Sie … Reisen", „Meiden Sie möglichst Reisen …", „… sollte gemieden werden"),
+  lead with 🟡 and that sentence's substance („Das Auswärtige Amt rät von Reisen in …
+  ab" / "advises avoiding non-essential travel to …"), naming the regions, and don't call
+  it a formal warning. Only when no such sentence exists is 🟢 advice-only the valid,
+  reassuring answer.

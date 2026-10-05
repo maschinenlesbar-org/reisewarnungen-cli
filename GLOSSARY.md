@@ -120,6 +120,17 @@ particular event or circumstance).
 **situationPartWarning.** A situation-specific *partial* warning — situational
 and limited to part of the country.
 
+**Advice against travel (no flag).** Below the formal levels, the advisory text
+advises against travel — to the whole country or to regions — without any flag
+being set: „Von Reisen … wird (dringend) abgeraten", „Das Auswärtige Amt rät …
+ab", „Vermeiden Sie … Reisen", „Meiden Sie möglichst Reisen …", „… sollte …
+gemieden werden". Türkei, Angola, Bangladesch, Jordanien and Mexiko had all four
+flags `false` on 2026-10-06 and such sentences in their text. So "no flag" means
+"no formal warning", not "all clear". The `advice` command (library:
+`client.advice`, `adviceSentences`) lists every sentence with one of these
+phrasings, with its section; `travel: true` marks those that also mention travel,
+a stay or a part of the country.
+
 ---
 
 ## Other entry fields
