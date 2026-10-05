@@ -221,3 +221,29 @@ test("summaries rejects a non-boolean warnedOnly before any request", async () =
   );
   assert.equal(mt.calls.length, 0);
 });
+
+test("list and summaries reject a 2xx answer that holds no country (P9: never 'no warnings')", async () => {
+  const lm = { lastModified: 1700000000 };
+  const broken: unknown[] = [
+    { response: {} },
+    { response: { ...lm, contentList: [] } },
+    { response: { error: "Service temporarily unavailable", ...lm } },
+    { response: { ...listBody.response, error: { code: 503 } } },
+    { response: { ...lm, contentList: ["100", "999"], "100": { countryName: "Atlantis", warning: true, partialWarning: false } } },
+    { response: { ...lm, "100": "Atlantis" } },
+  ];
+  for (const body of broken) {
+    for (const call of [(c: ReisewarnungenClient) => c.list(), (c: ReisewarnungenClient) => c.summaries({ warnedOnly: true })]) {
+      const mt = makeMockTransport(() => jsonResponse(body));
+      await assert.rejects(call(clientWith(mt)), ReiseParseError, JSON.stringify(body));
+    }
+  }
+  // The error text is named.
+  const mt = makeMockTransport(() => jsonResponse(broken[2]));
+  await assert.rejects(clientWith(mt).summaries(), /Service temporarily unavailable/);
+});
+
+test("get reports an error envelope as a parse error, not as 'not found'", async () => {
+  const mt = makeMockTransport(() => jsonResponse({ response: { error: "maintenance" } }));
+  await assert.rejects(clientWith(mt).get("100"), (e: unknown) => e instanceof ReiseParseError && /maintenance/.test(e.message));
+});

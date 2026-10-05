@@ -186,6 +186,12 @@ jeden anderen Wert – negativ, gebrochen, `NaN`, `Infinity`, über der Obergren
 jeder Anfrage mit einem `ReiseValidationError` ab, sodass ein falscher Wert nie eine
 Grenze abschaltet. Die Flags der CLI wenden dieselbe Regel an.
 
+**Eine leere Liste ist ein Fehler.** Die Liste umfasst rund 200 Länder. Eine Antwort
+ohne jedes Land, ein mit HTTP 200 gesendeter Fehler-Envelope oder eine `contentList`, die
+IDs ohne Eintrag nennt, endet mit Exit `1` – sie wird nie als „keine Reisewarnungen"
+gelesen. `countries --warned-only` mit `[]` heißt also: Die API hat ihre Liste geliefert,
+und kein Land darin trägt ein Flag.
+
 **Eintragssuche bei `get`.** Der Einzel-Endpoint legt seinen einen Eintrag unter der
 angefragten Content-ID ab, und `get` liefert **nur** diesen Eintrag. Ein Envelope ganz ohne
 Ländereintrag gilt als **nicht gefunden** (`ReiseNotFoundError`, Exit `4`); einer, dessen

@@ -155,9 +155,11 @@ with exit `0`; a failed run keeps its exit code even when nothing reads its stde
   the catalogue updates.
 - **Exit `1` / network error** — connectivity, DNS, or a timeout. Try again, or
   raise the limit with `--timeout 60000`.
-- **Empty array from `countries --warned-only`** — no warnings are currently in
-  force, or the upstream data was recently reset; try `countries` without the
-  flag to verify the API is returning data.
+- **Empty array from `countries --warned-only`** — the API returned its country
+  list, but no country carries a warning flag. A broken answer can't look like
+  this: an answer holding no country, an error envelope sent with HTTP 200 or a
+  `contentList` naming ids without an entry fails with exit `1` (`the
+  travel-warning list holds no country`, …).
 - **HTML in `content`** — the advisory text is delivered as HTML by the upstream
   API. Use `jq -r '.content'` to print it raw, or pipe it through an HTML
   renderer.

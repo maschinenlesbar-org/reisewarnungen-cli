@@ -274,6 +274,14 @@ the cap is passed; the engine also checks the body any transport returns. The me
 names both spellings: `Response exceeded the size limit of N bytes (maxResponseBytes;
 --max-response-bytes on the CLI)`.
 
+**List shape check.** `list()` (and so `summaries()`, `countries`) checks the
+unwrapped envelope before returning it: an `error` member (an error envelope sent
+with a 2xx status), a content-id key whose value is not an object, no country entry
+at all, or a `contentList` naming ids without an entry is a `ReiseParseError` (exit
+`1`). The live list holds about 200 countries, so an empty one is a broken answer —
+never "no travel warnings". `get` reports an error envelope the same way instead of
+"not found".
+
 **Entry lookup on `get`.** The single-warning endpoint keys its one entry under
 the requested content id, and `get` returns **only** that entry. An envelope with
 no country entry at all is **not found** (`ReiseNotFoundError`, exit `4`); one

@@ -76,6 +76,63 @@ function unwrap(body: unknown, path: string): JsonObject {
   return body["response"];
 }
 
+/** Keys of the list envelope that are not countries. */
+const ENVELOPE_KEYS = new Set(["lastModified", "contentList"]);
+
+/**
+ * Check the unwrapped list `response` against the documented shape and return it. The list
+ * always holds about 200 countries, so a 2xx answer that holds none is a broken answer, never
+ * "no travel warnings": a `{"response":{}}`, an envelope with only `lastModified` /
+ * `contentList`, or one carrying an `error` text used to print `[]` with exit 0, which the
+ * warned-overview skill reported as good news. Throws ReiseParseError for
+ *
+ * - an `error` member (an error envelope sent with a 2xx status), naming its text;
+ * - a content-id key (all digits) whose value is not an object;
+ * - no country entry at all;
+ * - a `contentList` naming an id that has no entry (a partial answer that would drop
+ *   countries silently).
+ */
+function checkList(response: JsonObject, path: string): JsonObject {
+  const error = response["error"];
+  if (error !== undefined) {
+    const text = typeof error === "string" ? error : JSON.stringify(error);
+    throw new ReiseParseError(
+      `The API answered ${path} with an error envelope instead of the travel-warning list: ${cutText(text)}`,
+    );
+  }
+  let countries = 0;
+  for (const [key, value] of Object.entries(response)) {
+    if (ENVELOPE_KEYS.has(key)) continue;
+    if (/^\d+$/.test(key)) {
+      if (!isObject(value)) throw shapeError(path, `an object for content id "${key}"`);
+      countries += 1;
+    }
+  }
+  if (countries === 0) {
+    throw new ReiseParseError(
+      `Unexpected response shape from ${path}: the travel-warning list holds no country ` +
+        "(a broken or partial answer, not \"no warnings\"); try again later.",
+    );
+  }
+  const contentList = response["contentList"];
+  if (Array.isArray(contentList)) {
+    const missing = contentList.map(String).filter((id) => !isObject(response[id]));
+    if (missing.length > 0) {
+      throw new ReiseParseError(
+        `Unexpected response shape from ${path}: contentList names ${missing.length} id(s) without an entry ` +
+          `(${cutText(missing.slice(0, 10).join(", "))}${missing.length > 10 ? ", …" : ""}), a partial answer.`,
+      );
+    }
+  }
+  return response;
+}
+
+/** Server text cut for a message: one line, at most 200 characters. */
+function cutText(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > 200 ? `${line.slice(0, 200)}…` : line;
+}
+
 export class ReisewarnungenClient {
   private readonly engine: RequestEngine;
 
@@ -83,9 +140,14 @@ export class ReisewarnungenClient {
     this.engine = new RequestEngine(options);
   }
 
-  /** The raw `response`: a `lastModified` timestamp plus one entry per country. */
+  /**
+   * The raw `response`: a `lastModified` timestamp, a `contentList` and one entry per
+   * country. A 2xx answer without any country entry, with an `error` member, or whose
+   * `contentList` names ids without an entry is a ReiseParseError (see checkList), never an
+   * empty result.
+   */
   async list(): Promise<TravelWarningList> {
-    return unwrap(await this.engine.getJson<unknown>(PATH), PATH);
+    return checkList(unwrap(await this.engine.getJson<unknown>(PATH), PATH), PATH);
   }
 
   /**
@@ -130,6 +192,14 @@ export class ReisewarnungenClient {
     assertContentId(contentId);
     const path = `${PATH}/${enc(contentId)}`;
     const response = unwrap(await this.engine.getJson<unknown>(path), path);
+    // An error envelope sent with a 2xx status is a failure, not "this country doesn't exist".
+    if (response["error"] !== undefined) {
+      const error = response["error"];
+      throw new ReiseParseError(
+        `The API answered ${path} with an error envelope instead of a travel warning: ` +
+          cutText(typeof error === "string" ? error : JSON.stringify(error)),
+      );
+    }
 
     const direct = Object.hasOwn(response, contentId) ? response[contentId] : undefined;
     if (isObject(direct)) return direct as TravelWarning;

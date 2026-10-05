@@ -105,8 +105,13 @@ Rules:
   `reisewarnungen get <id>` — wire that follow-up: "want the details on any of these?".
 - For a regional warning, remember it applies to **parts** of the country, not all of it —
   don't imply the whole country is off-limits.
-- If `--warned-only` returns `[]` (exit `0`), that means **no warnings are in force right
-  now** — report that as the (good) news, and optionally double-check with plain
-  `countries` that the API is returning data at all.
+- If `--warned-only` returns `[]` (exit `0`), the API did return the country list (an
+  answer holding no country at all, an error envelope or a partial list exits `1`), but
+  none of its countries carries a flag. That has not happened in the live data so far —
+  say so plainly ("the Auswärtiges Amt lists no formal travel warning right now") and
+  remind the user that advice against travel without a flag is in the advisory texts
+  (`reisewarnungen-trip-check`).
+- If the CLI exits `1` (e.g. `the travel-warning list holds no country`), report the
+  failure and that no overview could be made — **never** read it as "no warnings".
 - Offer the natural drill-down (`reisewarnungen-trip-check` for a specific country) and,
   for tracking changes over time, the `reisewarnungen-watch` workflow.

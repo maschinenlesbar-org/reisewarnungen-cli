@@ -187,6 +187,12 @@ other value — negative, fractional, `NaN`, `Infinity`, above the cap — with 
 `ReiseValidationError` before any request, so a bad value can never switch a limit
 off. The CLI's flags apply the same rule.
 
+**An empty list is an error.** The list holds about 200 countries. An answer
+holding no country, an error envelope sent with HTTP 200, or a `contentList` that
+names ids without an entry fails with exit `1` — it never reads as "no travel
+warnings". So `countries --warned-only` printing `[]` means the API returned its
+list and no country in it carries a flag.
+
 **Entry lookup on `get`.** The single-warning endpoint keys its one entry under
 the requested content id, and `get` returns **only** that entry. An envelope with
 no country entry at all is **not found** (`ReiseNotFoundError`, exit `4`); one
