@@ -2,9 +2,16 @@
 // requests via a Transport, applies retry/backoff for transient statuses
 // (429, 503), and decodes responses.
 
-import { MAX_TIMEOUT_MS, nodeHttpTransport, type Transport } from "./http.js";
+import {
+  MAX_TIMEOUT_MS,
+  nodeHttpTransport,
+  sizeLimitMessage,
+  type HttpRequest,
+  type HttpResponse,
+  type Transport,
+} from "./http.js";
 import { buildQueryString, type QueryParams } from "./query.js";
-import { ReiseApiError, ReiseNetworkError, ReiseParseError } from "./errors.js";
+import { ReiseApiError, ReiseError, ReiseNetworkError, ReiseParseError, redactUrl } from "./errors.js";
 import { assertValid, baseUrlProblem, headerValueProblem, intInRangeProblem } from "./validate.js";
 
 export const DEFAULT_BASE_URL = "https://www.auswaertiges-amt.de";
@@ -98,6 +105,88 @@ export function parseRetryAfter(
   if (!IMF_FIXDATE.test(value)) return undefined;
   const when = Date.parse(value);
   return Number.isNaN(when) ? undefined : Math.max(0, when - now);
+}
+
+/** Why `value` is not a usable HttpResponse, or undefined when it is. */
+function responseProblem(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) return "not an object";
+  const r = value as Partial<Record<"status" | "headers" | "body", unknown>>;
+  // A numeric string ("200") is what some hand-written transports return; accept it.
+  const status = typeof r.status === "string" && /^\d{3}$/.test(r.status) ? Number(r.status) : r.status;
+  if (typeof status !== "number" || !Number.isInteger(status) || status < 100 || status > 599) {
+    return "status is not an HTTP status code";
+  }
+  if (typeof r.headers !== "object" || r.headers === null || Array.isArray(r.headers)) return "headers is not an object";
+  if (bodyBytes(r.body) === undefined) return "body is not a Buffer, Uint8Array, other ArrayBuffer view or ArrayBuffer";
+  return undefined;
+}
+
+/**
+ * The response body as a Buffer (a view, no copy): a Buffer, any ArrayBuffer view (a
+ * Uint8Array from fetch, a DataView) or an ArrayBuffer/SharedArrayBuffer — checked by internal
+ * slot, not `instanceof`, so a value from another realm (a vm context, a Jest test) counts.
+ * Undefined for anything else.
+ */
+function bodyBytes(value: unknown): Buffer | undefined {
+  if (Buffer.isBuffer(value)) return value;
+  if (ArrayBuffer.isView(value)) return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  const tag = Object.prototype.toString.call(value);
+  if (tag === "[object ArrayBuffer]" || tag === "[object SharedArrayBuffer]") return Buffer.from(value as ArrayBuffer);
+  return undefined;
+}
+
+/**
+ * The response headers as a plain record with lower-case names. A transport built on
+ * `fetch` naturally returns its `Headers` object, which has no plain properties: the
+ * engine then saw no Retry-After, Location or Content-Type at all. Such an object
+ * (anything with `get` and `forEach`, a `Map` included) is copied into a record; a plain
+ * record gets its names lower-cased, as the engine reads them.
+ */
+function plainHeaders(headers: object): Record<string, string | string[] | undefined> {
+  const h = headers as { get?: unknown; forEach?: unknown };
+  if (typeof h.get === "function" && typeof h.forEach === "function") {
+    const record: Record<string, string> = {};
+    (h.forEach as (cb: (value: unknown, name: unknown) => void) => void).call(headers, (value, name) => {
+      record[String(name).toLowerCase()] = String(value);
+    });
+    return record;
+  }
+  // Node's transport lower-cases header names; a custom one may not ("Retry-After").
+  const record: Record<string, string | string[] | undefined> = {};
+  for (const [name, value] of Object.entries(headers as Record<string, string | string[] | undefined>)) {
+    record[name.toLowerCase()] = value;
+  }
+  return record;
+}
+
+/** A single header value: the first of an array, undefined for anything but a string. */
+function headerValue(value: string | string[] | undefined): string | undefined {
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === "string" ? first : undefined;
+}
+
+/**
+ * Error codes of a connection that broke off mid-request: Node's (`socket hang up` is
+ * ECONNRESET) and undici's (`fetch failed` with cause UND_ERR_SOCKET, "other side closed").
+ */
+const TRANSIENT_NETWORK_CODES = new Set(["ECONNRESET", "EPIPE", "ECONNABORTED", "UND_ERR_SOCKET"]);
+
+/** True when `err` or an error in its `cause` chain has a transient connection code. */
+function hasTransientCode(err: unknown, depth = 0): boolean {
+  if (typeof err !== "object" || err === null || depth > 4) return false;
+  const code = (err as { code?: unknown }).code;
+  if (typeof code === "string" && TRANSIENT_NETWORK_CODES.has(code)) return true;
+  return hasTransientCode((err as { cause?: unknown }).cause, depth + 1);
+}
+
+/**
+ * True for a ReiseNetworkError caused by a reset or aborted connection, which the engine
+ * retries — whichever transport raised it (a Node error, fetch's TypeError with an undici
+ * cause). A refused connection, a DNS failure or a timeout is not transient in that sense
+ * and is not retried.
+ */
+export function isTransientNetworkError(err: unknown): boolean {
+  return err instanceof ReiseNetworkError && hasTransientCode(err.cause);
 }
 
 /**
@@ -210,6 +299,40 @@ export class RequestEngine {
     return `${this.baseUrl}${normalizedPath}${qs ? `?${qs}` : ""}`;
   }
 
+  /**
+   * The request URL as error messages show it: absolute (so a message names the host that
+   * gave a bad answer), userinfo redacted.
+   */
+  private describe(url: string): string {
+    return redactUrl(url);
+  }
+
+  /**
+   * Call the transport under the overall deadline (`timeoutMs`): the request gets an
+   * AbortSignal that fires at the deadline, and the call rejects then whether the transport
+   * stops or not — a custom transport (fetch, a node:http wrapper) that ignores `timeoutMs`
+   * can't hang the caller. A synchronous throw becomes a rejection.
+   */
+  private async callTransport(request: HttpRequest): Promise<HttpResponse> {
+    const call = (signal?: AbortSignal): Promise<HttpResponse> =>
+      Promise.resolve().then(() => this.transport(signal === undefined ? request : { ...request, signal }));
+    if (this.timeoutMs === 0) return call();
+    const controller = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const err = new ReiseNetworkError(`Request timed out after ${this.timeoutMs}ms`);
+        controller.abort(err);
+        reject(err);
+      }, this.timeoutMs);
+    });
+    try {
+      return await Promise.race([call(controller.signal), deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Perform a request with Accept negotiation and transient-error retries. */
   async request(
     method: string,
@@ -222,24 +345,65 @@ export class RequestEngine {
       "User-Agent": this.userAgent,
     };
 
+    // Only an idempotent request is sent again after a reset: request() is public, and a
+    // POST re-sent may be applied twice. The client itself sends GETs only.
+    const idempotent = /^(GET|HEAD)$/i.test(method);
     let attempt = 0;
     let redirects = 0;
     // attempts = initial try + maxRetries (redirects are counted separately)
     for (;;) {
-      const response = await this.transport({
-        method,
-        url,
-        headers,
-        timeoutMs: this.timeoutMs,
-        ...(this.maxResponseBytes > 0 ? { maxResponseBytes: this.maxResponseBytes } : {}),
-      });
+      let raw: HttpResponse;
+      try {
+        raw = await this.callTransport({
+          method,
+          url,
+          headers,
+          timeoutMs: this.timeoutMs,
+          ...(this.maxResponseBytes > 0 ? { maxResponseBytes: this.maxResponseBytes } : {}),
+        });
+      } catch (cause) {
+        // A connection the server (or a gateway) reset: retry the GET like a 503, whichever
+        // transport reported it. Timeouts are not retried — --timeout bounds each attempt.
+        if (idempotent && hasTransientCode(cause) && attempt < this.maxRetries) {
+          attempt += 1;
+          await this.sleep(this.retryDelayMs * attempt);
+          continue;
+        }
+        // The default transport rejects with ReiseNetworkError only; an injected one may
+        // throw anything. Keep the library's contract — every failure is a ReiseError: a
+        // network failure is re-raised naming the request, with the original as `cause`;
+        // any other ReiseError passes through.
+        if (cause instanceof ReiseError && !(cause instanceof ReiseNetworkError)) throw cause;
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        throw new ReiseNetworkError(`${method} ${this.describe(url)} failed: ${sanitizeServerText(reason)}`, {
+          cause,
+        });
+      }
 
-      const status = response.status;
+      // An injected transport may resolve with anything; a malformed HttpResponse would
+      // otherwise surface as a raw TypeError, outside the ReiseError contract.
+      const invalid = responseProblem(raw);
+      if (invalid !== undefined) {
+        throw new ReiseNetworkError(
+          `${method} ${this.describe(url)} failed: the transport returned an invalid response (${invalid}).`,
+        );
+      }
+      const status = Number(raw.status);
+      const responseHeaders = plainHeaders(raw.headers);
+      // fetch gives a Uint8Array; view it as a Buffer (no copy). (HttpResponse types the
+      // body as Buffer; a JavaScript transport may not.)
+      const body = bodyBytes(raw.body) as Buffer;
+      // The size cap holds whatever the transport did: the default one aborts early, a
+      // custom one may have read everything.
+      if (this.maxResponseBytes > 0 && body.byteLength > this.maxResponseBytes) {
+        throw new ReiseNetworkError(`${method} ${this.describe(url)} failed: ${sizeLimitMessage(this.maxResponseBytes)}`);
+      }
+
       const retryable = status === 429 || status === 503;
       if (retryable && attempt < this.maxRetries) {
         // Honour Retry-After; without a usable one, back off linearly. A Retry-After
         // beyond MAX_RETRY_AFTER_MS is not retried: the error below surfaces at once.
-        const retryAfter = parseRetryAfter(response.headers["retry-after"]);
+        const retryAfter = parseRetryAfter(responseHeaders["retry-after"]);
         if (retryAfter === undefined || retryAfter <= MAX_RETRY_AFTER_MS) {
           attempt += 1;
           await this.sleep(retryAfter ?? this.retryDelayMs * attempt);
@@ -248,43 +412,35 @@ export class RequestEngine {
       }
 
       // Follow redirects, resolving the Location relative to the current URL.
-      const location = response.headers["location"];
+      const location = headerValue(responseHeaders["location"]);
       const next = FOLLOWED_REDIRECTS.has(status) ? resolveLocation(location, url) : undefined;
       if (next !== undefined && redirects >= this.maxRedirects) {
         // A loop (or a long chain): say how far it got rather than a bare 3xx.
         // (With maxRedirects 0 nothing was followed; the plain text says enough.)
-        throw this.toApiError(method, url, status, response.body, location, redirects || undefined);
+        throw this.toApiError(method, url, status, body, location, redirects || undefined);
       }
       if (next !== undefined) {
         const from = new URL(url);
         const to = next;
         // Enforce the http(s)-only allowlist for the redirect target in the
-        // engine itself, not only in the default transport. The CLI always uses
-        // nodeHttpTransport (which also rejects non-http(s) schemes), but
-        // Transport is a public injection seam: a library consumer supplying a
-        // custom transport must not be handed a file:/data:/ftp: URL taken from
-        // an attacker-controllable Location header.
+        // engine itself, not only in the default transport: a library consumer
+        // supplying a custom transport must not be handed a file:/data:/ftp: URL
+        // taken from an attacker-controllable Location header.
         if (to.protocol !== "https:" && to.protocol !== "http:") {
           throw new ReiseNetworkError(
-            `Refusing to follow a redirect to an unsupported protocol "${to.protocol}": ${to.toString()}`,
+            `Refusing to follow a redirect to an unsupported protocol "${to.protocol}": ${redirectTarget(url, to.href) ?? ""}`,
           );
         }
         // Refuse to follow a redirect that downgrades the connection security
-        // from https to http. `new URL(location, url)` would happily accept an
-        // absolute `http://...` Location, and the rest of the exchange would
-        // then proceed in cleartext even though the user targeted an https URL
-        // — letting an on-path attacker tamper the (safety-relevant)
-        // travel-warning data. Fail closed with a typed error instead.
+        // from https to http: the rest of the exchange would proceed in cleartext,
+        // letting an on-path attacker tamper the (safety-relevant) travel-warning data.
         if (from.protocol === "https:" && to.protocol === "http:") {
           throw new ReiseNetworkError(
-            `Refusing to follow an insecure https->http redirect to ${to.toString()}`,
+            `Refusing to follow an insecure https->http redirect to ${redirectTarget(url, to.href) ?? ""}`,
           );
         }
         // Credential-strip guard: on a cross-origin redirect, drop any
         // sensitive headers so credentials are never leaked to another host.
-        // The default headers (Accept, User-Agent) carry nothing sensitive,
-        // but this future-proofs against an Authorization/Cookie header being
-        // added by a consumer or subclass.
         if (to.origin !== from.origin) {
           for (const name of Object.keys(headers)) {
             if (SENSITIVE_HEADERS.has(name.toLowerCase())) delete headers[name];
@@ -297,12 +453,12 @@ export class RequestEngine {
       // Any other 3xx — not a followed status, or no usable Location — falls
       // through and surfaces as a ReiseApiError naming the target.
 
-      const contentType = String(response.headers["content-type"] ?? "");
+      const contentType = String(headerValue(responseHeaders["content-type"]) ?? "");
       if (status < 200 || status >= 300) {
-        throw this.toApiError(method, url, status, response.body, location);
+        throw this.toApiError(method, url, status, body, location);
       }
 
-      return { data: response.body, contentType, status };
+      return { data: body, contentType, status };
     }
   }
 

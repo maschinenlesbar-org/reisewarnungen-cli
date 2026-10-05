@@ -184,6 +184,20 @@ independently of the CLI.
 ([`http.ts`](src/client/http.ts)). The default uses Node's built-in
 `http`/`https`; tests inject a mock. This is the only HTTP seam.
 
+**Custom transports.** The engine enforces the documented limits for every transport,
+not only the built-in one. Each call runs under the overall `timeoutMs` deadline: the
+transport gets an `AbortSignal` (`HttpRequest.signal`) that fires at the deadline, and
+the call rejects then (`ReiseNetworkError: … Request timed out after …ms`) whether the
+transport stops or not, so a `fetch` or `node:http` transport can't hang a caller. The
+engine checks `maxResponseBytes` on the body it gets back. A transport may return the
+body as a Buffer, any `ArrayBuffer` view (fetch's `Uint8Array`, from any realm) or an
+`ArrayBuffer`, and the headers as a plain record in any case, a `Headers` object or a
+`Map` (so `Retry-After` and `Location` are read from all of them). Whatever it throws,
+and a response without a valid status, headers or body, becomes a `ReiseNetworkError`
+(`GET <url> failed: <reason>`, the original as `cause`); a reset reported as Node's
+`ECONNRESET`/`EPIPE`/`ECONNABORTED` or undici's `UND_ERR_SOCKET` anywhere in the `cause`
+chain is retried like a `503` (GET only; `isTransientNetworkError` tells them apart).
+
 **Request engine.** [`RequestEngine`](src/client/engine.ts) — builds URLs,
 serialises queries, applies retry/backoff, follows redirects, decodes JSON
 responses and maps errors. Sits between the client and the transport.
@@ -228,7 +242,10 @@ A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s) is not retried: the error surf
 
 **maxResponseBytes.** A hard cap on the response body size (default 100 MiB;
 `0` disables it) that aborts the request if exceeded, defending against memory
-exhaustion from a hostile or buggy endpoint.
+exhaustion from a hostile or buggy endpoint. The default transport aborts as soon as
+the cap is passed; the engine also checks the body any transport returns. The message
+names both spellings: `Response exceeded the size limit of N bytes (maxResponseBytes;
+--max-response-bytes on the CLI)`.
 
 **Entry lookup on `get`.** The single-warning endpoint keys its one entry under
 the requested content id, and `get` returns **only** that entry. An envelope with
