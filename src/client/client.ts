@@ -39,8 +39,8 @@ export function assertContentId(contentId: string): void {
 /**
  * Whether a country counts as "warned": true when **any** of the four warning flags
  * (`warning`, `partialWarning`, `situationWarning`, `situationPartWarning`) is
- * `true`. Only a real boolean `true` counts, so a malformed upstream value such as
- * the string `"false"` or the number `1` is not read as a warning. This is the rule
+ * `true`. Only a real boolean `true` counts; the client refuses an answer whose flags
+ * are not booleans (checkFlags), so a malformed value never reaches it. This is the rule
  * behind `summaries({ warnedOnly: true })` and the CLI's `countries --warned-only`.
  * Anything but an entry object is a ReiseValidationError.
  */
@@ -110,6 +110,38 @@ function unwrap(body: unknown, path: string): JsonObject {
   return body["response"];
 }
 
+/** The flags every country entry must carry as booleans. */
+const REQUIRED_FLAGS = ["warning", "partialWarning"] as const;
+/** The flags that must be booleans when present (all `false` in the live data so far). */
+const OPTIONAL_FLAGS = ["situationWarning", "situationPartWarning"] as const;
+
+/**
+ * Throw a ReiseParseError when a country entry's warning flags are not booleans: `warning`
+ * and `partialWarning` must be present, the two situation flags may be absent. A malformed
+ * flag used to fail open — `"true"` or `1` was not counted as warned (`--warned-only` dropped
+ * the country silently), a renamed `Warning` left every country unwarned, and the watch
+ * skill's jq read `"false"` as a warning. Such an answer is a format change upstream; no
+ * rule can read it safely, so it is refused.
+ */
+function checkFlags(entry: JsonObject, contentId: string, path: string): void {
+  for (const flag of REQUIRED_FLAGS) {
+    if (typeof entry[flag] !== "boolean") throw flagError(entry, contentId, flag, path);
+  }
+  for (const flag of OPTIONAL_FLAGS) {
+    if (entry[flag] !== undefined && typeof entry[flag] !== "boolean") throw flagError(entry, contentId, flag, path);
+  }
+}
+
+function flagError(entry: JsonObject, contentId: string, flag: string, path: string): ReiseParseError {
+  const name = typeof entry["countryName"] === "string" ? ` (${cutText(entry["countryName"])})` : "";
+  const value = entry[flag];
+  const got = value === undefined ? "it is missing" : `got ${cutText(JSON.stringify(value))}`;
+  return new ReiseParseError(
+    `Unexpected response shape from ${path}: the "${flag}" flag of content id "${contentId}"${name} ` +
+      `must be true or false, ${got}; the warning level can't be read safely.`,
+  );
+}
+
 /** Keys of the list envelope that are not countries. */
 const ENVELOPE_KEYS = new Set(["lastModified", "contentList"]);
 
@@ -139,6 +171,7 @@ function checkList(response: JsonObject, path: string): JsonObject {
     if (ENVELOPE_KEYS.has(key)) continue;
     if (/^\d+$/.test(key)) {
       if (!isObject(value)) throw shapeError(path, `an object for content id "${key}"`);
+      checkFlags(value, key, path);
       countries += 1;
     }
   }
@@ -271,7 +304,10 @@ export class ReisewarnungenClient {
     }
 
     const direct = Object.hasOwn(response, contentId) ? response[contentId] : undefined;
-    if (isObject(direct)) return direct as TravelWarning;
+    if (isObject(direct)) {
+      checkFlags(direct, contentId, path);
+      return direct as TravelWarning;
+    }
 
     if (Object.values(response).some(isObject)) {
       throw shapeError(

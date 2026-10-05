@@ -104,9 +104,11 @@ another path.
 The four boolean fields the client surfaces, in increasing specificity. A
 country counts as "warned" (the `countries --warned-only` filter) if **any** of
 them is `true`. The library owns this rule: it exports it as `isWarned(entry)`
-and applies it in `summaries({ warnedOnly: true })`, which the CLI calls. Only a
-real boolean `true` counts, so a malformed value such as `"false"` or `1` is not
-a warning.
+and applies it in `summaries({ warnedOnly: true })`, which the CLI calls. Every
+country entry must carry `warning` and `partialWarning` as booleans (the two
+situation flags may be absent, but are booleans when present): an answer with a
+missing, renamed or non-boolean flag (`"true"`, `1`, `null`) fails with exit `1`
+instead of silently dropping or adding a warned country.
 
 **warning.** A full travel warning (Reisewarnung) is in force for the whole
 country — the AA's strongest advice against travel.

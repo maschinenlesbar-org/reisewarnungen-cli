@@ -103,8 +103,11 @@ Die vier booleschen Felder, die der Client liefert, nach zunehmender Spezifität
 Land gilt als „mit Warnung“ (Filter `countries --warned-only`), wenn **eines** davon
 `true` ist. Die Regel gehört der Bibliothek: Sie exportiert sie als
 `isWarned(entry)` und wendet sie in `summaries({ warnedOnly: true })` an, das die
-CLI aufruft. Nur ein echtes boolesches `true` zählt; ein fehlerhafter Wert wie
-`"false"` oder `1` ist keine Warnung.
+CLI aufruft. Jeder Ländereintrag muss `warning` und `partialWarning` als boolesche Werte
+tragen (die beiden Lage-Flags dürfen fehlen, sind aber boolesch, wenn vorhanden): Eine
+Antwort mit fehlendem, umbenanntem oder nicht booleschem Flag (`"true"`, `1`, `null`)
+endet mit Exit `1`, statt ein Land mit Warnung stillschweigend wegzulassen oder
+hinzuzufügen.
 
 **warning.** Für das ganze Land gilt eine vollständige Reisewarnung – der stärkste
 Rat des AA, von Reisen abzusehen.

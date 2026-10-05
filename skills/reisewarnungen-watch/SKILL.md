@@ -77,7 +77,7 @@ jq -n --slurpfile old reisewarnungen-2026-06-04.json --slurpfile new reisewarnun
   ($old[0] | map({key:.id, value:.}) | from_entries) as $o
   | ($new[0] | map({key:.id, value:.}) | from_entries) as $n
   | def level(c): if c == null then 0 elif c.warning == true then 2
-        elif (c.partialWarning or c.situationWarning or c.situationPartWarning) == true then 1 else 0 end;
+        elif ([c.partialWarning, c.situationWarning, c.situationPartWarning] | any(. == true)) then 1 else 0 end;
     def lname(l): ["none", "partial", "full"][l];
     def flags(c): [c.warning, c.partialWarning, c.situationWarning, c.situationPartWarning] | map(. == true);
   { newlyWarned:  [ $n[] | select(level(.) > 0 and level($o[.id]) == 0) | {id,countryName,countryCode,level:lname(level(.))} ],
@@ -89,6 +89,10 @@ jq -n --slurpfile old reisewarnungen-2026-06-04.json --slurpfile new reisewarnun
 ```
 
 > **Traps.**
+> - A flag counts only when it is the boolean `true` (`== true`, as above) — jq's `or`
+>   would read a string `"false"` as true. Snapshots from `countries` always hold booleans
+>   (the CLI exits `1` on an answer with a malformed flag), but an older or hand-made file
+>   may not; if `level()` and the flags disagree, say so rather than guess.
 > - Compare by **`id`**, not by name — names are stable but ids are the real key, and a
 >   country can appear/disappear from the catalogue.
 > - `lastModified` is Unix **seconds** (not ms, despite older docs). Convert with
@@ -109,8 +113,13 @@ If the user just wants "what was updated recently", sort the current `countries`
 reisewarnungen countries --compact \
   | jq -r 'sort_by(-.lastModified) | .[:15][]
       | [(.lastModified|todate), .countryCode, .countryName,
-         (if .warning then "WARN" elif .partialWarning then "PART" else "advice" end)] | @tsv'
+         (if .warning == true then "WARN" elif .partialWarning == true then "PART" else "no flag" end)] | @tsv'
 ```
+
+`no flag` means no *formal* warning — not "all clear": many such advisories still advise
+against travel to a region in their text (Türkei, Jordanien, Mexiko). Don't call those
+countries "advice only"; for one the user cares about, read its advice with
+`reisewarnungen advice <id>` or hand off to `reisewarnungen-trip-check`.
 
 `(.lastModified|todate)` works because the value is already seconds. To answer "did X
 change since DATE?", filter `select(.lastModified > (DATE|fromdate))`.
@@ -130,7 +139,7 @@ Travel-warning changes, 4 Jun → 11 Jun 2026
    🟠 Tunesien (TN · …)       full → regional
 
 ✅ Lifted (1)
-   Kenia (KE · …)             regional warning lifted → advice only
+   Kenia (KE · …)             regional warning lifted → no formal warning
 
 ✏️  Advisory updated, same level (6)
    Thailand, Israel, Kenia, Guatemala, Botsuana, Palästinensische Gebiete*

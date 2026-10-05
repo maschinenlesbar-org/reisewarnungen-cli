@@ -56,7 +56,7 @@ test("run() still maps a plain ReiseError to exit 1", async () => {
 });
 
 test("parity() runs one input through the CLI and the library on one recording transport", async () => {
-  const body = { response: { lastModified: 1, "100": { countryName: "Atlantis", warning: true } } };
+  const body = { response: { lastModified: 1, "100": { countryName: "Atlantis", warning: true, partialWarning: false } } };
   const { cli, lib: l } = await parity(
     ["--compact", "countries"],
     (transport) => new ReisewarnungenClient({ transport }).summaries(),

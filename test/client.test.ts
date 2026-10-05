@@ -12,6 +12,9 @@ import {
 } from "../src/client/errors.js";
 import { makeMockTransport, jsonResponse } from "./helpers.js";
 
+/** The two flags every country entry must carry (booleans); fixtures spread it first. */
+const F = { warning: false, partialWarning: false } as const;
+
 function clientWith(mt: ReturnType<typeof makeMockTransport>): ReisewarnungenClient {
   return new ReisewarnungenClient({ transport: mt.transport });
 }
@@ -19,8 +22,8 @@ function clientWith(mt: ReturnType<typeof makeMockTransport>): ReisewarnungenCli
 const listBody = {
   response: {
     lastModified: 1700000000,
-    "100": { countryName: "Atlantis", countryCode: "AT", warning: true },
-    "200": { countryName: "Bukovia", countryCode: "BU", warning: false, partialWarning: true },
+    "100": { ...F, countryName: "Atlantis", countryCode: "AT", warning: true },
+    "200": { ...F, countryName: "Bukovia", countryCode: "BU", warning: false, partialWarning: true },
   },
 };
 
@@ -57,16 +60,16 @@ test("summaries flattens to an array with ids and drops lastModified", async () 
 
 test("summaries keeps the map key as id even when an entry carries its own id field", async () => {
   const mt = makeMockTransport(() =>
-    jsonResponse({ response: { "100": { countryName: "A", id: "555" } } }),
+    jsonResponse({ response: { "100": { ...F, countryName: "A", id: "555" } } }),
   );
   const entries = await clientWith(mt).summaries();
-  assert.deepEqual(entries, [{ id: "100", countryName: "A" }]);
-  assert.deepEqual(Object.keys(entries[0]!), ["id", "countryName"]); // id stays first
+  assert.deepEqual(entries, [{ id: "100", ...F, countryName: "A" }]);
+  assert.deepEqual(Object.keys(entries[0]!)[0], "id"); // id stays first
 });
 
 test("get builds the per-id path and unwraps the matching entry", async () => {
   const mt = makeMockTransport(() =>
-    jsonResponse({ response: { lastModified: 1, "226768": { countryName: "X", content: "<p>hi</p>" } } }),
+    jsonResponse({ response: { lastModified: 1, "226768": { ...F, countryName: "X", content: "<p>hi</p>" } } }),
   );
   const warning = await clientWith(mt).get("226768");
   assert.equal(new URL(mt.last().url).pathname, "/opendata/travelwarning/226768");
@@ -77,7 +80,7 @@ test("get builds the per-id path and unwraps the matching entry", async () => {
 test("get never returns a sole entry keyed by another id (a different country)", async () => {
   const mt = makeMockTransport(() =>
     jsonResponse({
-      response: { lastModified: 1, "999": { countryName: "OtherCountry" }, contentList: ["999"] },
+      response: { lastModified: 1, "999": { ...F, countryName: "OtherCountry" }, contentList: ["999"] },
     }),
   );
   await assert.rejects(
@@ -125,8 +128,8 @@ test("get does NOT return the wrong country when the response holds several othe
     jsonResponse({
       response: {
         lastModified: 1,
-        "111": { countryName: "Wrongland" },
-        "222": { countryName: "Alsowrong" },
+        "111": { ...F, countryName: "Wrongland" },
+        "222": { ...F, countryName: "Alsowrong" },
       },
     }),
   );
@@ -138,8 +141,8 @@ test("get returns the matching entry even when other entries are present", async
     jsonResponse({
       response: {
         lastModified: 1,
-        "226768": { countryName: "Right", content: "<p>ok</p>" },
-        "999": { countryName: "Other" },
+        "226768": { ...F, countryName: "Right", content: "<p>ok</p>" },
+        "999": { ...F, countryName: "Other" },
       },
     }),
   );
@@ -184,8 +187,8 @@ for (const flag of WARNING_FLAGS) {
       jsonResponse({
         response: {
           lastModified: 1,
-          "100": { countryName: "Flagged", [flag]: true },
-          "200": { countryName: "Clear", warning: false },
+          "100": { ...F, countryName: "Flagged", [flag]: true },
+          "200": { ...F, countryName: "Clear", warning: false },
         },
       }),
     );
@@ -229,7 +232,7 @@ test("list and summaries reject a 2xx answer that holds no country (P9: never 'n
     { response: { ...lm, contentList: [] } },
     { response: { error: "Service temporarily unavailable", ...lm } },
     { response: { ...listBody.response, error: { code: 503 } } },
-    { response: { ...lm, contentList: ["100", "999"], "100": { countryName: "Atlantis", warning: true, partialWarning: false } } },
+    { response: { ...lm, contentList: ["100", "999"], "100": { ...F, countryName: "Atlantis", warning: true, partialWarning: false } } },
     { response: { ...lm, "100": "Atlantis" } },
   ];
   for (const body of broken) {
@@ -246,4 +249,26 @@ test("list and summaries reject a 2xx answer that holds no country (P9: never 'n
 test("get reports an error envelope as a parse error, not as 'not found'", async () => {
   const mt = makeMockTransport(() => jsonResponse({ response: { error: "maintenance" } }));
   await assert.rejects(clientWith(mt).get("100"), (e: unknown) => e instanceof ReiseParseError && /maintenance/.test(e.message));
+});
+
+test("a non-boolean or missing warning flag is a parse error, on list, summaries and get (03#2)", async () => {
+  for (const entry of [
+    { countryName: "R", warning: "true", partialWarning: false },
+    { countryName: "R", warning: 1, partialWarning: 0 },
+    { countryName: "R", Warning: true },
+    { countryName: "R", warning: false },
+    { countryName: "R", warning: false, partialWarning: false, situationPartWarning: null },
+  ]) {
+    const body = { response: { lastModified: 1, "201536": entry } };
+    for (const call of [
+      (c: ReisewarnungenClient) => c.list(),
+      (c: ReisewarnungenClient) => c.summaries({ warnedOnly: true }),
+      (c: ReisewarnungenClient) => c.get("201536"),
+    ]) {
+      await assert.rejects(call(clientWith(makeMockTransport(() => jsonResponse(body)))), ReiseParseError, JSON.stringify(entry));
+    }
+  }
+  // The situation flags may be absent.
+  const ok = { response: { "1": { countryName: "Fine", warning: true, partialWarning: false } } };
+  assert.equal((await clientWith(makeMockTransport(() => jsonResponse(ok))).summaries({ warnedOnly: true })).length, 1);
 });

@@ -7,11 +7,14 @@ import type { CliDeps } from "../src/cli/io.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse } from "./helpers.js";
 
+/** The two flags every country entry must carry (booleans); fixtures spread it first. */
+const F = { warning: false, partialWarning: false } as const;
+
 const listBody = {
   response: {
     lastModified: 1700000000,
-    "100": { countryName: "Atlantis", warning: true },
-    "200": { countryName: "Bukovia", warning: false },
+    "100": { ...F, countryName: "Atlantis", warning: true },
+    "200": { ...F, countryName: "Bukovia", warning: false },
   },
 };
 
@@ -70,8 +73,8 @@ for (const flag of ["warning", "partialWarning", "situationWarning", "situationP
     const body = {
       response: {
         lastModified: 1,
-        "100": { countryName: "Flagged", [flag]: true },
-        "200": { countryName: "Clear", warning: false },
+        "100": { ...F, countryName: "Flagged", [flag]: true },
+        "200": { ...F, countryName: "Clear", warning: false },
       },
     };
     const cli = makeCli(() => jsonResponse(body));
@@ -92,7 +95,7 @@ test("countries pretty-prints (multi-line) without --compact", async () => {
 
 test("get builds the per-id path", async () => {
   const cli = makeCli(() =>
-    jsonResponse({ response: { lastModified: 1, "226768": { countryName: "X" } } }),
+    jsonResponse({ response: { lastModified: 1, "226768": { ...F, countryName: "X" } } }),
   );
   await run(["get", "226768"], cli.deps);
   assert.equal(new URL(cli.mt.last().url).pathname, "/opendata/travelwarning/226768");
@@ -138,7 +141,7 @@ test("get on a body without the response envelope is a parse error (exit 1), not
 
 test("get on an envelope keyed by another id exits 1 and prints no country", async () => {
   const cli = makeCli(() =>
-    jsonResponse({ response: { "999": { countryName: "OtherCountry" }, contentList: ["999"] } }),
+    jsonResponse({ response: { "999": { ...F, countryName: "OtherCountry" }, contentList: ["999"] } }),
   );
   const code = await run(["get", "100"], cli.deps);
   assert.equal(code, 1);
@@ -213,7 +216,7 @@ test("DEL and C1 control characters in server data are escaped in the JSON outpu
   const served = {
     response: {
       lastModified: 1,
-      "226768": { countryName: `Atlantis${controls}`, title: String.fromCharCode(0x1b) + "[31m" },
+      "226768": { ...F, countryName: `Atlantis${controls}`, title: String.fromCharCode(0x1b) + "[31m" },
     },
   };
   for (const format of [[], ["--compact"]]) {

@@ -129,8 +129,12 @@ without `content` is a `ReiseParseError`, never "no advice".
 
 `summaries({ warnedOnly: true })` keeps only the countries with a warning of any
 kind in force: the exported `isWarned(entry)` is true when **any** of `warning`,
-`partialWarning`, `situationWarning` or `situationPartWarning` is `true` (a real
-boolean, so a malformed `"false"` or `1` does not count). It is the same rule the
+`partialWarning`, `situationWarning` or `situationPartWarning` is `true`. The flags
+can't be malformed by then: `list()`/`summaries()` and `get()` require `warning` and
+`partialWarning` to be booleans on every entry (the situation flags may be absent, but are
+booleans when present) and throw `ReiseParseError` naming the country and flag otherwise.
+A non-boolean flag used to fail open — `"true"` or `1` dropped the country from
+`--warned-only`, a renamed `Warning` left every country unwarned. It is the same rule the
 CLI's `countries --warned-only` applies, because the CLI calls this method. A
 `warnedOnly` that is not a boolean, options that are not an object, and an unknown key
 (a misspelt `warnedonly`, `__proto__`) are rejected with `ReiseValidationError` before

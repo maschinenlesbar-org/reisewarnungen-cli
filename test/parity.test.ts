@@ -4,11 +4,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ReisewarnungenClient } from "../src/client/client.js";
-import { ReiseNetworkError, ReiseValidationError } from "../src/client/errors.js";
+import { ReiseNetworkError, ReiseParseError, ReiseValidationError } from "../src/client/errors.js";
 import type { EngineOptions } from "../src/client/engine.js";
 import { parity, jsonResponse, type CliOutcome, type LibOutcome } from "./helpers.js";
 
-const listBody = { response: { lastModified: 1, "100": { countryName: "Atlantis", warning: true } } };
+/** The two flags every country entry must carry (booleans); fixtures spread it first. */
+const F = { warning: false, partialWarning: false } as const;
+
+const listBody = { response: { lastModified: 1, "100": { ...F, countryName: "Atlantis", warning: true } } };
 
 /** Both sides reject the input with no request; the library with a ReiseValidationError. */
 function assertBothReject(cli: CliOutcome, lib: LibOutcome, message: RegExp): void {
@@ -27,10 +30,10 @@ function assertBothReject(cli: CliOutcome, lib: LibOutcome, message: RegExp): vo
 const flagsBody = {
   response: {
     lastModified: 1700000000,
-    "101": { countryName: "Full", warning: true },
-    "102": { countryName: "Partial", partialWarning: true },
-    "103": { countryName: "Situation", situationWarning: true },
-    "104": { countryName: "SituationPart", situationPartWarning: true },
+    "101": { ...F, countryName: "Full", warning: true },
+    "102": { ...F, countryName: "Partial", partialWarning: true },
+    "103": { ...F, countryName: "Situation", situationWarning: true },
+    "104": { ...F, countryName: "SituationPart", situationPartWarning: true },
     "105": {
       countryName: "Clear",
       warning: false,
@@ -41,19 +44,29 @@ const flagsBody = {
   },
 };
 
-// Malformed flag values: only a real `true` counts as a warning.
-const malformedBody = {
-  response: {
-    lastModified: 1700000000,
-    "201": { countryName: "StringFalse", warning: "false" },
-    "202": { countryName: "NumberOne", warning: 1 },
-    "203": { countryName: "Zero", warning: 0, partialWarning: null },
-  },
-};
+
+test("parity: a malformed flag fails in CLI and library alike, never as a shorter list", async () => {
+  for (const entry of [
+    { countryName: "StringTrue", warning: "true", partialWarning: false },
+    { countryName: "NumberOne", warning: 1, partialWarning: 0 },
+    { countryName: "Renamed", Warning: true },
+    { countryName: "SituationString", warning: false, partialWarning: false, situationWarning: "false" },
+  ]) {
+    const { cli, lib } = await parity(
+      ["--compact", "countries", "--warned-only"],
+      (transport) => new ReisewarnungenClient({ transport }).summaries({ warnedOnly: true }),
+      () => jsonResponse({ response: { lastModified: 1, "201": entry, "202": { ...F, countryName: "Fine" } } }),
+    );
+    assert.equal(cli.code, 1, JSON.stringify(entry));
+    assert.match(cli.err, /flag of content id "201"/);
+    assert.equal(cli.out, "");
+    assert.equal(lib.ok, false);
+    if (!lib.ok) assert.ok(lib.error instanceof ReiseParseError, String(lib.error));
+  }
+});
 
 for (const [label, body, ids] of [
   ["realistic", flagsBody, ["101", "102", "103", "104"]],
-  ["malformed", malformedBody, []],
 ] as const) {
   test(`parity: countries --warned-only == summaries({ warnedOnly: true }) (${label} body)`, async () => {
     const { cli, lib } = await parity(
