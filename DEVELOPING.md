@@ -163,6 +163,15 @@ the userinfo replaced by `***`, a redirect target is shown the same way, and err
 bodies, details, transport error text and the `cause` chain are scrubbed of the
 userinfo (raw and percent-decoded) before they reach an error.
 
+**Plain `http:`.** `cleartextProblem(baseUrl, secrets?)` (exported) returns one sentence
+when requests to `baseUrl` would travel unencrypted — `requests to <host> are sent
+unencrypted (http:, not https:)`, or `the base URL's credentials are sent unencrypted to
+<host> (http:, not https:)` when it carries userinfo — and `undefined` for `https:`, an
+unparseable URL and a loopback host (`localhost`, 127.0.0.0/8, `::1`). `<host>` is
+`url.host`, never the userinfo. The CLI's `action()` wrapper writes it as `warning: <sentence>`
+to stderr once per run, before the client is built; help, version and usage errors never
+warn, and stdout and the exit code are unchanged. The library itself never warns.
+
 **Credentials across redirects.** The engine takes the userinfo off the base URL and
 sends it as a Basic `Authorization` header, attached per hop and only to requests on the
 base URL's origin (scheme, host and port): a same-origin redirect keeps it, whether its
@@ -335,7 +344,7 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`validate.test.ts`** — `assertValid`, the `ReiseValidationError` exit-code mapping and the `parity()` helper.
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, `-o -`, and exit codes (network/parse → 1, not-found → 4) — mocked client.
 - **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.
-- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options). Only their `adapter` block is repo-specific.
+- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL). Only their `adapter` block is repo-specific.
 
 ## Continuous integration
 

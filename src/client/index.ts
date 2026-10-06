@@ -10,6 +10,7 @@ export {
   MAX_RETRIES,
   MAX_RETRY_AFTER_MS,
   assertHeaderValue,
+  cleartextProblem,
   intOption,
   isTransientNetworkError,
   parseRetryAfter,

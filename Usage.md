@@ -153,6 +153,14 @@ a flaky network.
 reisewarnungen --base-url http://localhost:8080 --timeout 5000 countries
 ```
 
+A loopback host like `localhost` runs without a warning. A remote mirror on plain
+`http:` works too, but the CLI says on stderr that its requests travel unencrypted:
+
+```text
+$ reisewarnungen --base-url http://mirror.example countries
+warning: requests to mirror.example are sent unencrypted (http:, not https:)
+```
+
 Global options may be given before or after the command, so
 `reisewarnungen countries --compact` and `reisewarnungen --compact countries`
 are equivalent.
@@ -164,7 +172,7 @@ Real flags only, from `reisewarnungen --help`:
 | Option | Description |
 | --- | --- |
 | `-V, --version` | Output the version number |
-| `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`, no surrounding whitespace). A `user:password@` in it is sent as HTTP Basic auth and never printed (`***`); write a literal `%` in it as `%25` |
+| `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`, no surrounding whitespace). A `user:password@` in it is sent as HTTP Basic auth and never printed (`***`); write a literal `%` in it as `%25`. A plain `http:` base URL to a remote host prints one `warning: … sent unencrypted to <host> (http:, not https:)` line on stderr before the first request (naming the base URL's credentials when it carries any, never printing them); loopback hosts (`localhost`, `127.x`, `::1`) don't warn, and stdout and the exit code are unchanged |
 | `--timeout <ms>` | Time limit per request in milliseconds, whole response included (default `30000`; at most `2147483647`; `0` = no limit, the request may wait forever) |
 | `--user-agent <ua>` | `User-Agent` header value (non-blank, Latin-1, no control characters) |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses and reset connections (`0`–`10`; each waits a backoff — 200 ms, 400 ms, … for a `503`, from 1 s doubling for a `429` — or longer if the server's `Retry-After` asks, up to 30 s; a longer `Retry-After` is not retried) |
