@@ -20,7 +20,7 @@ no warning flag is set — as clean JSON you can pipe straight into
 - **Save to file** — write output directly to a file with `-o/--output` instead of stdout.
 
 > Want to use this as a TypeScript library or understand how it's built?
-> See **[DEVELOPING.md](DEVELOPING.md)**.
+> See **[DEVELOPING.md](https://github.com/maschinenlesbar-org/reisewarnungen-cli/blob/main/DEVELOPING.md)**.
 
 ## Install
 
@@ -106,11 +106,11 @@ sentence is advice only.
 
 A country is included by `--warned-only` if **any** of `warning`,
 `partialWarning`, `situationWarning`, or `situationPartWarning` is true.
-The **[Glossary](GLOSSARY.md)** explains every warning flag.
+The **[Glossary](https://github.com/maschinenlesbar-org/reisewarnungen-cli/blob/main/GLOSSARY.md)** explains every warning flag.
 
 ## Common tasks
 
-A few recipes to get going — see **[Usage.md](Usage.md)** for the full,
+A few recipes to get going — see **[Usage.md](https://github.com/maschinenlesbar-org/reisewarnungen-cli/blob/main/Usage.md)** for the full,
 use-case-driven set.
 
 ```bash
@@ -216,10 +216,10 @@ with `"<path>" is a directory; give a file path to --output.`
 
 ## Learn more
 
-- **[SKILLS.md](SKILLS.md)** — Claude Code Agent Skills that drive this CLI for live travel-safety briefings.
-- **[Usage.md](Usage.md)** — full use-case-driven cookbook.
-- **[GLOSSARY.md](GLOSSARY.md)** — every domain term and warning flag explained.
-- **[DEVELOPING.md](DEVELOPING.md)** — TypeScript library usage, architecture, testing, CI.
+- **[SKILLS.md](https://github.com/maschinenlesbar-org/reisewarnungen-cli/blob/main/SKILLS.md)** — Claude Code Agent Skills that drive this CLI for live travel-safety briefings.
+- **[Usage.md](https://github.com/maschinenlesbar-org/reisewarnungen-cli/blob/main/Usage.md)** — full use-case-driven cookbook.
+- **[GLOSSARY.md](https://github.com/maschinenlesbar-org/reisewarnungen-cli/blob/main/GLOSSARY.md)** — every domain term and warning flag explained.
+- **[DEVELOPING.md](https://github.com/maschinenlesbar-org/reisewarnungen-cli/blob/main/DEVELOPING.md)** — TypeScript library usage, architecture, testing, CI.
 
 ## Data license
 
