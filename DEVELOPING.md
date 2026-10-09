@@ -324,6 +324,12 @@ never makes a zero-delay burst. A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s
 retried: the error surfaces at once, and its message names the requested wait and says that
 retrying sooner won't help. `retryDelayMs` is an integer `0`..`MAX_RETRY_AFTER_MS`.
 `ReiseApiError` exposes `isRetryable` (true for `429`/`503`).
+Each retry is announced: the engine option `onRetry(event: RetryEvent)` (exported type:
+`{ retry` (1-based), `maxRetries`, `delayMs`, `status?` (absent for a reset), `url` (userinfo
+redacted) `}`) is called once per retry right before the sleep, never when there is none, and
+a throw in it is swallowed. The CLI's `action()` sets it to log one `WARN` record of
+`reisewarnungen.http`, `HTTP 503 from <host>: retry 1 of 3 in 2 s` (`retryMessage`; host only,
+whole seconds, ms under 1 s). Tests: `test/engine.test.ts`, `test/retry-log.test.ts`.
 
 **maxResponseBytes.** A hard cap on the response body size (default 100 MiB;
 `0` disables it) that aborts the request if exceeded, defending against memory

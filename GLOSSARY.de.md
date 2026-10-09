@@ -219,7 +219,7 @@ eine Stufe (`ERROR`, `WARN`, `INFO`) und ein Thema `reisewarnungen.<Bereich>`, a
 Bereiche: `cli` (Bedienfehler, Meldungen von commander, unerwartete Fehler), `api` (die
 Antworten der API: ein Fehlerstatus, ein nicht gefundenes Land, eine fehlerhafte Antwort –
 kein JSON, die falsche Form, ein mit HTTP 200 gesendeter Fehler-Envelope, ein unbekannter
-Zeichensatz), `http` (die Verbindung, die Warnung vor unverschlüsseltem `http:`) und
+Zeichensatz), `http` (die Verbindung, die Warnung vor unverschlüsseltem `http:` und je Wiederholung eine WARN-Zeile vor dem Warten) und
 `output` (die `-o`-Datei, ein fehlgeschlagenes Schreiben auf stdout). Ein Eintrag ist
 immer eine Zeile; Steuerzeichen darin werden maskiert.
 

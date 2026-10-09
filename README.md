@@ -151,6 +151,7 @@ than 4000 characters is cut and ends in `… (N more characters)`:
 
 ```text
 2026-10-09T14:03:12.481Z WARN  [reisewarnungen.http] requests to mirror.test are sent unencrypted (http:, not https:)
+2026-10-09T14:03:12.700Z WARN  [reisewarnungen.http] HTTP 503 from mirror.test: retry 1 of 2 in 200 ms
 2026-10-09T14:03:12.902Z ERROR [reisewarnungen.api] HTTP 404 for GET https://www.auswaertiges-amt.de/opendata/travelwarning/999999
 ```
 
@@ -225,7 +226,7 @@ These apply to every command and may be given before *or* after it:
 | `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`, no surrounding whitespace). A `user:password@` in it is sent as HTTP Basic auth and never printed (`***`); write a literal `%` in it as `%25`. A plain `http:` base URL to a remote host logs one `WARN` record of `reisewarnungen.http` on stderr (`… sent unencrypted to <host> (http:, not https:)`) before the first request (naming the base URL's credentials when it carries any, never printing them); loopback hosts (`localhost`, `127.x`, `::1`) don't warn, and stdout and the exit code are unchanged |
 | `--timeout <ms>` | Time limit per request, reading the whole response included (default `30000`; at most `2147483647`; `0` = no limit, the request may wait forever) |
 | `--user-agent <ua>` | `User-Agent` header value (non-blank, Latin-1, no control characters) |
-| `--max-retries <n>` | Retries for transient `429`/`503` responses and reset connections (`0`–`10`, default `2`; each waits a backoff — 200 ms, 400 ms, … for a `503`, from 1 s doubling for a `429` — or longer if the server's `Retry-After` asks, up to 30 s; a longer `Retry-After` is not retried) |
+| `--max-retries <n>` | Retries for transient `429`/`503` responses and reset connections (`0`–`10`, default `2`; each waits a backoff — 200 ms, 400 ms, … for a `503`, from 1 s doubling for a `429` — or longer if the server's `Retry-After` asks, up to 30 s; a longer `Retry-After` is not retried; each retry logs one WARN record of `reisewarnungen.http` before it waits, `HTTP 503 from host: retry 1 of 3 in 2 s`) |
 | `--max-redirects <n>` | HTTP redirects to follow (`0` = none; default `5`) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 
