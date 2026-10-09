@@ -5,7 +5,7 @@ import { ReisewarnungenClient } from "../src/client/client.js";
 import { ReiseNetworkError } from "../src/client/errors.js";
 import type { CliDeps } from "../src/cli/io.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
-import { makeMockTransport, jsonResponse } from "./helpers.js";
+import { makeMockTransport, jsonResponse, untimed } from "./helpers.js";
 
 /** The two flags every country entry must carry (booleans); fixtures spread it first. */
 const F = { warning: false, partialWarning: false } as const;
@@ -113,8 +113,8 @@ test("a 404 on list/countries is exit 1 (the endpoint is missing), not 4 (countr
     const code = await run([command], cli.deps);
     assert.equal(code, 1, command);
     assert.equal(
-      cli.err.join("\n"),
-      "Error: HTTP 404 for GET https://www.auswaertiges-amt.de/opendata/travelwarning " +
+      untimed(cli.err.join("\n")),
+      "ERROR [reisewarnungen.api] HTTP 404 for GET https://www.auswaertiges-amt.de/opendata/travelwarning " +
         "(the travel-warning list itself was not found: a wrong --base-url, or the API moved)",
     );
   }
@@ -125,6 +125,7 @@ test("get on a 200-but-empty envelope maps to exit code 4 (not-found)", async ()
   const code = await run(["get", "226768"], cli.deps);
   assert.equal(code, 4);
   assert.ok(cli.err.join("\n").includes("226768"));
+  assert.match(untimed(cli.err.join("\n")), /^ERROR \[reisewarnungen\.api\] /);
 });
 
 test("get on a body without the response envelope is a parse error (exit 1), not exit 4", async () => {
@@ -133,8 +134,8 @@ test("get on a body without the response envelope is a parse error (exit 1), not
     const code = await run(["get", "100"], cli.deps);
     assert.equal(code, 1, JSON.stringify(body));
     assert.equal(
-      cli.err.join("\n"),
-      'Error: Unexpected response shape from /opendata/travelwarning/100: expected a JSON object with a "response" object.',
+      untimed(cli.err.join("\n")),
+      'ERROR [reisewarnungen.cli] Unexpected response shape from /opendata/travelwarning/100: expected a JSON object with a "response" object.',
     );
   }
 });
@@ -154,8 +155,8 @@ test("a malformed redirect Location is a clean error (exit 1), not 'Unexpected e
   const code = await run(["list"], cli.deps);
   assert.equal(code, 1);
   assert.equal(
-    cli.err.join("\n"),
-    "Error: HTTP 302 for GET https://www.auswaertiges-amt.de/opendata/travelwarning: redirect to http://[bad not followed",
+    untimed(cli.err.join("\n")),
+    "ERROR [reisewarnungen.api] HTTP 302 for GET https://www.auswaertiges-amt.de/opendata/travelwarning: redirect to http://[bad not followed",
   );
 });
 
@@ -165,7 +166,7 @@ test("a network failure maps to exit code 1", async () => {
   });
   const code = await run(["list"], cli.deps);
   assert.equal(code, 1);
-  assert.ok(cli.err.join("\n").startsWith("Error:"));
+  assert.equal(untimed(cli.err.join("\n")), "ERROR [reisewarnungen.http] GET https://www.auswaertiges-amt.de/opendata/travelwarning failed: connection reset");
 });
 
 test("a malformed JSON success body maps to exit code 1 (parse error)", async () => {
@@ -176,7 +177,7 @@ test("a malformed JSON success body maps to exit code 1 (parse error)", async ()
   }));
   const code = await run(["list"], cli.deps);
   assert.equal(code, 1);
-  assert.ok(cli.err.join("\n").startsWith("Error:"));
+  assert.ok(untimed(cli.err.join("\n")).startsWith("ERROR [reisewarnungen.cli] "));
 });
 
 test("no command prints help to stdout and exits 0", async () => {
@@ -238,7 +239,7 @@ test("--output writes the file and confirms on stderr (stdout stays clean)", asy
   assert.equal(code, 0);
   assert.equal(cli.out.length, 0); // nothing on stdout
   assert.ok(cli.files.has("out.json"));
-  assert.match(cli.err.join("\n"), /Wrote \d+ bytes to out\.json/);
+  assert.match(untimed(cli.err.join("\n")), /^INFO  \[reisewarnungen\.output\] Wrote \d+ bytes to out\.json$/);
 });
 
 test("--output refuses to overwrite an existing file without --force (exit 1)", async () => {
@@ -270,7 +271,7 @@ test("-o pointing at a directory says so (exit 1), not 'pass --force'", async ()
     cli.deps.io.writeFile = defaultIO.writeFile;
     const code = await run(["-o", dir, "list"], cli.deps);
     assert.equal(code, 1);
-    assert.equal(cli.err.join("\n"), `Error: "${dir}" is a directory; give a file path to --output.`);
+    assert.equal(untimed(cli.err.join("\n")), `ERROR [reisewarnungen.cli] "${dir}" is a directory; give a file path to --output.`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -284,7 +285,7 @@ test("a failed --output write surfaces a clean error (exit 1), not 'Unexpected e
   const code = await run(["-o", "out.json", "countries"], cli.deps);
   assert.equal(code, 1);
   const errText = cli.err.join("\n");
-  assert.match(errText, /Error: Could not write to out\.json/);
+  assert.match(untimed(errText), /^ERROR \[reisewarnungen\.cli\] Could not write to out\.json/);
   assert.doesNotMatch(errText, /Unexpected error/);
 });
 

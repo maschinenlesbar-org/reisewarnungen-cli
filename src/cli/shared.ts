@@ -3,7 +3,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import type { CliDeps } from "./io.js";
+import { logOf, type CliDeps } from "./io.js";
 import { ReiseError } from "../client/errors.js";
 import { baseUrlProblem, headerValueProblem, intInRangeProblem } from "../client/validate.js";
 import { DEFAULT_BASE_URL, cleartextProblem, type EngineOptions } from "../client/engine.js";
@@ -160,7 +160,7 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
  * Write the result to `--output`, with a short confirmation on stderr so stdout
  * stays clean for piping. A filesystem failure (bad path, missing directory,
  * permission denied) is a foreseeable user error, so it is surfaced as a clean
- * ReiseError ("Error: could not write …", exit 1) rather than bubbling up as a
+ * ReiseError (an ERROR record "Could not write …", exit 1) rather than bubbling up as a
  * raw Node errno through run()'s "Unexpected error" fallback.
  *
  * The write is exclusive unless `force` is set: an existing file at `path` is
@@ -182,7 +182,7 @@ function writeOutputFile(deps: CliDeps, path: string, data: Buffer, force: boole
     const reason = cause instanceof Error ? cause.message : String(cause);
     throw new ReiseError(`Could not write to ${path}: ${reason}`, { cause });
   }
-  deps.io.err(`Wrote ${data.length} bytes to ${path}`);
+  logOf(deps).info("output", `Wrote ${data.length} bytes to ${path}`);
 }
 
 export interface ActionContext {
@@ -198,9 +198,10 @@ export interface ActionContext {
  * options + this command's options) and the command's positional arguments.
  *
  * Before the client is built (so before any request), the base URL is checked: plain
- * `http:` to a remote host gets one `warning: <cleartextProblem sentence>` line on
- * stderr. An action runs once per run, so the warning does too; help, version and
- * usage errors never reach an action and never warn. stdout is never touched.
+ * `http:` to a remote host gets one WARN record of `reisewarnungen.http` (the
+ * `cleartextProblem` sentence) on stderr. An action runs once per run, so the warning
+ * does too; help, version and usage errors never reach an action and never warn.
+ * stdout is never touched.
  *
  * Commander invokes actions as (arg1, ..., argN, options, command); we slice off
  * the trailing options object and command instance to recover the positionals.
@@ -214,7 +215,7 @@ export function action(
     const positionals = args.slice(0, Math.max(0, args.length - 2)) as string[];
     const global = command.optsWithGlobals() as GlobalOptions;
     const cleartext = cleartextProblem(global.baseUrl ?? DEFAULT_BASE_URL);
-    if (cleartext !== undefined) deps.io.err(`warning: ${cleartext}`);
+    if (cleartext !== undefined) logOf(deps).warn("http", cleartext);
     const client = deps.createClient(toEngineOptions(global));
     await fn({ client, global, opts: command.opts() }, positionals);
   };

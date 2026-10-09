@@ -82,6 +82,18 @@ export function constantJson(body: unknown, status = 200): MockTransport {
   return makeMockTransport(() => jsonResponse(body, status));
 }
 
+// ---- the log on stderr -------------------------------------------------------
+
+/**
+ * stderr with each text record's timestamp taken off: `ERROR [reisewarnungen.api] HTTP 404 …`.
+ * The format itself — timestamp, level, topic — is the conformance test's
+ * (conformance-p23-log-format); the other tests check what was said, at which level
+ * and under which topic.
+ */
+export function untimed(text: string): string {
+  return text.replace(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z /gm, "");
+}
+
 // ---- CLI <-> library parity ---------------------------------------------------
 
 /** What the CLI did with one input: exit code, captured output and requests. */
@@ -124,7 +136,7 @@ export async function parity(
   };
   const code = await run(argv, deps);
   const cliRequests = mt.calls.slice();
-  const cli: CliOutcome = { code, out: out.join("\n"), err: err.join("\n"), requests: cliRequests };
+  const cli: CliOutcome = { code, out: out.join("\n"), err: untimed(err.join("\n")), requests: cliRequests };
 
   let lib: LibOutcome;
   try {

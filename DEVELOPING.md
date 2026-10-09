@@ -168,8 +168,8 @@ when requests to `baseUrl` would travel unencrypted — `requests to <host> are 
 unencrypted (http:, not https:)`, or `the base URL's credentials are sent unencrypted to
 <host> (http:, not https:)` when it carries userinfo — and `undefined` for `https:`, an
 unparseable URL and a loopback host (`localhost`, 127.0.0.0/8, `::1`). `<host>` is
-`url.host`, never the userinfo. The CLI's `action()` wrapper writes it as `warning: <sentence>`
-to stderr once per run, before the client is built; help, version and usage errors never
+`url.host`, never the userinfo. The CLI's `action()` wrapper logs it as a `WARN` record of
+`reisewarnungen.http` on stderr once per run, before the client is built; help, version and usage errors never
 warn, and stdout and the exit code are unchanged. The library itself never warns.
 
 **Credentials across redirects.** The engine takes the userinfo off the base URL and
@@ -211,7 +211,8 @@ src/
     advice.ts    # adviceSentences: the advice-against-travel sentences of an advisory's HTML
     client.ts    # ReisewarnungenClient — list / summaries / get / advice over the engine
   cli/
-    io.ts        # injectable I/O seam (stdout/stderr/file)
+    io.ts        # injectable I/O seam (stdout/stderr/file), the logger and the clock
+    log.ts       # the stderr log: records with ts, level, topic; --log-format text|jsonl
     shared.ts    # option parsers, global-option resolver, JSON renderer
     commands/    # list / countries / get / advice
     program.ts   # assembles the commander program from injectable deps
@@ -331,6 +332,24 @@ any key.)
 serialiser: omits `undefined`/`null`, repeats keys for arrays, renders booleans
 as `true`/`false`, dates as ISO-8601, and encodes spaces as `%20` (not `+`).
 
+## The log on stderr
+
+Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp, a level
+(`ERROR`, `WARN`, `INFO`) and a topic, `reisewarnungen.<area>`. `--log-format text` (the
+default) writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
+`--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
+and `msg`. The areas are `cli` (usage errors, commander's messages, unexpected errors, the
+library's validation and parse errors), `api` (the API's answers: an HTTP error status, a
+country the response doesn't hold, a `404` on the list endpoint), `http` (the connection,
+the cleartext warning) and `output` (`-o`). Code logs through `logOf(deps)` and never
+writes diagnostics with `io.err` directly. `run()` builds the logger from argv before
+commander parses it, so commander's own usage errors are records too, and on top of the
+redacted `io.err`, so a secret is kept out of the log in either format. `CliDeps.now`
+makes the timestamps testable. stdout carries data only. Only the bin shim's
+`Output error: …` (a failed write to stdout, `handleOutputErrors`, outside `run()`) stays a
+plain line. Conformance test P23 checks all of this, and its body is shared across the
+*-cli repos.
+
 ## Testing
 
 ```bash
@@ -344,7 +363,7 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`validate.test.ts`** — `assertValid`, the `ReiseValidationError` exit-code mapping and the `parity()` helper.
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, `-o -`, and exit codes (network/parse → 1, not-found → 4) — mocked client.
 - **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.
-- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL). Only their `adapter` block is repo-specific.
+- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL, P23 the log on stderr — its body takes the usage-error exit code from the adapter's `USAGE_EXIT`, `1` here). Only their `adapter` block is repo-specific.
 
 ## Continuous integration
 

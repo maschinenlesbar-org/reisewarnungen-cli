@@ -4,10 +4,12 @@
 
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
-import type { CliDeps } from "./io.js";
+import { logOf, type CliDeps } from "./io.js";
+import { createLogger, logFormatFromArgv } from "./log.js";
 import {
   ReiseApiError,
   ReiseError,
+  ReiseNetworkError,
   ReiseNotFoundError,
   ReiseValidationError,
   credentialsIn,
@@ -64,13 +66,28 @@ function configureTree(command: Command, deps: CliDeps): void {
   command.exitOverride();
   command.configureOutput({
     writeOut: (str) => deps.io.out(str.replace(/\n$/, "")),
-    writeErr: (str) => deps.io.err(str.replace(/\n$/, "")),
+    // commander's own messages are log records too: its "error: …" an ERROR, the help it
+    // shows after one an INFO.
+    writeErr: (str) => {
+      const text = str.replace(/\n$/, "");
+      // The blank line commander writes between an error and the help it shows after.
+      if (text === "") return;
+      if (text.startsWith("error: ")) logOf(deps).error("cli", text.slice("error: ".length));
+      else logOf(deps).info("cli", text);
+    },
   });
   for (const child of command.commands) configureTree(child, deps);
 }
 
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
   deps = withRedactedOutput(deps, argv);
+  // Every record goes through the redacted `io.err`, so a secret is kept out of the
+  // log in either format.
+  const redacted = deps;
+  deps = {
+    ...deps,
+    log: createLogger({ format: logFormatFromArgv(argv), write: (line) => redacted.io.err(line), ...(deps.now === undefined ? {} : { now: deps.now }) }),
+  };
   const program = buildProgram(deps);
   configureTree(program, deps);
 
@@ -107,14 +124,15 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       // Help/version requests exit 0; genuine parse errors carry their own code.
       return err.exitCode;
     }
+    const log = logOf(deps);
     if (err instanceof ReiseValidationError) {
       // The library rejected an input before any request: a usage error, with the
       // exit code commander gives a value its parsers reject (1).
-      deps.io.err(`Error: ${err.message}`);
+      log.error("cli", err.message);
       return 1;
     }
     if (err instanceof ReiseApiError) {
-      deps.io.err(`Error: ${err.message}`);
+      log.error("api", err.message);
       // Map a few notable statuses to distinct exit codes for scripting.
       if (err.status === 404) return 4;
       return 1;
@@ -122,14 +140,16 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
     if (err instanceof ReiseNotFoundError) {
       // A 2xx response that contained no matching entry: same "not found"
       // exit code as an upstream 404 for scripting symmetry.
-      deps.io.err(`Error: ${err.message}`);
+      log.error("api", err.message);
       return 4;
     }
     if (err instanceof ReiseError) {
-      deps.io.err(`Error: ${err.message}`);
+      // A connection failure is the transport's; an API error rewrapped for its exit code
+      // (a 404 on the list endpoint, exit 1) is still the API's answer.
+      log.error(err instanceof ReiseNetworkError ? "http" : err.cause instanceof ReiseApiError ? "api" : "cli", err.message);
       return 1;
     }
-    deps.io.err(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
+    log.error("cli", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   }
 }

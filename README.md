@@ -138,6 +138,21 @@ reisewarnungen list -o warnings-2026-06-08.json
 Every command prints **pretty JSON to stdout** (or to a file with `-o`). Errors
 and diagnostics go to stderr, so piping stdout into `jq` stays clean.
 
+Each line on stderr is a **log record**: a timestamp (UTC), a level (`ERROR`, `WARN`,
+`INFO`) and a topic, the program and the area it comes from (`reisewarnungen.cli` for
+usage errors, `reisewarnungen.api` for the API's answers, `reisewarnungen.http` for the
+connection, `reisewarnungen.output` for `-o`). By default it is written log4j style;
+`--log-format jsonl` writes one JSON object per line instead:
+
+```text
+2026-10-09T14:03:12.481Z WARN  [reisewarnungen.http] requests to mirror.test are sent unencrypted (http:, not https:)
+2026-10-09T14:03:12.902Z ERROR [reisewarnungen.api] HTTP 404 for GET https://www.auswaertiges-amt.de/opendata/travelwarning/999999
+```
+
+```bash
+reisewarnungen --log-format jsonl get 999999 2>log.jsonl   # {"ts":"…","level":"ERROR","topic":"reisewarnungen.api","msg":"HTTP 404 …"}
+```
+
 ```bash
 # Extract the HTML advisory text from a single warning
 reisewarnungen get 226768 --compact | jq -r '.content'
@@ -199,9 +214,10 @@ These apply to every command and may be given before *or* after it:
 | `-V, --version` | Print the version number |
 | `-h, --help` | Show help for the program or a command |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
+| `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [reisewarnungen.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
 | `-o, --output <file>` | Write output to this file instead of stdout; `-o -` means stdout (no file named `-`) |
 | `--force` | Overwrite the `--output` file if it already exists |
-| `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`, no surrounding whitespace). A `user:password@` in it is sent as HTTP Basic auth and never printed (`***`); write a literal `%` in it as `%25`. A plain `http:` base URL to a remote host prints one `warning: … sent unencrypted to <host> (http:, not https:)` line on stderr before the first request (naming the base URL's credentials when it carries any, never printing them); loopback hosts (`localhost`, `127.x`, `::1`) don't warn, and stdout and the exit code are unchanged |
+| `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`, no surrounding whitespace). A `user:password@` in it is sent as HTTP Basic auth and never printed (`***`); write a literal `%` in it as `%25`. A plain `http:` base URL to a remote host logs one `WARN` record of `reisewarnungen.http` on stderr (`… sent unencrypted to <host> (http:, not https:)`) before the first request (naming the base URL's credentials when it carries any, never printing them); loopback hosts (`localhost`, `127.x`, `::1`) don't warn, and stdout and the exit code are unchanged |
 | `--timeout <ms>` | Time limit per request, reading the whole response included (default `30000`; at most `2147483647`; `0` = no limit, the request may wait forever) |
 | `--user-agent <ua>` | `User-Agent` header value (non-blank, Latin-1, no control characters) |
 | `--max-retries <n>` | Retries for transient `429`/`503` responses and reset connections (`0`–`10`, default `2`; each waits a backoff — 200 ms, 400 ms, … for a `503`, from 1 s doubling for a `429` — or longer if the server's `Retry-After` asks, up to 30 s; a longer `Retry-After` is not retried) |
