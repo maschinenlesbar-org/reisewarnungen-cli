@@ -383,7 +383,10 @@ INFO record per line, and `help` for an unknown command an ERROR "missing comman
 (`writeCommanderErr`). The log is built with the run's redaction (`withRedactedOutput`), which replaces a secret in the message only, before it
 is escaped: the frame is never touched, and a secret is kept out of the log in either
 format. `CliDeps.now`
-makes the timestamps testable. stdout carries data only. A failed write to stdout other
+makes the timestamps testable. stdout carries data only, and a record waits for it: the
+default `io.err` (`stderrAfterStdout`) holds a record while stdout still has data queued
+and writes it, in order, once that is out, so with `2>&1 |` and a slow reader a record
+never lands inside the JSON. A failed write to stdout other
 than a closed pipe (`handleOutputErrors`, in the bin shim, outside `run()`) is an ERROR
 record of `reisewarnungen.output` (`Could not write to stdout: …`), in the format argv asks
 for and redacted like the run's log (`processLogger`). So are Node's own process warnings
@@ -404,8 +407,9 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`client.test.ts`** — response unwrapping, the flattened `summaries()` view, the `get` entry lookup (not-found vs. entries under other keys) — mocked transport.
 - **`validate.test.ts`** — `assertValid`, the `ReiseValidationError` exit-code mapping and the `parity()` helper.
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, `-o -`, and exit codes (network/parse → 1, not-found → 4) — mocked client.
-- **`io.test.ts`** — `defaultIO.writeFile` and `handleOutputErrors` on fake streams: the
-  pipe cases, and a stdout write error as an ERROR record of `reisewarnungen.output`.
+- **`io.test.ts`** — `defaultIO.writeFile`, and `handleOutputErrors` and
+  `stderrAfterStdout` on fake streams: the pipe cases, a stdout write error as an ERROR
+  record of `reisewarnungen.output`, and a record held behind stdout's backlog.
 - **`log.test.ts`** — the record helpers of `src/cli/log.ts` on their own
   (`escapeForRecord`, `formatLogRecord`, `installWarningLog`); the CLI-level checks are P23's.
 - **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.
