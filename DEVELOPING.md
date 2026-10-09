@@ -278,11 +278,12 @@ never a bad configuration value), `ReiseParseError` (bad JSON, or a 2xx body tha
 option, option key or type, content id, or `isWarned` argument — never a raw
 `TypeError`), all extending `ReiseError`. Server text in a message (an error
 `detail`, a redirect target, a transport's error text) and the URL it names are cut
-at 500 characters; `ReiseApiError.body` keeps the full body. The client's own messages
+at 500 characters, never inside a surrogate pair (`cutText`), so the message stays
+well-formed; `ReiseApiError.body` keeps the full body. The client's own messages
 that quote the server (the text of an error envelope sent with a 2xx status, a country
 name and a malformed flag value, the ids a `contentList` names without an entry) go
 through the exported `serverTextForMessage`: one line, no control (C0, DEL, C1) or bidi
-characters, at most 200 characters. The CLI maps a `404` (real or synthetic) on `get` to exit
+characters, at most 200 characters (cut the same way). The CLI maps a `404` (real or synthetic) on `get` to exit
 code `4`, other errors to `1` — including a `404` on `list`/`countries`, where it
 means the endpoint itself is missing, not a country, and a `ReiseValidationError`,
 which gets the same exit code commander gives a usage error.
@@ -346,7 +347,9 @@ and `msg`. A record is always one line: `formatLogRecord` runs `escapeForRecord`
 the message (text) or the whole JSON object (jsonl), which writes CR and LF as `\r`/`\n`,
 every other C0 control but TAB, DEL and C1 as `\u00XX`, and U+2028, U+2029 and the bidi
 controls as `\uXXXX`, so no text that reaches a record, by whatever path, can split it,
-forge another one or steer the terminal. The areas are `cli` (usage errors, commander's messages, unexpected errors, the
+forge another one or steer the terminal. Before that a lone surrogate (half a
+character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`).
+The areas are `cli` (usage errors, commander's messages, unexpected errors, the
 library's validation and parse errors), `api` (the API's answers: an HTTP error status, a
 country the response doesn't hold, a `404` on the list endpoint), `http` (the connection,
 the cleartext warning) and `output` (`-o`). Code logs through `logOf(deps)` and never

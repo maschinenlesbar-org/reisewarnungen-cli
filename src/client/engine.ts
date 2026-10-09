@@ -19,6 +19,7 @@ import {
   ReiseParseError,
   ReiseValidationError,
   credentialsIn,
+  cutText,
   redactCredentials,
   redactUrl,
 } from "./errors.js";
@@ -275,7 +276,7 @@ function isBidiControl(n: number): boolean {
  * U+2028/U+2029 included) folded to one space, so it stays on one line; control
  * characters (`sanitizeServerText`: C0, DEL, C1) and the bidi controls dropped, so no
  * escape sequence reaches a terminal; trimmed and cut at `max` characters (200), ending
- * in "…" when cut.
+ * in "…" when cut, never inside a surrogate pair (`cutText`).
  */
 export function serverTextForMessage(text: string, max = 200): string {
   let clean = "";
@@ -283,15 +284,15 @@ export function serverTextForMessage(text: string, max = 200): string {
     if (!isBidiControl(ch.codePointAt(0) ?? 0)) clean += ch;
   }
   clean = clean.trim();
-  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+  return clean.length > max ? `${cutText(clean, max)}…` : clean;
 }
 
 /** Longest server text (in characters) an error message keeps; `ReiseApiError.body` keeps all. */
 const MAX_DETAIL_LENGTH = 500;
 
-/** `text` cut at MAX_DETAIL_LENGTH characters, ending in "…" when cut. */
+/** `text` cut at MAX_DETAIL_LENGTH characters (never inside a surrogate pair), ending in "…" when cut. */
 function cutServerText(text: string): string {
-  return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
+  return text.length > MAX_DETAIL_LENGTH ? `${cutText(text, MAX_DETAIL_LENGTH)}…` : text;
 }
 
 /**

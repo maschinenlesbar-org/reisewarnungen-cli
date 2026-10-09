@@ -296,3 +296,23 @@ test("server strings the client quotes in its own messages reach no terminal raw
     });
   }
 });
+
+test("server text cut at 200 characters in the client's own messages never leaves half a character", async () => {
+  const LONE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+  const long = "a".repeat(199) + "\u{1f600}" + "b".repeat(50);
+  const flag = "c".repeat(199) + "\u{1f1e9}\u{1f1ea}";
+  const cases: Array<[string, unknown, (c: ReisewarnungenClient) => Promise<unknown>]> = [
+    ["list error envelope", { response: { error: long } }, (c) => c.list()],
+    ["get error envelope", { response: { error: long } }, (c) => c.get("5")],
+    ["flag error, countryName", { response: { "100": { countryName: flag, warning: 1, partialWarning: false } } }, (c) => c.list()],
+  ];
+  for (const [name, body, call] of cases) {
+    const mt = makeMockTransport(() => jsonResponse(body));
+    await assert.rejects(call(clientWith(mt)), (err: unknown) => {
+      assert.ok(err instanceof ReiseParseError, name);
+      assert.ok(!LONE.test(err.message), `${name}: ${JSON.stringify(err.message)}`);
+      assert.match(err.message, /…/, name);
+      return true;
+    });
+  }
+});

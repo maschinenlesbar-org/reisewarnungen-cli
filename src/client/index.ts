@@ -39,8 +39,10 @@ export {
   ReiseParseError,
   ReiseValidationError,
   credentialsIn,
+  cutText,
   redactCredentials,
   redactUrl,
+  toWellFormed,
 } from "./errors.js";
 
 export * from "./types.js";

@@ -10,7 +10,7 @@ import {
 } from "../src/client/engine.js";
 import { baseUrlProblem } from "../src/client/validate.js";
 import { MAX_TIMEOUT_MS } from "../src/client/http.js";
-import { ReiseApiError, ReiseNetworkError, ReiseParseError, ReiseValidationError } from "../src/client/errors.js";
+import { ReiseApiError, ReiseNetworkError, ReiseParseError, ReiseValidationError, cutText, toWellFormed } from "../src/client/errors.js";
 import {
   makeMockTransport,
   jsonResponse,
@@ -459,4 +459,21 @@ test("the constructor rejects an unsendable userAgent before any request", () =>
     assert.equal(mt.calls.length, 0);
   }
   assert.equal(assertHeaderValue("userAgent", "my-app/1.0\tü"), "my-app/1.0\tü");
+});
+
+test("cutText never cuts inside a surrogate pair; toWellFormed replaces half a character", () => {
+  assert.equal(cutText("ab\u{1f600}cd", 3), "ab");
+  assert.equal(cutText("ab\u{1f600}cd", 4), "ab\u{1f600}");
+  assert.equal(cutText("short", 10), "short");
+  assert.equal(toWellFormed("a\ud83d b\ude00 \u{1f600}"), "a\ufffd b\ufffd \u{1f600}");
+});
+
+test("a server detail cut at 500 characters keeps the message well-formed", async () => {
+  const detail = "a" + "\u{1f600}".repeat(400);
+  const engine = new RequestEngine({ transport: async () => ({ status: 500, headers: { "content-type": "application/json" }, body: Buffer.from(JSON.stringify({ detail })) }) });
+  await assert.rejects(engine.getJson("/opendata/travelwarning"), (err: Error) => {
+    assert.equal(toWellFormed(err.message), err.message);
+    assert.match(err.message, /…$/);
+    return true;
+  });
 });
