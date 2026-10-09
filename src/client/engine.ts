@@ -263,6 +263,29 @@ function sanitizeServerText(text: string): string {
   return out;
 }
 
+/** True for U+061C, U+200E, U+200F, U+202A–U+202E and U+2066–U+2069: the bidi controls. */
+function isBidiControl(n: number): boolean {
+  return n === 0x061c || n === 0x200e || n === 0x200f || (n >= 0x202a && n <= 0x202e) || (n >= 0x2066 && n <= 0x2069);
+}
+
+/**
+ * Server text that one of the client's own messages quotes — the text of an error
+ * envelope sent with a 2xx status, a country name, a malformed flag value, the ids a
+ * `contentList` names without an entry — made safe and short: whitespace (line breaks,
+ * U+2028/U+2029 included) folded to one space, so it stays on one line; control
+ * characters (`sanitizeServerText`: C0, DEL, C1) and the bidi controls dropped, so no
+ * escape sequence reaches a terminal; trimmed and cut at `max` characters (200), ending
+ * in "…" when cut.
+ */
+export function serverTextForMessage(text: string, max = 200): string {
+  let clean = "";
+  for (const ch of sanitizeServerText(text.replace(/\s+/g, " "))) {
+    if (!isBidiControl(ch.codePointAt(0) ?? 0)) clean += ch;
+  }
+  clean = clean.trim();
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
 /** Longest server text (in characters) an error message keeps; `ReiseApiError.body` keeps all. */
 const MAX_DETAIL_LENGTH = 500;
 

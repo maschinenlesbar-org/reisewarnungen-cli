@@ -6,7 +6,7 @@
 //   client.summaries({ warnedOnly: true })  // only countries with a warning in force
 //   client.get("226768")     // one country's full warning (HTML content)
 
-import { RequestEngine, type EngineOptions } from "./engine.js";
+import { RequestEngine, serverTextForMessage, type EngineOptions } from "./engine.js";
 import { ReiseNotFoundError, ReiseParseError, ReiseValidationError } from "./errors.js";
 import { assertKnownKeys, assertValid, booleanProblem } from "./validate.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
@@ -133,9 +133,9 @@ function checkFlags(entry: JsonObject, contentId: string, path: string): void {
 }
 
 function flagError(entry: JsonObject, contentId: string, flag: string, path: string): ReiseParseError {
-  const name = typeof entry["countryName"] === "string" ? ` (${cutText(entry["countryName"])})` : "";
+  const name = typeof entry["countryName"] === "string" ? ` (${serverTextForMessage(entry["countryName"])})` : "";
   const value = entry[flag];
-  const got = value === undefined ? "it is missing" : `got ${cutText(JSON.stringify(value))}`;
+  const got = value === undefined ? "it is missing" : `got ${serverTextForMessage(JSON.stringify(value))}`;
   return new ReiseParseError(
     `Unexpected response shape from ${path}: the "${flag}" flag of content id "${contentId}"${name} ` +
       `must be true or false, ${got}; the warning level can't be read safely.`,
@@ -163,7 +163,7 @@ function checkList(response: JsonObject, path: string): JsonObject {
   if (error !== undefined) {
     const text = typeof error === "string" ? error : JSON.stringify(error);
     throw new ReiseParseError(
-      `The API answered ${path} with an error envelope instead of the travel-warning list: ${cutText(text)}`,
+      `The API answered ${path} with an error envelope instead of the travel-warning list: ${serverTextForMessage(text)}`,
     );
   }
   let countries = 0;
@@ -187,17 +187,11 @@ function checkList(response: JsonObject, path: string): JsonObject {
     if (missing.length > 0) {
       throw new ReiseParseError(
         `Unexpected response shape from ${path}: contentList names ${missing.length} id(s) without an entry ` +
-          `(${cutText(missing.slice(0, 10).join(", "))}${missing.length > 10 ? ", …" : ""}), a partial answer.`,
+          `(${serverTextForMessage(missing.slice(0, 10).join(", "))}${missing.length > 10 ? ", …" : ""}), a partial answer.`,
       );
     }
   }
   return response;
-}
-
-/** Server text cut for a message: one line, at most 200 characters. */
-function cutText(text: string): string {
-  const line = text.replace(/\s+/g, " ").trim();
-  return line.length > 200 ? `${line.slice(0, 200)}…` : line;
 }
 
 export class ReisewarnungenClient {
@@ -299,7 +293,7 @@ export class ReisewarnungenClient {
       const error = response["error"];
       throw new ReiseParseError(
         `The API answered ${path} with an error envelope instead of a travel warning: ` +
-          cutText(typeof error === "string" ? error : JSON.stringify(error)),
+          serverTextForMessage(typeof error === "string" ? error : JSON.stringify(error)),
       );
     }
 

@@ -272,3 +272,27 @@ test("a non-boolean or missing warning flag is a parse error, on list, summaries
   const ok = { response: { "1": { countryName: "Fine", warning: true, partialWarning: false } } };
   assert.equal((await clientWith(makeMockTransport(() => jsonResponse(ok))).summaries({ warnedOnly: true })).length, 1);
 });
+
+/** Characters the client's own messages never carry raw: C0, DEL, C1, U+2028/2029, bidi controls. */
+const RAW_IN_MESSAGE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+
+test("server strings the client quotes in its own messages reach no terminal raw (ESC, OSC, C1, DEL, bidi)", async () => {
+  const hostile = "Wartung\u001b]0;pwned\u0007 \u001b[2J\u001b[H x\u009b2J y\u007f z\u202eevil\u2066iso\nnext\u2028line";
+  const cases: Array<[string, unknown, (c: ReisewarnungenClient) => Promise<unknown>]> = [
+    ["list error envelope", { response: { error: hostile } }, (c) => c.list()],
+    ["get error envelope", { response: { error: hostile } }, (c) => c.get("5")],
+    ["flag error, countryName", { response: { "100": { countryName: hostile, warning: "true", partialWarning: false } } }, (c) => c.list()],
+    ["flag error, value", { response: { "100": { countryName: "A", warning: hostile, partialWarning: false } } }, (c) => c.list()],
+    ["contentList ids", { response: { "100": { ...F, countryName: "A" }, contentList: ["100", hostile] } }, (c) => c.list()],
+  ];
+  for (const [name, body, call] of cases) {
+    const mt = makeMockTransport(() => jsonResponse(body));
+    await assert.rejects(call(clientWith(mt)), (err: unknown) => {
+      assert.ok(err instanceof ReiseParseError, name);
+      assert.ok(!RAW_IN_MESSAGE.test(err.message), `${name}: ${JSON.stringify(err.message)}`);
+      // The visible text survives; only the control and bidi characters are gone.
+      assert.match(err.message, /Wartung/, name);
+      return true;
+    });
+  }
+});

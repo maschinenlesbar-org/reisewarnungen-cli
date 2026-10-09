@@ -14,6 +14,7 @@ export {
   intOption,
   isTransientNetworkError,
   parseRetryAfter,
+  serverTextForMessage,
   validateBaseUrl,
 } from "./engine.js";
 export type { EngineOptions, RawResponse } from "./engine.js";
