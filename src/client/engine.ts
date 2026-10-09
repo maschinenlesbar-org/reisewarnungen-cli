@@ -689,7 +689,7 @@ export class RequestEngine {
       // An HTML maintenance or proxy page is the usual non-JSON answer: name its type, so it
       // reads as an upstream problem rather than a client bug.
       const type = res.contentType.split(";")[0]?.trim() ?? "";
-      const hint = type !== "" && !/json/i.test(type) ? `: expected JSON, got Content-Type "${sanitizeServerText(type)}"` : "";
+      const hint = type !== "" && !/json/i.test(type) ? `: expected JSON, got Content-Type "${cutForMessage(sanitizeServerText(type))}"` : "";
       throw new ReiseParseError(`Failed to parse JSON response from ${path}${hint}`, { cause });
     }
   }
@@ -745,7 +745,7 @@ function decodeBody(body: Buffer, contentType: string, path: string): string {
   try {
     decoder = new TextDecoder(charset);
   } catch {
-    throw new ReiseParseError(`Unsupported response charset "${sanitizeServerText(charset)}" from ${path}.`);
+    throw new ReiseParseError(`Unsupported response charset "${cutForMessage(sanitizeServerText(charset))}" from ${path}.`);
   }
   return decoder.decode(body);
 }

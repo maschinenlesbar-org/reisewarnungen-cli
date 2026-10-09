@@ -279,8 +279,8 @@ option, option key or type, content id, or `isWarned` argument — never a raw
 `TypeError`), all extending `ReiseError`. Server text in a message (an error
 `detail`, a redirect target, a transport's error text) and the URL it names are cut
 at 500 characters, never inside a surrogate pair (`cutText`), so the message stays
-well-formed; a redirect target the message names at `MAX_QUOTED_LENGTH` (200,
-`cutForMessage`, both exported); `ReiseApiError.body` keeps the full body. The client's own messages
+well-formed; a redirect target, a Content-Type or a charset the message names at
+`MAX_QUOTED_LENGTH` (200, `cutForMessage`, both exported); `ReiseApiError.body` keeps the full body. The client's own messages
 that quote the server (the text of an error envelope sent with a 2xx status, a country
 name and a malformed flag value, the ids a `contentList` names without an entry) go
 through the exported `serverTextForMessage`: one line, no control (C0, DEL, C1) or bidi

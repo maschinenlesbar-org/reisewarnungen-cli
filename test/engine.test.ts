@@ -483,3 +483,13 @@ test("own messages quote a server value at most 200 characters long (L3)", async
   const redirect = new RequestEngine({ maxRedirects: 0, transport: async () => ({ status: 302, headers: { location: `https://other.example/${long}` }, body: Buffer.alloc(0) }) });
   await assert.rejects(redirect.getJson("/opendata/travelwarning"), (err: Error) => err.message.length < 400 && /redirect to https:\/\/other\.example\/x+… not followed/.test(err.message));
 });
+
+test("the Content-Type and charset a parse error names are cut at 200 characters (B2)", async () => {
+  const long = "X".repeat(14000);
+  const html = new RequestEngine({ transport: async () => ({ status: 200, headers: { "content-type": `text/html${long}` }, body: Buffer.from("<html>") }) });
+  await assert.rejects(html.getJson("/opendata/travelwarning"), (err: Error) =>
+    err instanceof ReiseParseError && err.message.length < 400 && /got Content-Type "text\/htmlX+…"/.test(err.message));
+  const charset = new RequestEngine({ transport: async () => ({ status: 200, headers: { "content-type": `application/json; charset=x${long}` }, body: Buffer.from("{}") }) });
+  await assert.rejects(charset.getJson("/opendata/travelwarning"), (err: Error) =>
+    err instanceof ReiseParseError && err.message.length < 400 && /Unsupported response charset "xX+…"/.test(err.message));
+});
