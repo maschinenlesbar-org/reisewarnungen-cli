@@ -493,3 +493,20 @@ test("the Content-Type and charset a parse error names are cut at 200 characters
   await assert.rejects(charset.getJson("/opendata/travelwarning"), (err: Error) =>
     err instanceof ReiseParseError && err.message.length < 400 && /Unsupported response charset "xX+…"/.test(err.message));
 });
+
+test("credentials a server echoes are scrubbed from the error: Basic, user:password, password (L13)", async () => {
+  // The engine sends the pair UTF-8 encoded, so that is the form a server echoes.
+  const basic = Buffer.from("alice:pä ss-pw", "utf8").toString("base64");
+  const body = JSON.stringify({ message: `no: Basic ${basic} / alice:pä ss-pw / pä ss-pw` });
+  const engine = new RequestEngine({
+    baseUrl: "https://alice:p%C3%A4%20ss-pw@127.0.0.1",
+    maxRetries: 0,
+    transport: async () => ({ status: 401, headers: { "content-type": "application/json" }, body: Buffer.from(body) }),
+  });
+  await assert.rejects(engine.getJson("/x"), (err: unknown) => {
+    assert.ok(err instanceof ReiseApiError);
+    for (const form of [basic, "alice:pä ss-pw", "pä ss-pw"]) assert.ok(!err.message.includes(form), err.message);
+    assert.match(err.message, /no: Basic \*\*\* \/ \*\*\* \/ \*\*\*/);
+    return true;
+  });
+});

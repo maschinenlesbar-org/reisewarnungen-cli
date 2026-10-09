@@ -42,7 +42,9 @@ export {
   credentialsIn,
   cutForMessage,
   cutText,
+  echoedCredentialForms,
   redactCredentials,
+  redactSecrets,
   redactUrl,
   toWellFormed,
 } from "./errors.js";

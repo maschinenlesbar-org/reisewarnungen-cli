@@ -164,7 +164,12 @@ URL in a real `#private` field (so `console.log(client)`, `util.inspect` and
 `JSON.stringify` don't show it), `ReiseApiError.url` and its message carry the URL with
 the userinfo replaced by `***`, a redirect target is shown the same way, and error
 bodies, details, transport error text and the `cause` chain are scrubbed of the
-userinfo (raw and percent-decoded) before they reach an error.
+userinfo (raw and percent-decoded) before they reach an error — and with it of the forms
+a server echoes it back in (`echoedCredentialForms`, exported): the `Authorization: Basic`
+value, the decoded `user:password`, and the password alone from 4 characters on
+(`redactSecrets`, exported). The CLI replaces the Basic value and the pair on stdout and
+stderr, the bare password on stderr only (on stdout a short password may well occur in
+the data).
 
 **Plain `http:`.** `cleartextProblem(baseUrl, secrets?)` (exported) returns one sentence
 when requests to `baseUrl` would travel unencrypted — `requests to <host> are sent
