@@ -214,6 +214,15 @@ exit `1`), never read as the requested country — a travel-safety tool must not
 answer with a different country. (Earlier versions accepted a *sole* entry under
 any key.)
 
+**Log record.** Every diagnostic line the CLI writes to stderr: a timestamp, a level
+(`ERROR`, `WARN`, `INFO`) and a topic `reisewarnungen.<area>`, as text (log4j style) or
+with `--log-format jsonl` as one JSON object per line. The areas: `cli` (usage errors,
+commander's messages, unexpected errors), `api` (the API's answers: an error status, a
+country not found, a malformed answer — bad JSON, the wrong shape, an error envelope sent
+with HTTP 200, an unknown charset), `http` (the connection, the cleartext warning) and
+`output` (the `-o` file, a failed write to stdout). A record is always one line; control
+characters in it are escaped.
+
 ---
 
 > **Library & internals.** Terms for the TypeScript client and its internals —

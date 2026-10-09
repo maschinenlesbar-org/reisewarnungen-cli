@@ -135,7 +135,7 @@ test("get on a body without the response envelope is a parse error (exit 1), not
     assert.equal(code, 1, JSON.stringify(body));
     assert.equal(
       untimed(cli.err.join("\n")),
-      'ERROR [reisewarnungen.cli] Unexpected response shape from /opendata/travelwarning/100: expected a JSON object with a "response" object.',
+      'ERROR [reisewarnungen.api] Unexpected response shape from /opendata/travelwarning/100: expected a JSON object with a "response" object.',
     );
   }
 });
@@ -177,7 +177,7 @@ test("a malformed JSON success body maps to exit code 1 (parse error)", async ()
   }));
   const code = await run(["list"], cli.deps);
   assert.equal(code, 1);
-  assert.ok(untimed(cli.err.join("\n")).startsWith("ERROR [reisewarnungen.cli] "));
+  assert.ok(untimed(cli.err.join("\n")).startsWith("ERROR [reisewarnungen.api] "));
 });
 
 test("no command prints help to stdout and exits 0", async () => {
@@ -460,4 +460,24 @@ test("every -o failure is an ERROR record of reisewarnungen.output, exit 1 (L8)"
     assert.match(untimed(cli.err.join("\n")), /^ERROR \[reisewarnungen\.output\] /);
     assert.doesNotMatch(cli.err.join("\n"), /Unexpected error/);
   }
+});
+
+test("a malformed answer is an ERROR record of reisewarnungen.api, exit 1 (L9)", async () => {
+  const answers: HttpResponse[] = [
+    { status: 200, headers: { "content-type": "application/json" }, body: Buffer.from("not json") },
+    jsonResponse({ response: { error: "down" } }),
+    jsonResponse({ response: { "100": { countryName: "A", warning: "true", partialWarning: false } } }),
+  ];
+  for (const answer of answers) {
+    const cli = makeCli(() => answer);
+    assert.equal(await run(["countries"], cli.deps), 1);
+    assert.match(untimed(cli.err.join("\n")), /^ERROR \[reisewarnungen\.api\] /);
+  }
+  // advice on an entry without content, get on entries under other keys.
+  const advice = makeCli(() => jsonResponse({ response: { "5": { ...F, countryName: "A" } } }));
+  assert.equal(await run(["advice", "5"], advice.deps), 1);
+  assert.match(untimed(advice.err.join("\n")), /^ERROR \[reisewarnungen\.api\] The advisory for content id "5" has no content/);
+  const other = makeCli(() => jsonResponse({ response: { "9": { ...F, countryName: "B" } } }));
+  assert.equal(await run(["get", "5"], other.deps), 1);
+  assert.match(untimed(other.err.join("\n")), /^ERROR \[reisewarnungen\.api\] Unexpected response shape/);
 });

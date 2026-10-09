@@ -11,6 +11,7 @@ import {
   ReiseError,
   ReiseNetworkError,
   ReiseNotFoundError,
+  ReiseParseError,
   ReiseValidationError,
   credentialsIn,
   echoedCredentialForms,
@@ -186,6 +187,21 @@ function writeCommanderErr(command: Command, deps: CliDeps, state: { errorLogged
 }
 
 /**
+ * The log area of a `ReiseError` that is neither an API error, a not-found nor a usage
+ * error: the connection (`http`), a malformed answer (`api`: bad JSON, the wrong shape, an
+ * error envelope sent with a 2xx status, an unknown charset — the API's answer as much as
+ * an error status is), an API error rewrapped for its exit code (a `404` on the list
+ * endpoint: `api`), the `-o` file (`output`), else `cli`.
+ */
+function areaOf(err: ReiseError): string {
+  if (err instanceof ReiseNetworkError) return "http";
+  if (err instanceof ReiseParseError) return "api";
+  if (err instanceof OutputError) return "output";
+  if (err.cause instanceof ReiseApiError) return "api";
+  return "cli";
+}
+
+/**
  * The log for what happens outside `run()`, in the bin shim: a stdout write error
  * (`handleOutputErrors`). Its format is the one argv asks for (`logFormatFromArgv`), and
  * it replaces the secrets of argv like the run's own log; it writes to the raw stderr.
@@ -269,12 +285,7 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
       return 4;
     }
     if (err instanceof ReiseError) {
-      // A connection failure is the transport's; an API error rewrapped for its exit code
-      // (a 404 on the list endpoint, exit 1) is still the API's answer; any -o failure is
-      // the output's.
-      const area =
-        err instanceof ReiseNetworkError ? "http" : err instanceof OutputError ? "output" : err.cause instanceof ReiseApiError ? "api" : "cli";
-      log.error(area, err.message);
+      log.error(areaOf(err), err.message);
       return 1;
     }
     log.error("cli", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);

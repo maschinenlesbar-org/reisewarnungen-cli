@@ -213,6 +213,16 @@ Ländereinträge unter anderen Schlüsseln stehen, ist eine fehlerhafte Antwort
 für Reisesicherheit darf nicht mit einem anderen Land antworten. (Frühere Versionen
 akzeptierten einen *einzigen* Eintrag unter beliebigem Schlüssel.)
 
+**Log-Eintrag.** Jede Diagnosezeile, die die CLI auf stderr schreibt: ein Zeitstempel,
+eine Stufe (`ERROR`, `WARN`, `INFO`) und ein Thema `reisewarnungen.<Bereich>`, als Text
+(im Stil von log4j) oder mit `--log-format jsonl` als ein JSON-Objekt pro Zeile. Die
+Bereiche: `cli` (Bedienfehler, Meldungen von commander, unerwartete Fehler), `api` (die
+Antworten der API: ein Fehlerstatus, ein nicht gefundenes Land, eine fehlerhafte Antwort –
+kein JSON, die falsche Form, ein mit HTTP 200 gesendeter Fehler-Envelope, ein unbekannter
+Zeichensatz), `http` (die Verbindung, die Warnung vor unverschlüsseltem `http:`) und
+`output` (die `-o`-Datei, ein fehlgeschlagenes Schreiben auf stdout). Ein Eintrag ist
+immer eine Zeile; Steuerzeichen darin werden maskiert.
+
 ---
 
 > **Bibliothek & Interna.** Begriffe zum TypeScript-Client und seinen Interna –
