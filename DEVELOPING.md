@@ -370,7 +370,10 @@ library's validation and parse errors), `api` (the API's answers: an HTTP error 
 country the response doesn't hold, a `404` on the list endpoint), `http` (the connection,
 the cleartext warning) and `output` (`-o`). Code logs through `logOf(deps)` and never
 writes diagnostics with `io.err` directly. `run()` builds the logger from argv before
-commander parses it, so commander's own usage errors are records too: its `error: …` an
+commander parses it (`logFormatFromArgv`, which skips the value of the program's value
+options such as `--user-agent` and `-o`, used only for the records of a parse error; a
+`preAction` hook then sets the format commander parsed, so an option's value that looks
+like `--log-format` never switches it), so commander's own usage errors are records too: its `error: …` an
 ERROR of `cli` (a `(Did you mean …?)` line joined to it), the help it shows after one an
 INFO record per line, and `help` for an unknown command an ERROR "missing command:
 `reisewarnungen <subcommand>`" before that help, so every failed run has an ERROR record

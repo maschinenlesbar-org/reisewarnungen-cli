@@ -427,3 +427,20 @@ test("help for an unknown command is a failed run with an ERROR first, then the 
   for (const record of records.slice(1)) assert.match(record, /^INFO  \[reisewarnungen\.cli\] .*\S$/);
   assert.ok(records.some((record) => /\] Usage: reisewarnungen /.test(record)), records.join("\n"));
 });
+
+test("a parse error is logged in the format commander would have parsed (L6)", async () => {
+  const isJsonl = (line: string): boolean => line.startsWith("{");
+  const cases: [string[], boolean][] = [
+    // Repeated: the last one counts, in commander and in the scan.
+    [["--log-format", "text", "--log-format", "jsonl", "listx"], true],
+    [["--log-format", "jsonl", "--log-format", "text", "listx"], false],
+    // --log-format is --user-agent's (or -o's) value, so `jsonl` is an unknown command, logged in text.
+    [["--user-agent", "--log-format", "jsonl", "countries"], false],
+    [["-o", "--log-format", "jsonl", "countries"], false],
+  ];
+  for (const [argv, jsonl] of cases) {
+    const cli = makeCli(() => jsonResponse(listBody));
+    assert.equal(await run(argv, cli.deps), 1, argv.join(" "));
+    assert.ok(cli.err.length > 0 && cli.err.every((line) => isJsonl(line) === jsonl), `${argv.join(" ")}:\n${cli.err.join("\n")}`);
+  }
+});
