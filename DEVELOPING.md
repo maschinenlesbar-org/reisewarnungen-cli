@@ -386,7 +386,10 @@ format. `CliDeps.now`
 makes the timestamps testable. stdout carries data only. A failed write to stdout other
 than a closed pipe (`handleOutputErrors`, in the bin shim, outside `run()`) is an ERROR
 record of `reisewarnungen.output` (`Could not write to stdout: …`), in the format argv asks
-for and redacted like the run's log (`processLogger`). Conformance test P23 checks all of this, and its body is shared across the
+for and redacted like the run's log (`processLogger`). So are Node's own process warnings
+(`installWarningLog`, also installed by the shim): a WARN record of `reisewarnungen.cli`,
+`(node) <name>: <message>`, instead of Node's plain `(node:PID) Warning: …` line (e.g. with
+`NODE_TLS_REJECT_UNAUTHORIZED=0`). Conformance test P23 checks all of this, and its body is shared across the
 *-cli repos.
 
 ## Testing
@@ -404,7 +407,7 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`io.test.ts`** — `defaultIO.writeFile` and `handleOutputErrors` on fake streams: the
   pipe cases, and a stdout write error as an ERROR record of `reisewarnungen.output`.
 - **`log.test.ts`** — the record helpers of `src/cli/log.ts` on their own
-  (`escapeForRecord`, `formatLogRecord`); the CLI-level checks are P23's.
+  (`escapeForRecord`, `formatLogRecord`, `installWarningLog`); the CLI-level checks are P23's.
 - **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.
 - **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL, P23 the log on stderr — its body takes the usage-error exit code from the adapter's `USAGE_EXIT`, `1` here). Only their `adapter` block is repo-specific.
 
