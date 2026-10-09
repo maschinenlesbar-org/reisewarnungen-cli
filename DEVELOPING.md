@@ -368,7 +368,7 @@ and a message longer than `MAX_RECORD_MESSAGE` (4000 characters, exported) is cu
 code point and ends in `… (N more characters)`. The areas are `cli` (usage errors, commander's messages, unexpected errors, the
 library's validation and parse errors), `api` (the API's answers: an HTTP error status, a
 country the response doesn't hold, a `404` on the list endpoint), `http` (the connection,
-the cleartext warning) and `output` (`-o`). Code logs through `logOf(deps)` and never
+the cleartext warning) and `output` (`-o`, a failed write to stdout). Code logs through `logOf(deps)` and never
 writes diagnostics with `io.err` directly. `run()` builds the logger from argv before
 commander parses it (`logFormatFromArgv`, which skips the value of the program's value
 options such as `--user-agent` and `-o`, used only for the records of a parse error; a
@@ -380,9 +380,10 @@ INFO record per line, and `help` for an unknown command an ERROR "missing comman
 (`writeCommanderErr`). The log is built with the run's redaction (`withRedactedOutput`), which replaces a secret in the message only, before it
 is escaped: the frame is never touched, and a secret is kept out of the log in either
 format. `CliDeps.now`
-makes the timestamps testable. stdout carries data only. Only the bin shim's
-`Output error: …` (a failed write to stdout, `handleOutputErrors`, outside `run()`) stays a
-plain line. Conformance test P23 checks all of this, and its body is shared across the
+makes the timestamps testable. stdout carries data only. A failed write to stdout other
+than a closed pipe (`handleOutputErrors`, in the bin shim, outside `run()`) is an ERROR
+record of `reisewarnungen.output` (`Could not write to stdout: …`), in the format argv asks
+for and redacted like the run's log (`processLogger`). Conformance test P23 checks all of this, and its body is shared across the
 *-cli repos.
 
 ## Testing
@@ -397,6 +398,8 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`client.test.ts`** — response unwrapping, the flattened `summaries()` view, the `get` entry lookup (not-found vs. entries under other keys) — mocked transport.
 - **`validate.test.ts`** — `assertValid`, the `ReiseValidationError` exit-code mapping and the `parity()` helper.
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, `-o -`, and exit codes (network/parse → 1, not-found → 4) — mocked client.
+- **`io.test.ts`** — `defaultIO.writeFile` and `handleOutputErrors` on fake streams: the
+  pipe cases, and a stdout write error as an ERROR record of `reisewarnungen.output`.
 - **`log.test.ts`** — the record helpers of `src/cli/log.ts` on their own
   (`escapeForRecord`, `formatLogRecord`); the CLI-level checks are P23's.
 - **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.

@@ -5,7 +5,7 @@
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
 import { logOf, type CliDeps } from "./io.js";
-import { DEFAULT_LOG_FORMAT, createLogger, logFormatFromArgv, type LogFormat } from "./log.js";
+import { DEFAULT_LOG_FORMAT, createLogger, logFormatFromArgv, type LogFormat, type Logger } from "./log.js";
 import {
   ReiseApiError,
   ReiseError,
@@ -183,6 +183,19 @@ function writeCommanderErr(command: Command, deps: CliDeps, state: { errorLogged
     log.error("cli", `missing command: \`${commandPath(command)} <subcommand>\``);
   }
   for (const line of text.split("\n")) if (line.trim() !== "") log.info("cli", line.trimEnd());
+}
+
+/**
+ * The log for what happens outside `run()`, in the bin shim: a stdout write error
+ * (`handleOutputErrors`). Its format is the one argv asks for (`logFormatFromArgv`), and
+ * it replaces the secrets of argv like the run's own log; it writes to the raw stderr.
+ */
+export function processLogger(argv: readonly string[]): Logger {
+  return createLogger({
+    format: logFormatFromArgv(argv),
+    write: (line) => process.stderr.write(line + "\n"),
+    redact: redactionFor(argv).err,
+  });
 }
 
 export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<number> {
