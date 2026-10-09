@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
 import { ReisewarnungenClient } from "../src/client/client.js";
-import { ReiseNetworkError, credentialsIn } from "../src/client/errors.js";
+import { ReiseError, ReiseNetworkError, credentialsIn } from "../src/client/errors.js";
 import type { CliDeps } from "../src/cli/io.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse, untimed } from "./helpers.js";
@@ -271,7 +271,7 @@ test("-o pointing at a directory says so (exit 1), not 'pass --force'", async ()
     cli.deps.io.writeFile = defaultIO.writeFile;
     const code = await run(["-o", dir, "list"], cli.deps);
     assert.equal(code, 1);
-    assert.equal(untimed(cli.err.join("\n")), `ERROR [reisewarnungen.cli] "${dir}" is a directory; give a file path to --output.`);
+    assert.equal(untimed(cli.err.join("\n")), `ERROR [reisewarnungen.output] "${dir}" is a directory; give a file path to --output.`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -285,7 +285,7 @@ test("a failed --output write surfaces a clean error (exit 1), not 'Unexpected e
   const code = await run(["-o", "out.json", "countries"], cli.deps);
   assert.equal(code, 1);
   const errText = cli.err.join("\n");
-  assert.match(untimed(errText), /^ERROR \[reisewarnungen\.cli\] Could not write to out\.json/);
+  assert.match(untimed(errText), /^ERROR \[reisewarnungen\.output\] Could not write to out\.json/);
   assert.doesNotMatch(errText, /Unexpected error/);
 });
 
@@ -442,5 +442,22 @@ test("a parse error is logged in the format commander would have parsed (L6)", a
     const cli = makeCli(() => jsonResponse(listBody));
     assert.equal(await run(argv, cli.deps), 1, argv.join(" "));
     assert.ok(cli.err.length > 0 && cli.err.every((line) => isJsonl(line) === jsonl), `${argv.join(" ")}:\n${cli.err.join("\n")}`);
+  }
+});
+
+test("every -o failure is an ERROR record of reisewarnungen.output, exit 1 (L8)", async () => {
+  const thrown: unknown[] = [
+    new ReiseError('"out" is a directory; give a file path to --output.'),
+    new Error("EACCES: permission denied, open 'out.json'"),
+    Object.assign(new Error("EEXIST: file already exists"), { code: "EEXIST" }),
+  ];
+  for (const error of thrown) {
+    const cli = makeCli(() => jsonResponse(listBody));
+    cli.deps.io.writeFile = () => {
+      throw error;
+    };
+    assert.equal(await run(["-o", "out.json", "countries"], cli.deps), 1);
+    assert.match(untimed(cli.err.join("\n")), /^ERROR \[reisewarnungen\.output\] /);
+    assert.doesNotMatch(cli.err.join("\n"), /Unexpected error/);
   }
 });

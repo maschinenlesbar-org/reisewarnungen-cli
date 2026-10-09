@@ -4,7 +4,7 @@
 
 import { CommanderError, type Command } from "commander";
 import { buildProgram, defaultDeps } from "./program.js";
-import { logOf, type CliDeps } from "./io.js";
+import { OutputError, logOf, type CliDeps } from "./io.js";
 import { DEFAULT_LOG_FORMAT, createLogger, logFormatFromArgv, type LogFormat, type Logger } from "./log.js";
 import {
   ReiseApiError,
@@ -270,8 +270,11 @@ export async function run(argv: string[], deps: CliDeps = defaultDeps): Promise<
     }
     if (err instanceof ReiseError) {
       // A connection failure is the transport's; an API error rewrapped for its exit code
-      // (a 404 on the list endpoint, exit 1) is still the API's answer.
-      log.error(err instanceof ReiseNetworkError ? "http" : err.cause instanceof ReiseApiError ? "api" : "cli", err.message);
+      // (a 404 on the list endpoint, exit 1) is still the API's answer; any -o failure is
+      // the output's.
+      const area =
+        err instanceof ReiseNetworkError ? "http" : err instanceof OutputError ? "output" : err.cause instanceof ReiseApiError ? "api" : "cli";
+      log.error(area, err.message);
       return 1;
     }
     log.error("cli", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);

@@ -7,6 +7,12 @@ import type { ReisewarnungenClient } from "../client/client.js";
 import type { EngineOptions } from "../client/engine.js";
 import { createLogger, type Logger } from "./log.js";
 
+/**
+ * Writing the output to the `-o` file failed (an existing file without `--force`, a
+ * directory, EACCES, …). Logged as an ERROR of `reisewarnungen.output`, exit 1.
+ */
+export class OutputError extends ReiseError {}
+
 export interface CliIO {
   out(text: string): void;
   err(text: string): void;
@@ -100,7 +106,7 @@ export const defaultIO: CliIO = {
       const code = (cause as NodeJS.ErrnoException | undefined)?.code;
       // `wx` answers EEXIST and `w` EISDIR for a directory; --force cannot help there.
       if ((code === "EEXIST" || code === "EISDIR") && isDirectory(path)) {
-        throw new ReiseError(`"${path}" is a directory; give a file path to --output.`, { cause });
+        throw new OutputError(`"${path}" is a directory; give a file path to --output.`, { cause });
       }
       throw cause;
     }

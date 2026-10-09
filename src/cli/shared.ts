@@ -3,7 +3,7 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import { logOf, type CliDeps } from "./io.js";
+import { OutputError, logOf, type CliDeps } from "./io.js";
 import { ReiseError } from "../client/errors.js";
 import { baseUrlProblem, headerValueProblem, intInRangeProblem } from "../client/validate.js";
 import { DEFAULT_BASE_URL, cleartextProblem, type EngineOptions } from "../client/engine.js";
@@ -160,8 +160,9 @@ export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown)
  * Write the result to `--output`, with a short confirmation on stderr so stdout
  * stays clean for piping. A filesystem failure (bad path, missing directory,
  * permission denied) is a foreseeable user error, so it is surfaced as a clean
- * ReiseError (an ERROR record "Could not write …", exit 1) rather than bubbling up as a
- * raw Node errno through run()'s "Unexpected error" fallback.
+ * OutputError (an ERROR record of `reisewarnungen.output`, "Could not write …", exit 1)
+ * rather than bubbling up as a raw Node errno through run()'s "Unexpected error"
+ * fallback; whatever the `CliIO` threw, every `-o` failure is an OutputError.
  *
  * The write is exclusive unless `force` is set: an existing file at `path` is
  * never silently overwritten (a mistyped `-o` path would otherwise destroy it).
@@ -171,16 +172,17 @@ function writeOutputFile(deps: CliDeps, path: string, data: Buffer, force: boole
   try {
     deps.io.writeFile(path, data, force);
   } catch (cause) {
-    if (cause instanceof ReiseError) throw cause; // already a clean message (e.g. a directory)
+    if (cause instanceof OutputError) throw cause; // already a clean message (e.g. a directory)
+    if (cause instanceof ReiseError) throw new OutputError(cause.message, { cause });
     const code = (cause as { code?: unknown } | null)?.code;
     if (code === "EEXIST") {
-      throw new ReiseError(
+      throw new OutputError(
         `Refusing to overwrite existing file ${path}; pass --force to overwrite.`,
         { cause },
       );
     }
     const reason = cause instanceof Error ? cause.message : String(cause);
-    throw new ReiseError(`Could not write to ${path}: ${reason}`, { cause });
+    throw new OutputError(`Could not write to ${path}: ${reason}`, { cause });
   }
   logOf(deps).info("output", `Wrote ${data.length} bytes to ${path}`);
 }
