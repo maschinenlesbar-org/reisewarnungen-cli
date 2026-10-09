@@ -402,3 +402,28 @@ test("an a:b@c argument (an -o path, a User-Agent) is neither a credential in th
   assert.equal(await run(["--base-url", "alice:hunter2-pw@mirror.example", "countries"], bare.deps), 1);
   assert.ok(!bare.err.join("\n").includes("hunter2-pw"), bare.err.join("\n"));
 });
+
+test("the help after a usage error is one INFO record per line; a suggestion is part of the ERROR (L5)", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["list", "--no-such-option"], cli.deps), 1);
+  const records = cli.err.map(untimed);
+  assert.equal(records[0], "ERROR [reisewarnungen.cli] unknown option '--no-such-option'");
+  assert.ok(records.length > 3, records.join("\n"));
+  for (const record of records.slice(1)) {
+    assert.match(record, /^INFO  \[reisewarnungen\.cli\] .*\S$/);
+    assert.doesNotMatch(record, /\\n/, "one line of the help per record");
+  }
+  const typo = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["listx"], typo.deps), 1);
+  assert.equal(untimed(typo.err[0] ?? ""), "ERROR [reisewarnungen.cli] unknown command 'listx' (Did you mean list?)");
+});
+
+test("help for an unknown command is a failed run with an ERROR first, then the help one INFO record per line (L5)", async () => {
+  const cli = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["help", "nope"], cli.deps), 1);
+  const records = cli.err.map(untimed);
+  assert.equal(records[0], "ERROR [reisewarnungen.cli] missing command: `reisewarnungen <subcommand>`");
+  assert.ok(records.length > 3, records.join("\n"));
+  for (const record of records.slice(1)) assert.match(record, /^INFO  \[reisewarnungen\.cli\] .*\S$/);
+  assert.ok(records.some((record) => /\] Usage: reisewarnungen /.test(record)), records.join("\n"));
+});
