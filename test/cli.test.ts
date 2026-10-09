@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { run } from "../src/cli/run.js";
 import { ReisewarnungenClient } from "../src/client/client.js";
-import { ReiseNetworkError } from "../src/client/errors.js";
+import { ReiseNetworkError, credentialsIn } from "../src/client/errors.js";
 import type { CliDeps } from "../src/cli/io.js";
 import type { HttpRequest, HttpResponse } from "../src/client/http.js";
 import { makeMockTransport, jsonResponse, untimed } from "./helpers.js";
@@ -384,4 +384,21 @@ test("-o - writes to stdout and creates no file named '-' (P12)", async () => {
   assert.equal(cli.files.size, 0);
   assert.equal((JSON.parse(cli.out.join("\n")) as unknown[]).length, 2);
   assert.deepEqual(cli.err, []);
+});
+
+test("an a:b@c argument (an -o path, a User-Agent) is neither a credential in the log nor rewritten in the JSON on stdout (L14)", async () => {
+  const body = { response: { lastModified: 1, "100": { ...F, countryName: "run:2026-10-09@x.json" } } };
+  const o = makeCli(() => jsonResponse(body));
+  assert.equal(await run(["-o", "run:2026-10-09@x.json", "countries"], o.deps), 0);
+  assert.ok(o.files.has("run:2026-10-09@x.json"));
+  assert.ok(o.err.some((line) => /Wrote \d+ bytes to run:2026-10-09@x\.json$/.test(line)), o.err.join("\n"));
+  const ua = makeCli(() => jsonResponse(body));
+  assert.equal(await run(["--user-agent", "run:2026-10-09@x.json", "countries"], ua.deps), 0);
+  assert.match(ua.out.join("\n"), /"countryName": "run:2026-10-09@x\.json"/);
+  assert.deepEqual(credentialsIn("run:2026-10-09@x.json"), []);
+  assert.deepEqual(credentialsIn("https://alice:pw@host"), ["alice:pw"]);
+  // A base URL typed without its scheme is still read as one: its password is never echoed.
+  const bare = makeCli(() => jsonResponse(body));
+  assert.equal(await run(["--base-url", "alice:hunter2-pw@mirror.example", "countries"], bare.deps), 1);
+  assert.ok(!bare.err.join("\n").includes("hunter2-pw"), bare.err.join("\n"));
 });

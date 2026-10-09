@@ -151,13 +151,16 @@ no `--api-key` flag, no env var, and nothing to configure.
 `--base-url https://user:password@host` (sent as HTTP Basic auth). The CLI never prints
 that password: `run()` wraps its output (`withRedactedOutput`) so every line — commander's
 usage errors that echo a rejected value, its own messages, library errors naming the
-request URL — has the exact userinfo of every argument replaced by `***`, whatever
-characters the password holds (`#`, `?`, `/`, spaces, quotes). The log replaces it in
+request URL — has the exact userinfo of every URL argument replaced by `***`, whatever
+characters the password holds (`#`, `?`, `/`, spaces, quotes). Only a value that starts
+with a scheme counts (a bare `a:b@c` is an `-o` file name or a User-Agent as often as a
+credential), except as the `--base-url` value, where a `user:password@host` typed without
+its scheme is still a credential. The log replaces it in
 each record's *message* (`redactionFor`), before the record is cut and escaped, and writes
 the record to the raw stderr: the frame (time, level, topic) is never touched, and a
 password with DEL, C1 or bidi characters is matched in its raw form. The library exports the
-pieces: `redactUrl(url)`, `credentialsIn(value)` (the userinfo as written, also for a
-value that doesn't parse) and `redactCredentials(text, list)`.
+pieces: `redactUrl(url)`, `credentialsIn(value)` (the userinfo of a value with a scheme, as written, also for
+one that doesn't parse; `[]` for a bare `alice:pw@host`) and `redactCredentials(text, list)`.
 
 The library keeps the password out of what a caller logs, too: the engine holds the base
 URL in a real `#private` field (so `console.log(client)`, `util.inspect` and
