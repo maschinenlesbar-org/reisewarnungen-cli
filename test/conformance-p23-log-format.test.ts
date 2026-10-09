@@ -5,6 +5,15 @@
 // usage errors are records too; stdout carries data only; a secret is kept out of the log
 // in either format. Shared across the *-cli repos; only the adapter block below differs
 // per repo.
+//
+// The fix plan of the 2026-10-09 sweep (.reviews/2026-10-09-exploratory/fix-plan.md) added:
+// a hostile message is one line with nothing raw, well-formed and bounded (L1-L3); a secret
+// is replaced in the message only, before escaping (L4); commander's help is one record per
+// line and every failure has an ERROR (L5); the format is commander's (L6); a malformed
+// answer is `api` (L9); echoed credentials are replaced (L13); an `a:b@c` value that is no
+// URL is left alone (L14). Adapter switches added with them: VALUE_OPTION, OUTPUT_OPTION,
+// errorAnswer, MALFORMED_ANSWERS, secretArgv, HELP_AFTER_ERROR, BASE_URL_USERINFO, and the
+// import of MAX_RECORD_MESSAGE.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -23,6 +32,8 @@ const SIMPLE_COMMAND = ["list"];
 const okBody = { response: { lastModified: 1, "100": { countryName: "Atlantis", warning: true, partialWarning: false } } };
 /** The exit code of a usage error. */
 const USAGE_EXIT = 1; // commander's default: this CLI's usage errors exit 1
+/** Whether commander shows the command's whole help after a usage error (autobahn-cli: a one-line pointer). */
+const HELP_AFTER_ERROR = true;
 /** Whether --base-url accepts userinfo (destatis-genesis/regionalstatistik refuse it: nothing a server could echo). */
 const BASE_URL_USERINFO = true; // sent as HTTP Basic auth, for a mirror behind a login
 /** The option that writes the output to a file and logs where, or undefined if the CLI has none. */
@@ -253,9 +264,9 @@ test("P23: commander's help after an error is one record per line, its suggestio
     assert.equal(r.code, USAGE_EXIT);
     assertOneRecordEach(r.err, format, format);
     const msgs = r.err.map((line) => (format === "jsonl" ? ((JSON.parse(line) as Record<string, unknown>)["msg"] as string) : line.slice(line.indexOf("] ") + 2)));
-    assert.ok(msgs.length > 2, `${format}: the help is several records:\n${r.err.join("\n")}`);
+    assert.ok(msgs.length > (HELP_AFTER_ERROR ? 2 : 1), `${format}: the help is several records:\n${r.err.join("\n")}`);
     assert.ok(msgs.every((msg) => !msg.includes("\\n") && !msg.includes("\n") && msg.trim() !== ""), `${format}:\n${r.err.join("\n")}`);
-    assert.ok(msgs.some((msg) => /^Usage: /.test(msg)), `${format}:\n${r.err.join("\n")}`);
+    assert.ok(!HELP_AFTER_ERROR || msgs.some((msg) => /^Usage: /.test(msg)), `${format}:\n${r.err.join("\n")}`);
 
     const typo = await cli(["--log-format", format, `${SIMPLE_COMMAND[0]}x`]);
     assert.equal(typo.code, USAGE_EXIT);
@@ -268,7 +279,8 @@ test("P23: every failed run has an ERROR record, a missing command included", as
   for (const argv of [[], [SIMPLE_COMMAND[0] as string]]) {
     const r = await cli(argv);
     if (r.code === 0) continue; // a command that runs on its own
-    assert.match(r.err[0] ?? "", new RegExp(`^${TS} ERROR \\[${PROGRAM}\\.cli\\] missing command: \``), `${JSON.stringify(argv)}:\n${r.err.join("\n")}`);
+    // A group without its subcommand: "missing command"; a command without its arguments or a required option: commander's own error.
+    assert.match(r.err[0] ?? "", new RegExp(`^${TS} ERROR \\[${PROGRAM}\\.cli\\] (missing (command: \`|required argument )|required option )`), `${JSON.stringify(argv)}:\n${r.err.join("\n")}`);
     assertOneRecordEach(r.err, "text", JSON.stringify(argv));
   }
 });
