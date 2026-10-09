@@ -152,7 +152,10 @@ no `--api-key` flag, no env var, and nothing to configure.
 that password: `run()` wraps its output (`withRedactedOutput`) so every line — commander's
 usage errors that echo a rejected value, its own messages, library errors naming the
 request URL — has the exact userinfo of every argument replaced by `***`, whatever
-characters the password holds (`#`, `?`, `/`, spaces, quotes). The library exports the
+characters the password holds (`#`, `?`, `/`, spaces, quotes). The log replaces it in
+each record's *message* (`redactionFor`), before the record is cut and escaped, and writes
+the record to the raw stderr: the frame (time, level, topic) is never touched, and a
+password with DEL, C1 or bidi characters is matched in its raw form. The library exports the
 pieces: `redactUrl(url)`, `credentialsIn(value)` (the userinfo as written, also for a
 value that doesn't parse) and `redactCredentials(text, list)`.
 
@@ -359,8 +362,10 @@ library's validation and parse errors), `api` (the API's answers: an HTTP error 
 country the response doesn't hold, a `404` on the list endpoint), `http` (the connection,
 the cleartext warning) and `output` (`-o`). Code logs through `logOf(deps)` and never
 writes diagnostics with `io.err` directly. `run()` builds the logger from argv before
-commander parses it, so commander's own usage errors are records too, and on top of the
-redacted `io.err`, so a secret is kept out of the log in either format. `CliDeps.now`
+commander parses it, so commander's own usage errors are records too, and with the run's
+redaction (`withRedactedOutput`), which replaces a secret in the message only, before it
+is escaped: the frame is never touched, and a secret is kept out of the log in either
+format. `CliDeps.now`
 makes the timestamps testable. stdout carries data only. Only the bin shim's
 `Output error: …` (a failed write to stdout, `handleOutputErrors`, outside `run()`) stays a
 plain line. Conformance test P23 checks all of this, and its body is shared across the
