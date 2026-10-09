@@ -187,7 +187,9 @@ export class ReiseNotFoundError extends ReiseError {
   readonly contentId: string;
 
   constructor(contentId: string) {
-    super(`No travel warning found for content id "${contentId}"`);
+    // The message quotes at most 500 characters of the id (a 6000-digit id made a 6 KB
+    // message); `contentId` keeps it whole.
+    super(`No travel warning found for content id "${cutForMessage(contentId, 500)}"`);
     this.contentId = contentId;
   }
 }

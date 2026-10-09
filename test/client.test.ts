@@ -316,3 +316,29 @@ test("server text cut at 200 characters in the client's own messages never leave
     });
   }
 });
+
+test("a long content id is quoted at most 500 characters long in every message (B4)", async () => {
+  const id = "1".repeat(6000);
+  const cases: Array<[string, unknown, (c: ReisewarnungenClient) => Promise<unknown>, new (...a: never[]) => Error]> = [
+    ["not found", { response: { lastModified: 1 } }, (c) => c.get(id), ReiseNotFoundError],
+    ["entries under other keys", { response: { "999": { ...F, countryName: "Other" } } }, (c) => c.get(id), ReiseParseError],
+    ["malformed flag", { response: { [id]: { countryName: "A", warning: "yes", partialWarning: false } } }, (c) => c.get(id), ReiseParseError],
+    ["no content", { response: { [id]: { ...F, countryName: "A" } } }, (c) => c.advice(id), ReiseParseError],
+    ["error envelope", { response: { error: "down" } }, (c) => c.get(id), ReiseParseError],
+    ["not the envelope", [], (c) => c.get(id), ReiseParseError],
+    ["not JSON", "<html>", (c) => c.get(id), ReiseParseError],
+    ["list key", { response: { [id]: { countryName: "A", warning: "yes", partialWarning: false } } }, (c) => c.list(), ReiseParseError],
+  ];
+  for (const [name, body, call, type] of cases) {
+    const mt = makeMockTransport(() => (typeof body === "string" ? { status: 200, headers: { "content-type": "application/json" }, body: Buffer.from(body) } : jsonResponse(body)));
+    await assert.rejects(call(clientWith(mt)), (err: unknown) => {
+      assert.ok(err instanceof type, `${name}: ${String(err)}`);
+      assert.ok((err as Error).message.length < 1300, `${name}: ${(err as Error).message.length} characters`);
+      assert.match((err as Error).message, /1…/, name);
+      return true;
+    });
+  }
+  // The error keeps the whole id for a caller.
+  const mt = makeMockTransport(() => jsonResponse({ response: { lastModified: 1 } }));
+  await assert.rejects(clientWith(mt).get(id), (err: unknown) => err instanceof ReiseNotFoundError && err.contentId === id);
+});

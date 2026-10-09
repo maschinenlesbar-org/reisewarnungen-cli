@@ -7,13 +7,25 @@
 //   client.get("226768")     // one country's full warning (HTML content)
 
 import { RequestEngine, serverTextForMessage, type EngineOptions } from "./engine.js";
-import { ReiseNotFoundError, ReiseParseError, ReiseValidationError } from "./errors.js";
+import { ReiseNotFoundError, ReiseParseError, ReiseValidationError, cutForMessage } from "./errors.js";
 import { assertKnownKeys, assertValid, booleanProblem } from "./validate.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
 import { adviceSentences, type AdviceSentence } from "./advice.js";
 
 const PATH = "/opendata/travelwarning";
 const enc = encodeURIComponent;
+
+/**
+ * The most characters of a content id a message quotes, like the request URL in a
+ * ReiseApiError: a 6000-digit id used to make a 6 KB not-found message and a 12 KB shape
+ * error (the path and the id, each whole). The errors keep the id whole where they carry it.
+ */
+const MAX_ID_IN_MESSAGE = 500;
+
+/** A content id (or a path that ends in one) as a message quotes it: at most 500 characters. */
+function idForMessage(id: string): string {
+  return cutForMessage(id, MAX_ID_IN_MESSAGE);
+}
 
 /**
  * Check a content id before it becomes a path segment. Content ids are numeric (the
@@ -31,7 +43,8 @@ export function assertContentId(contentId: string): void {
     );
   }
   if (!/^\d+$/.test(contentId)) {
-    const shown = JSON.stringify(contentId.length > 500 ? contentId.slice(0, 500) : contentId) + (contentId.length > 500 ? "…" : "");
+    const cut = idForMessage(contentId);
+    const shown = cut === contentId ? JSON.stringify(contentId) : `${JSON.stringify(cut.slice(0, -1))}…`;
     throw new ReiseValidationError(`Invalid contentId ${shown}. Expected a numeric content id (e.g. 226768).`);
   }
 }
@@ -137,7 +150,7 @@ function flagError(entry: JsonObject, contentId: string, flag: string, path: str
   const value = entry[flag];
   const got = value === undefined ? "it is missing" : `got ${serverTextForMessage(JSON.stringify(value))}`;
   return new ReiseParseError(
-    `Unexpected response shape from ${path}: the "${flag}" flag of content id "${contentId}"${name} ` +
+    `Unexpected response shape from ${path}: the "${flag}" flag of content id "${idForMessage(contentId)}"${name} ` +
       `must be true or false, ${got}; the warning level can't be read safely.`,
   );
 }
@@ -264,7 +277,7 @@ export class ReisewarnungenClient {
     const entry = await this.get(contentId);
     if (typeof entry.content !== "string" || entry.content.trim() === "") {
       throw new ReiseParseError(
-        `The advisory for content id "${contentId}" has no content, so its advice can't be read.`,
+        `The advisory for content id "${idForMessage(contentId)}" has no content, so its advice can't be read.`,
       );
     }
     const pick = <K extends keyof TravelWarning>(key: K): Partial<Pick<TravelWarning, K>> =>
@@ -287,26 +300,28 @@ export class ReisewarnungenClient {
   async get(contentId: string): Promise<TravelWarning> {
     assertContentId(contentId);
     const path = `${PATH}/${enc(contentId)}`;
-    const response = unwrap(await this.engine.getJson<unknown>(path), path);
+    // Where the messages say the answer came from: the path, its id cut (idForMessage).
+    const where = `${PATH}/${idForMessage(enc(contentId))}`;
+    const response = unwrap(await this.engine.getJson<unknown>(path), where);
     // An error envelope sent with a 2xx status is a failure, not "this country doesn't exist".
     if (response["error"] !== undefined) {
       const error = response["error"];
       throw new ReiseParseError(
-        `The API answered ${path} with an error envelope instead of a travel warning: ` +
+        `The API answered ${where} with an error envelope instead of a travel warning: ` +
           serverTextForMessage(typeof error === "string" ? error : JSON.stringify(error)),
       );
     }
 
     const direct = Object.hasOwn(response, contentId) ? response[contentId] : undefined;
     if (isObject(direct)) {
-      checkFlags(direct, contentId, path);
+      checkFlags(direct, contentId, where);
       return direct as TravelWarning;
     }
 
     if (Object.values(response).some(isObject)) {
       throw shapeError(
-        path,
-        `the entry for content id "${contentId}", got country entries under other keys only`,
+        where,
+        `the entry for content id "${idForMessage(contentId)}", got country entries under other keys only`,
       );
     }
     throw new ReiseNotFoundError(contentId);

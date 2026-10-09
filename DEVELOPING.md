@@ -284,7 +284,10 @@ well-formed; a redirect target, a Content-Type or a charset the message names at
 that quote the server (the text of an error envelope sent with a 2xx status, a country
 name and a malformed flag value, the ids a `contentList` names without an entry) go
 through the exported `serverTextForMessage`: one line, no control (C0, DEL, C1) or bidi
-characters, at most 200 characters (cut the same way). The CLI maps a `404` (real or synthetic) on `get` to exit
+characters, at most 200 characters (cut the same way). A content id (or the path that
+ends in one) is quoted at most 500 characters long in every message — not found, shape
+and parse errors, `assertContentId`'s — while `ReiseNotFoundError.contentId` keeps it
+whole. The CLI maps a `404` (real or synthetic) on `get` to exit
 code `4`, other errors to `1` — including a `404` on `list`/`countries`, where it
 means the endpoint itself is missing, not a country, and a `ReiseValidationError`,
 which gets the same exit code commander gives a usage error.
