@@ -18,8 +18,9 @@ import {
   ReiseNetworkError,
   ReiseParseError,
   ReiseValidationError,
+  MAX_QUOTED_LENGTH,
   credentialsIn,
-  cutText,
+  cutForMessage,
   redactCredentials,
   redactUrl,
 } from "./errors.js";
@@ -275,16 +276,15 @@ function isBidiControl(n: number): boolean {
  * `contentList` names without an entry — made safe and short: whitespace (line breaks,
  * U+2028/U+2029 included) folded to one space, so it stays on one line; control
  * characters (`sanitizeServerText`: C0, DEL, C1) and the bidi controls dropped, so no
- * escape sequence reaches a terminal; trimmed and cut at `max` characters (200), ending
- * in "…" when cut, never inside a surrogate pair (`cutText`).
+ * escape sequence reaches a terminal; trimmed and cut at `max` characters (`MAX_QUOTED_LENGTH`, 200), ending
+ * in "…" when cut, never inside a surrogate pair (`cutForMessage`).
  */
-export function serverTextForMessage(text: string, max = 200): string {
+export function serverTextForMessage(text: string, max = MAX_QUOTED_LENGTH): string {
   let clean = "";
   for (const ch of sanitizeServerText(text.replace(/\s+/g, " "))) {
     if (!isBidiControl(ch.codePointAt(0) ?? 0)) clean += ch;
   }
-  clean = clean.trim();
-  return clean.length > max ? `${cutText(clean, max)}…` : clean;
+  return cutForMessage(clean.trim(), max);
 }
 
 /** Longest server text (in characters) an error message keeps; `ReiseApiError.body` keeps all. */
@@ -292,7 +292,7 @@ const MAX_DETAIL_LENGTH = 500;
 
 /** `text` cut at MAX_DETAIL_LENGTH characters (never inside a surrogate pair), ending in "…" when cut. */
 function cutServerText(text: string): string {
-  return text.length > MAX_DETAIL_LENGTH ? `${cutText(text, MAX_DETAIL_LENGTH)}…` : text;
+  return cutForMessage(text, MAX_DETAIL_LENGTH);
 }
 
 /**

@@ -279,7 +279,8 @@ option, option key or type, content id, or `isWarned` argument — never a raw
 `TypeError`), all extending `ReiseError`. Server text in a message (an error
 `detail`, a redirect target, a transport's error text) and the URL it names are cut
 at 500 characters, never inside a surrogate pair (`cutText`), so the message stays
-well-formed; `ReiseApiError.body` keeps the full body. The client's own messages
+well-formed; a redirect target the message names at `MAX_QUOTED_LENGTH` (200,
+`cutForMessage`, both exported); `ReiseApiError.body` keeps the full body. The client's own messages
 that quote the server (the text of an error envelope sent with a 2xx status, a country
 name and a malformed flag value, the ids a `contentList` names without an entry) go
 through the exported `serverTextForMessage`: one line, no control (C0, DEL, C1) or bidi
@@ -348,8 +349,9 @@ the message (text) or the whole JSON object (jsonl), which writes CR and LF as `
 every other C0 control but TAB, DEL and C1 as `\u00XX`, and U+2028, U+2029 and the bidi
 controls as `\uXXXX`, so no text that reaches a record, by whatever path, can split it,
 forge another one or steer the terminal. Before that a lone surrogate (half a
-character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`).
-The areas are `cli` (usage errors, commander's messages, unexpected errors, the
+character, which jq rejects, stopping the whole stream) becomes U+FFFD (`toWellFormed`),
+and a message longer than `MAX_RECORD_MESSAGE` (4000 characters, exported) is cut at a
+code point and ends in `… (N more characters)`. The areas are `cli` (usage errors, commander's messages, unexpected errors, the
 library's validation and parse errors), `api` (the API's answers: an HTTP error status, a
 country the response doesn't hold, a `404` on the list endpoint), `http` (the connection,
 the cleartext warning) and `output` (`-o`). Code logs through `logOf(deps)` and never

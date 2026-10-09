@@ -477,3 +477,9 @@ test("a server detail cut at 500 characters keeps the message well-formed", asyn
     return true;
   });
 });
+
+test("own messages quote a server value at most 200 characters long (L3)", async () => {
+  const long = "x".repeat(5000);
+  const redirect = new RequestEngine({ maxRedirects: 0, transport: async () => ({ status: 302, headers: { location: `https://other.example/${long}` }, body: Buffer.alloc(0) }) });
+  await assert.rejects(redirect.getJson("/opendata/travelwarning"), (err: Error) => err.message.length < 400 && /redirect to https:\/\/other\.example\/x+… not followed/.test(err.message));
+});

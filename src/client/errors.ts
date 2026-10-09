@@ -78,6 +78,19 @@ export function cutText(text: string, max: number): string {
   return text.slice(0, end);
 }
 
+/**
+ * The longest value (in characters) an own message quotes from a server answer or from
+ * the user's input: a header, a key, a redirect target. A longer one is cut (`cutText`)
+ * and ends in "…", so a library caller's `err.message` stays bounded too.
+ */
+export const MAX_QUOTED_LENGTH = 200;
+
+/** `text` cut to `max` characters (default `MAX_QUOTED_LENGTH`), a cut marked with "…". */
+export function cutForMessage(text: string, max = MAX_QUOTED_LENGTH): string {
+  const cut = cutText(text, max);
+  return cut.length < text.length ? `${cut}…` : text;
+}
+
 function isHighSurrogate(c: number): boolean {
   return c >= 0xd800 && c <= 0xdbff;
 }
@@ -136,7 +149,7 @@ export class ReiseApiError extends ReiseError {
           : "";
       parts.push(
         args.location
-          ? `redirect to ${args.location} not followed${limit}`
+          ? `redirect to ${cutForMessage(args.location)} not followed${limit}`
           : "redirect not followed (no Location header)",
       );
     }
@@ -145,7 +158,7 @@ export class ReiseApiError extends ReiseError {
     // into a message, a log line or JSON.stringify(err).
     const url = redactUrl(args.url);
     // A 5000-digit content id makes a 5 KB URL: the message shows at most 500 characters.
-    const shown = url.length > 500 ? `${url.slice(0, 500)}…` : url;
+    const shown = cutForMessage(url, 500);
     super(`HTTP ${args.status} for ${args.method} ${shown}${detailPart}`);
     this.status = args.status;
     this.url = url;
