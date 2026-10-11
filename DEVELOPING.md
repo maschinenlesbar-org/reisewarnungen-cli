@@ -22,14 +22,14 @@ The package ships both a CLI (`reisewarnungen`) and a typed API client
 
 ```bash
 npm install
-npm run build        # compiles TypeScript to dist/
+npm run build        # compiles every workspace (tsc -b) to its dist/
 ```
 
 Run the locally built CLI without a global install:
 
 ```bash
-node dist/src/cli/index.js --help
-# or, after `npm link`:
+node apps/cli/dist/src/cli/index.js --help    # or: npm start -- --help
+# or, after `npm link --workspace apps/cli`:
 reisewarnungen --help
 ```
 
@@ -113,7 +113,7 @@ advice-against-travel sentences; the CLI's `advice`).
 
 `advice(contentId)` fetches the advisory with `get` (same errors) and returns its flags,
 `effective`/`lastModified` and `sentences` from the exported `adviceSentences(html)`
-([`advice.ts`](src/client/advice.ts)): every sentence that matches one of
+([`advice.ts`](packages/client/src/advice.ts)): every sentence that matches one of
 `ADVICE_PATTERNS` (abraten, warnen, Reisewarnung, (ver)meiden/gemieden/vermieden,
 verzichten, unterlassen/unterbleiben, aufgefordert, nicht … reisen/aufsuchen/besuchen;
 case-insensitive, Unicode word boundaries), with its heading path (`section`) and
@@ -210,9 +210,46 @@ the limit stopped it, or `redirect not followed (no Location header)`.
 
 ## Architecture
 
+The repository is an **npm workspace** with two folders: `apps/` holds the programs it
+publishes, `packages/` the libraries they are built from.
+
 ```
-src/
-  client/
+package.json         # private workspace manifest: no version, never packed
+apps/cli/            # @maschinenlesbar.org/reisewarnungen-cli — the published package
+  package.json       # its version, bin, files, bundleDependencies
+  src/index.ts       # library entry: re-exports @maschinenlesbar.org/reisewarnungen-client
+  src/cli/           # the CLI (below)
+  test/              # CLI tests and every conformance-*.test.ts
+packages/client/     # @maschinenlesbar.org/reisewarnungen-client — private, bundled into the CLI
+  src/               # the API client (below)
+  test/              # tests that only touch the client, + the transport helpers
+tools/pack/          # prepack/postpack: bundle the client and commander into the tarball
+tools/bump.mjs       # version bump + commit + tag (npm run bump)
+tsconfig.docs.json   # TypeDoc only: the package entry, with the client read from its sources
+```
+
+- **The client is its own package** so a later MCP app can share it with the CLI. It is
+  never published on its own: `apps/cli`'s `prepack` copies it (and commander) into the
+  app's `node_modules`, and `bundleDependencies` ships it inside the tarball. The library
+  entry re-exports the client's `"."`, so `import { ReisewarnungenClient } from
+  "@maschinenlesbar.org/reisewarnungen-cli"` is unchanged.
+- **The client's exports:** `"."` is the public library surface (`src/index.ts`);
+  `"./internal/*"` maps to any module (`…/reisewarnungen-client/internal/engine`) for what
+  the CLI needs beyond that; `"./test/*"` reaches the client's test helpers from the CLI's
+  tests (not bundled). Only `"."` is part of the library.
+- **Dependencies point one way:** the app depends on the client, the client on nothing
+  in the workspace.
+- **The version lives in `apps/cli/package.json`.** The root has none; a plain
+  `npm version` at the root is refused. Release with `npm run bump -- <patch|minor|major>`,
+  which bumps the app, commits (the bare version as the message) and tags `vX.Y.Z`.
+- **TypeScript:** `tsconfig.base.json` holds the compiler options; every workspace has a
+  `tsconfig.json` (`src/`) and a `tsconfig.test.json` (`test/`), and the root
+  `tsconfig.json`/`tsconfig.test.json` reference them, built with `tsc -b`.
+
+The client (`packages/client/src/`) and the CLI (`apps/cli/src/`):
+
+```
+packages/client/src/
     types.ts     # TravelWarning / CountryEntry + the response envelope
     query.ts     # dependency-free query-string builder
     http.ts      # the Transport interface + default node:http/https transport
@@ -221,7 +258,8 @@ src/
     validate.ts  # input rules (Problem functions) + assertValid / assertKnownKeys, shared with the CLI
     advice.ts    # adviceSentences: the advice-against-travel sentences of an advisory's HTML
     client.ts    # ReisewarnungenClient — list / summaries / get / advice over the engine
-  cli/
+    index.ts     # the client's public surface (the library entry re-exports it)
+apps/cli/src/cli/
     io.ts        # injectable I/O seam (stdout/stderr/file), the logger and the clock
     log.ts       # the stderr log: records with ts, level, topic; --log-format text|jsonl
     shared.ts    # option parsers, global-option resolver, JSON renderer
@@ -242,12 +280,12 @@ src/
 
 ### Library / technical terms
 
-**API client.** [`ReisewarnungenClient`](src/client/client.ts) — the typed
+**API client.** [`ReisewarnungenClient`](packages/client/src/client.ts) — the typed
 wrapper over the API (`list` / `summaries` / `get`). Usable as a library
 independently of the CLI.
 
 **Transport.** A single function `(HttpRequest) => Promise<HttpResponse>`
-([`http.ts`](src/client/http.ts)). The default uses Node's built-in
+([`http.ts`](packages/client/src/http.ts)). The default uses Node's built-in
 `http`/`https`; tests inject a mock. This is the only HTTP seam.
 
 **Custom transports.** The engine enforces the documented limits for every transport,
@@ -264,7 +302,7 @@ and a response without a valid status, headers or body, becomes a `ReiseNetworkE
 `ECONNRESET`/`EPIPE`/`ECONNABORTED` or undici's `UND_ERR_SOCKET` anywhere in the `cause`
 chain is retried like a `503` (GET only; `isTransientNetworkError` tells them apart).
 
-**Request engine.** [`RequestEngine`](src/client/engine.ts) — builds URLs,
+**Request engine.** [`RequestEngine`](packages/client/src/engine.ts) — builds URLs,
 serialises queries, applies retry/backoff, follows redirects, decodes JSON
 responses and maps errors. Sits between the client and the transport.
 
@@ -275,11 +313,11 @@ is a `ReiseParseError`, and so is a body that isn't JSON (naming a non-JSON
 Content-Type such as `text/html`, the usual maintenance page).
 
 **CliDeps / CliIO.** The dependency-injection seam for the CLI
-([`io.ts`](src/cli/io.ts)): a client factory plus an I/O object
+([`io.ts`](apps/cli/src/cli/io.ts)): a client factory plus an I/O object
 (`out`/`err`/`writeFile`). Lets the whole CLI run in tests with a
 mocked client and captured output — no subprocess.
 
-**Error types.** [`errors.ts`](src/client/errors.ts): `ReiseApiError` (non-2xx,
+**Error types.** [`errors.ts`](packages/client/src/errors.ts): `ReiseApiError` (non-2xx,
 carries `status`/`detail`), `ReiseNotFoundError` (a 2xx response with no matching
 entry; synthetic `status` 404), `ReiseNetworkError` (transport
 failure/timeout, a redirect to a refused target, or a request Node refuses —
@@ -304,14 +342,14 @@ means the endpoint itself is missing, not a country, and a `ReiseValidationError
 which gets the same exit code commander gives a usage error.
 
 **Input validation.** Every rule about what a request may contain lives in the
-library, in [`validate.ts`](src/client/validate.ts) or next to the option it
+library, in [`validate.ts`](packages/client/src/validate.ts) or next to the option it
 guards, as an exported `…Problem(value)` function that returns the reason a value
 is invalid (or `undefined`). The library enforces it with `assertValid(name,
 value, problem)`, which throws `ReiseValidationError` with the message
 `Invalid <name>: <reason>` before any request (methods that return a promise
 reject; constructors throw). The CLI's option parsers call the same functions and
 turn the reason into a usage error, so the CLI keeps no rules of its own. Tests
-check this with the `parity()` helper in `test/helpers.ts`, which sends one input
+check this with the `parity()` helper in `apps/cli/test/helpers.ts`, which sends one input
 through `run()` and through the library on one recording mock transport.
 
 **Retry / backoff.** Transient `429` (rate limited) and `503` responses are
@@ -329,7 +367,7 @@ Each retry is announced: the engine option `onRetry(event: RetryEvent)` (exporte
 redacted) `}`) is called once per retry right before the sleep, never when there is none, and
 a throw in it is swallowed. The CLI's `action()` sets it to log one `WARN` record of
 `reisewarnungen.http`, `HTTP 503 from <host>: retry 1 of 3 in 2 s` (`retryMessage`; host only,
-whole seconds, ms under 1 s). Tests: `test/engine.test.ts`, `test/retry-log.test.ts`.
+whole seconds, ms under 1 s). Tests: `packages/client/test/engine.test.ts`, `apps/cli/test/retry-log.test.ts`.
 
 **maxResponseBytes.** A hard cap on the response body size (default 100 MiB;
 `0` disables it) that aborts the request if exceeded, defending against memory
@@ -354,13 +392,13 @@ exit `1`), never read as the requested country — a travel-safety tool must not
 answer with a different country. (Earlier versions accepted a *sole* entry under
 any key.)
 
-**Query builder.** [`buildQueryString`](src/client/query.ts) — a dependency-free
+**Query builder.** [`buildQueryString`](packages/client/src/query.ts) — a dependency-free
 serialiser: omits `undefined`/`null`, repeats keys for arrays, renders booleans
 as `true`/`false`, dates as ISO-8601, and encodes spaces as `%20` (not `+`).
 
 ## The log on stderr
 
-Every diagnostic line on stderr is a log record (`src/cli/log.ts`): a timestamp, a level
+Every diagnostic line on stderr is a log record (`apps/cli/src/cli/log.ts`): a timestamp, a level
 (`ERROR`, `WARN`, `INFO`) and a topic, `reisewarnungen.<area>`. `--log-format text` (the
 default) writes it log4j style, `<ISO 8601 UTC> <LEVEL padded to 5> [<topic>] <message>`;
 `--log-format jsonl` writes one JSON object per line with exactly `ts`, `level`, `topic`
@@ -404,8 +442,13 @@ for and redacted like the run's log (`processLogger`). So are Node's own process
 ## Testing
 
 ```bash
-npm test          # builds, then runs `node --test` over dist/test
+npm test          # builds, then runs `node --test` over each workspace's dist/test
+npm run coverage  # the same tests in one run, with a coverage report
+node --test apps/cli/dist/test/cli.test.js   # one file, after a build
 ```
+
+The client's tests are in `packages/client/test/` (`query`, `http`, `engine`, `client`),
+everything that drives the CLI is in `apps/cli/test/`.
 
 - **`query.test.ts`** — query-string serialisation.
 - **`http.test.ts`** — the default transport against a real loopback `http.createServer`.
@@ -416,7 +459,7 @@ npm test          # builds, then runs `node --test` over dist/test
 - **`io.test.ts`** — `defaultIO.writeFile`, and `handleOutputErrors` and
   `stderrAfterStdout` on fake streams: the pipe cases, a stdout write error as an ERROR
   record of `reisewarnungen.output`, and a record held behind stdout's backlog.
-- **`log.test.ts`** — the record helpers of `src/cli/log.ts` on their own
+- **`log.test.ts`** — the record helpers of `apps/cli/src/cli/log.ts` on their own
   (`escapeForRecord`, `formatLogRecord`, `installWarningLog`); the CLI-level checks are P23's.
 - **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.
 - **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL, P23 the log on stderr — its body takes the usage-error exit code from the adapter's `USAGE_EXIT`, `1` here). Only their `adapter` block is repo-specific.
@@ -425,9 +468,13 @@ npm test          # builds, then runs `node --test` over dist/test
 
 GitHub Actions workflows under `.github/workflows/`:
 
-- **ci.yml** — type-check, build and test on Node 22/24 for every push and PR.
-- **release.yml** — on a `v*` tag: verify the tag matches `package.json`, test, `npm pack`, and create a GitHub Release with the tarball.
-- **publish.yml** — manual dispatch from the release tag (`gh workflow run publish.yml --ref vX.Y.Z`; the version is the tag's): publish to npm via OIDC **Trusted Publishing** (no stored `NPM_TOKEN`) with provenance.
+- **ci.yml** — type-check, build and test on Node 22/24 for every push and PR; then pack the
+  real tarball, check the pack left nothing behind, install it globally with the registry out
+  of reach and run the bin.
+- **release.yml** — on a `v*` tag (made by `npm run bump`): verify the tag matches
+  `apps/cli/package.json`, test, write the SBOMs (scoped to the `apps/cli` workspace), then
+  `npm pack --workspace apps/cli`, and create a GitHub Release with the tarball.
+- **publish.yml** — manual dispatch from the release tag (`gh workflow run publish.yml --ref vX.Y.Z`; the version is the tag's): `npm publish --workspace apps/cli` via OIDC **Trusted Publishing** (no stored `NPM_TOKEN`) with provenance.
 - **docs.yml** — build the project website (`site/`, English and German) with the TypeDoc API docs
   under `/api/`, and deploy both to GitHub Pages on each `v*` tag.
   TypeDoc runs from the isolated, lockfile-pinned `tools/docs/` toolchain because it
@@ -444,7 +491,9 @@ TypeDoc API reference under `/api/`. Its content comes from this repository: the
 and quick start, the command tree of the built CLI (`site/scripts/cli-reference.mjs`),
 `Usage.md`, `GLOSSARY.md` and its German version `GLOSSARY.de.md`, the skills, and the skill
 examples in `EXAMPLE.md` and `EXAMPLE.de.md`. The only repo-specific files are
-`site/_config.yml` and `site/_data/project.yml` (the German intro and the access requirements);
+`site/_config.yml` (which also says where the published manifest and the built program are:
+`manifest: apps/cli/package.json`, `program: apps/cli/dist/src/cli/program.js`) and
+`site/_data/project.yml` (the German intro and the access requirements);
 the rest of `site/` is identical in every maschinenlesbar.org CLI, so change it in all of them
 together. When the README intro changes, update the German intro in `site/_data/project.yml`.
 

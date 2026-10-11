@@ -12,7 +12,7 @@ npm i -g @maschinenlesbar.org/reisewarnungen-cli
 ```
 
 This installs the `reisewarnungen` bin. Without a global install you can run the
-built CLI directly with `node dist/src/cli/index.js`.
+built CLI directly with `node apps/cli/dist/src/cli/index.js`.
 
 The four subcommands are: `list`, `countries`, `get`, and `advice`.
 
