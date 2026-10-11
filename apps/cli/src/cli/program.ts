@@ -1,0 +1,89 @@
+// Assemble the full commander program. The program is built around an injectable
+// CliDeps so the entire CLI can be driven in tests with a mocked client and
+// captured output.
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { Command, InvalidArgumentError } from "commander";
+import type { CliDeps } from "./io.js";
+import { defaultIO } from "./io.js";
+import { ReisewarnungenClient } from "@maschinenlesbar.org/reisewarnungen-client/internal/client";
+import { MAX_TIMEOUT_MS } from "@maschinenlesbar.org/reisewarnungen-client/internal/http";
+import { MAX_RETRIES, MAX_RETRY_AFTER_MS } from "@maschinenlesbar.org/reisewarnungen-client/internal/engine";
+import { parseBoundedInt, parseIntArg, parseOutputPath, parseBaseUrl, parseHeaderValue } from "./shared.js";
+import { registerWarningCommands } from "./commands/warnings.js";
+import { DEFAULT_LOG_FORMAT, logFormatProblem } from "./log.js";
+
+/**
+ * Single source of truth for the version: read from package.json at runtime
+ * rather than duplicating a literal that can silently drift after a release bump.
+ * From the compiled location (dist/src/cli/program.js) package.json is three
+ * directories up; the same offset holds for the source under src/cli.
+ */
+function readVersion(): string {
+  try {
+    const pkgUrl = new URL("../../../package.json", import.meta.url);
+    const pkg = JSON.parse(readFileSync(fileURLToPath(pkgUrl), "utf8")) as { version?: string };
+    return pkg.version ?? "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+export const VERSION = readVersion();
+
+/** Default dependencies: real client + real stdout/stderr/filesystem. */
+export const defaultDeps: CliDeps = {
+  io: defaultIO,
+  createClient: (options) => new ReisewarnungenClient(options),
+};
+
+/** commander value-parser for `--log-format`. */
+function parseLogFormat(value: string): string {
+  const problem = logFormatProblem(value);
+  if (problem !== undefined) throw new InvalidArgumentError(problem);
+  return value;
+}
+
+export function buildProgram(deps: CliDeps = defaultDeps): Command {
+  const program = new Command();
+
+  program
+    .name("reisewarnungen")
+    .description(
+      "CLI for the open Auswärtiges Amt travel-warning API " +
+        "(https://www.auswaertiges-amt.de/opendata/travelwarning)",
+    )
+    .version(VERSION)
+    .option("--base-url <url>", "API base URL", parseBaseUrl, "https://www.auswaertiges-amt.de")
+    .option(
+      "--timeout <ms>",
+      "time limit per request in milliseconds, whole response included (0 = no limit; default 30000)",
+      parseBoundedInt(0, MAX_TIMEOUT_MS),
+    )
+    .option("--user-agent <ua>", "User-Agent header value (non-blank, Latin-1, no control characters)", parseHeaderValue)
+    .option(
+      "--max-retries <n>",
+      `retries for transient 429/503 responses and resets (0..${MAX_RETRIES}; each waits a backoff, or the server's longer Retry-After up to ${MAX_RETRY_AFTER_MS / 1000} s; see README)`,
+      parseBoundedInt(0, MAX_RETRIES),
+    )
+    .option("--max-redirects <n>", "HTTP redirects to follow (0 = none; default 5)", parseIntArg)
+    .option(
+      "--max-response-bytes <n>",
+      "cap response body size in bytes (0 = unlimited; default 100 MiB)",
+      parseIntArg,
+    )
+    .option(
+      "--log-format <format>",
+      `how errors, warnings and notes are written to stderr: text (log4j style: time, level, [topic], message) or jsonl (one JSON object per line: ts, level, topic, msg); default ${DEFAULT_LOG_FORMAT}`,
+      parseLogFormat,
+    )
+    .option("--compact", "print JSON on a single line instead of pretty-printed")
+    .option("-o, --output <file>", "write output to this file instead of stdout (- = stdout)", parseOutputPath)
+    .option("--force", "overwrite the --output file if it already exists")
+    .showHelpAfterError();
+
+  registerWarningCommands(program, deps);
+
+  return program;
+}

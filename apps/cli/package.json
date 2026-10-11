@@ -1,0 +1,67 @@
+{
+  "name": "@maschinenlesbar.org/reisewarnungen-cli",
+  "version": "0.5.0",
+  "description": "TypeScript API client and CLI for the open Auswärtiges Amt travel-warning API (auswaertiges-amt.de)",
+  "type": "module",
+  "bin": {
+    "reisewarnungen": "dist/src/cli/index.js"
+  },
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist/src",
+    "!dist/src/**/*.map",
+    "LICENSING.md",
+    "DATA_LICENSE.md",
+    "CONTRIBUTING.md"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "prepack": "tsc -b ../../tsconfig.json && node ../../tools/pack/prepack.mjs",
+    "postpack": "node ../../tools/pack/postpack.mjs",
+    "test": "node --test $(node -p \"+process.versions.node.split('.')[0] >= 24 ? '--test-timeout=5000' : ''\") dist/test/*.test.js"
+  },
+  "keywords": [
+    "reisewarnungen",
+    "auswaertiges-amt",
+    "travel-warning",
+    "travel",
+    "germany",
+    "cli",
+    "api-client"
+  ],
+  "author": "Sebastian Schürmann <sebs@2xs.org>",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maschinenlesbar-org/reisewarnungen-cli.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/maschinenlesbar-org/reisewarnungen-cli/issues"
+  },
+  "homepage": "https://maschinenlesbar-org.github.io/reisewarnungen-cli/",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/sebs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@maschinenlesbar.org/reisewarnungen-client": "0.0.1",
+    "commander": "15.0.0"
+  },
+  "bundleDependencies": [
+    "@maschinenlesbar.org/reisewarnungen-client",
+    "commander"
+  ]
+}
