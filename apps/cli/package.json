@@ -16,6 +16,7 @@
   },
   "files": [
     "dist/src",
+    "dist/node_modules",
     "!dist/src/**/*.map",
     "LICENSING.md",
     "DATA_LICENSE.md",
@@ -57,11 +58,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@maschinenlesbar.org/reisewarnungen-client": "0.0.1",
     "commander": "15.0.0"
   },
   "bundleDependencies": [
-    "@maschinenlesbar.org/reisewarnungen-client",
     "commander"
   ]
 }
