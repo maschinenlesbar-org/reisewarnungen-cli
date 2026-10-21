@@ -37,25 +37,37 @@ export interface AdviceSentence {
  */
 export const ADVICE_PATTERNS: readonly RegExp[] = [
   /abgeraten|abzuraten/iu,
-  word("rät|raten", "[^]*", "ab"),
+  words("rät|raten", "ab"),
   /gewarnt/iu,
-  word("warnt|warnen"),
+  words("warnt|warnen"),
   /reisewarnung/iu,
   /meiden|meidet|gemieden|vermieden/iu,
   /verzicht/iu,
   /unterlassen|unterbleiben/iu,
   /aufgefordert/iu,
-  word("nicht", "[^]*", "reisen|bereisen|bereist|aufsuchen|aufgesucht|besuchen|besucht"),
+  words("nicht", "reisen|bereisen|bereist|aufsuchen|aufgesucht|besuchen|besucht"),
 ];
 
+/** A whole-word alternation (`\b` is ASCII-only in JavaScript, so `\brät\b` never matches before a space). */
+function whole(alternatives: string): string {
+  return `(?<!\\p{L})(?:${alternatives})(?!\\p{L})`;
+}
+
 /**
- * A case-insensitive pattern for whole words (`\b` is ASCII-only in JavaScript, so `\brät\b`
- * never matches before a space): the first alternation, then optionally `gap` and further
- * whole-word alternations in order.
+ * A case-insensitive pattern for whole words in order, each anywhere after the one before:
+ * `words("rät|raten", "ab")` matches „rät … ab". It runs in linear time. The obvious form,
+ * `rät[^]*ab`, rescanned the rest of the sentence from every „rät" when no „ab" followed it, so
+ * a long sentence took quadratic time (192 KB of „nicht": 9 s). Here the earliest occurrence of
+ * each word is found inside a lookahead, which JavaScript never backtracks into, and taken with a
+ * back-reference; the earliest one is enough, since any later one could only see less of the
+ * sentence after it.
  */
-function word(first: string, gap?: string, then?: string): RegExp {
-  const w = (alternatives: string): string => `(?<!\\p{L})(?:${alternatives})(?!\\p{L})`;
-  return new RegExp(w(first) + (gap !== undefined && then !== undefined ? gap + w(then) : ""), "iu");
+function words(first: string, ...then: string[]): RegExp {
+  if (then.length === 0) return new RegExp(whole(first), "iu");
+  const all = [first, ...then];
+  const last = all.pop() as string;
+  const steps = all.map((alternatives, i) => `(?=([^]*?${whole(alternatives)}))\\${i + 1}`).join("");
+  return new RegExp(`^${steps}[^]*?${whole(last)}`, "iu");
 }
 
 /** Words that tie a sentence to travel or a part of the country (see AdviceSentence.travel). */

@@ -96,6 +96,22 @@ test("advice: entities are decoded, soft hyphens dropped, odd input gives []", (
   assert.deepEqual(adviceSentences(undefined as never), []);
 });
 
+test("advice: a long sentence without a full stop is scanned in linear time, not quadratic (bug 4)", () => {
+  // „nicht … reisen" and „rät … ab" have a gap between two words; a sentence of 192 KB with
+  // 32 000 „nicht" and no „reisen" took 9 s (each „nicht" rescanned the rest of the sentence),
+  // and --timeout did not bound it. 400 KB took over half a minute; it now takes milliseconds.
+  for (const word of ["nicht ", "rät ", "Rät "]) {
+    const html = `<p>${word.repeat(Math.ceil(400_000 / word.length))}</p>`;
+    const started = performance.now();
+    assert.deepEqual(adviceSentences(html), []);
+    const ms = performance.now() - started;
+    assert.ok(ms < 1500, `${JSON.stringify(word)}: ${Math.round(ms)} ms`);
+  }
+  // The gap still spans the sentence: the second word may stand anywhere after the first.
+  const far = `Die Region sollte ${"weit ".repeat(20_000)}nicht ${"sehr ".repeat(20_000)}besucht werden.`;
+  assert.equal(adviceSentences(`<p>${far}</p>`).length, 1);
+});
+
 test("splitSentences keeps abbreviations and ordinals inside a sentence", () => {
   assert.deepEqual(splitSentences("Seit dem 5. Oktober gilt u. a. dies. Zum Beispiel z.B. hier. Ende 2015. Neu."), [
     "Seit dem 5. Oktober gilt u. a. dies.",
