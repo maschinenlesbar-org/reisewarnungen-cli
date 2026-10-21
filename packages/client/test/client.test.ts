@@ -273,6 +273,29 @@ test("a non-boolean or missing warning flag is a parse error, on list, summaries
   assert.equal((await clientWith(makeMockTransport(() => jsonResponse(ok))).summaries({ warnedOnly: true })).length, 1);
 });
 
+test("a country entry under a key that is not a content id is a parse error, never dropped silently (bug 2)", async () => {
+  // summaries() returns every object member as a country; the flags of a non-digit key were never
+  // checked, so --warned-only dropped a malformed one silently, and plain countries printed an id
+  // that get refuses.
+  for (const entry of [
+    { countryName: "Badflag", warning: "true", partialWarning: "yes" },
+    { countryName: "Fine flags", warning: true, partialWarning: false },
+  ]) {
+    const body = { response: { lastModified: 1, contentList: ["226768", "DE-1"], "226768": { ...F, countryName: "Valid" }, "DE-1": entry } };
+    for (const call of [
+      (c: ReisewarnungenClient) => c.list(),
+      (c: ReisewarnungenClient) => c.summaries(),
+      (c: ReisewarnungenClient) => c.summaries({ warnedOnly: true }),
+    ]) {
+      await assert.rejects(call(clientWith(makeMockTransport(() => jsonResponse(body)))), (err: unknown) => {
+        assert.ok(err instanceof ReiseParseError, String(err));
+        assert.match(err.message, /"DE-1".*not a content id/);
+        return true;
+      });
+    }
+  }
+});
+
 /** Characters the client's own messages never carry raw: C0, DEL, C1, U+2028/2029, bidi controls. */
 const RAW_IN_MESSAGE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
 

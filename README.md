@@ -208,8 +208,9 @@ with exit `0`; a failed run keeps its exit code even when nothing reads its stde
   raise the limit with `--timeout 60000`.
 - **Empty array from `countries --warned-only`** — the API returned its country
   list, but no country carries a warning flag. A broken answer can't look like
-  this: an answer holding no country, an error envelope sent with HTTP 200 or a
-  `contentList` naming ids without an entry fails with exit `1` (`the
+  this: an answer holding no country, an error envelope sent with HTTP 200, a
+  country entry under a key that is not a content id, or a `contentList` naming ids
+  without an entry fails with exit `1` (`the
   travel-warning list holds no country`, …).
 - **HTML in `content`** — the advisory text is delivered as HTML by the upstream
   API. Use `jq -r '.content'` to print it raw, or pipe it through an HTML

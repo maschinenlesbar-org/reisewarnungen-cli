@@ -402,7 +402,8 @@ names both spellings: `Response exceeded the size limit of N bytes (maxResponseB
 
 **List shape check.** `list()` (and so `summaries()`, `countries`) checks the
 unwrapped envelope before returning it: an `error` member (an error envelope sent
-with a 2xx status), a content-id key whose value is not an object, no country entry
+with a 2xx status), a content-id key whose value is not an object, an object (a country
+entry, as `summaries()` reads it) under a key that is not a content id, no country entry
 at all, or a `contentList` naming ids without an entry is a `ReiseParseError` (exit
 `1`). The live list holds about 200 countries, so an empty one is a broken answer —
 never "no travel warnings". `get` reports an error envelope the same way instead of

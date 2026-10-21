@@ -168,6 +168,7 @@ const ENVELOPE_KEYS = new Set(["lastModified", "contentList"]);
  *
  * - an `error` member (an error envelope sent with a 2xx status), naming its text;
  * - a content-id key (all digits) whose value is not an object;
+ * - an object (a country entry, as summaries() reads it) under a key that is not a content id;
  * - no country entry at all;
  * - a `contentList` naming an id that has no entry (a partial answer that would drop
  *   countries silently).
@@ -187,6 +188,13 @@ function checkList(response: JsonObject, path: string): JsonObject {
       if (!isObject(value)) throw shapeError(path, `an object for content id "${key}"`);
       checkFlags(value, key, path);
       countries += 1;
+    } else if (isObject(value)) {
+      // summaries() would return it as a country: its flags were never checked (so
+      // --warned-only dropped a malformed one silently) and its id is one get() refuses.
+      throw shapeError(
+        path,
+        `a content id (digits) for every country entry, got one under "${serverTextForMessage(key)}", which is not a content id`,
+      );
     }
   }
   if (countries === 0) {
