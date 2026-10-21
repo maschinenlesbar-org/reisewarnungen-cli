@@ -98,7 +98,7 @@ export interface SummariesOptions {
    * Keep only the countries with a warning of any kind in force ({@link isWarned}).
    * Defaults to `false` (every country).
    */
-  warnedOnly?: boolean;
+  warnedOnly?: boolean | undefined;
 }
 
 /** A non-null, non-array JSON object. */

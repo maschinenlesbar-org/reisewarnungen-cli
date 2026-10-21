@@ -42,20 +42,20 @@ export interface RawResponse {
 
 export interface EngineOptions {
   /** Base URL of the API. Defaults to https://www.auswaertiges-amt.de */
-  baseUrl?: string;
+  baseUrl?: string | undefined;
   /** Swappable transport. Defaults to the built-in node http/https transport. */
-  transport?: Transport;
+  transport?: Transport | undefined;
   /**
    * Value of the User-Agent header: non-blank Latin-1 without control characters
    * (tab allowed). Defaults to "reisewarnungen-cli".
    */
-  userAgent?: string;
+  userAgent?: string | undefined;
   /**
    * Time limit per request in milliseconds, covering the whole response body, not
    * only idle gaps: an integer 0..`MAX_TIMEOUT_MS` (2^31 - 1 ms, the largest timer
    * Node supports); 0 disables. Defaults to 30 s.
    */
-  timeoutMs?: number;
+  timeoutMs?: number | undefined;
   /**
    * Number of automatic retries for transient (429/503) responses and reset
    * connections, an integer 0..`MAX_RETRIES` (10); defaults to 2. Each waits the
@@ -63,32 +63,32 @@ export interface EngineOptions {
    * attempt (at most 30 s) — or longer when the response's `Retry-After` asks for
    * it, never shorter. A `Retry-After` above `MAX_RETRY_AFTER_MS` is not retried.
    */
-  maxRetries?: number;
+  maxRetries?: number | undefined;
   /**
    * Base backoff between retries in milliseconds (grows linearly; a 429 waits at
    * least 1 s, doubling), an integer 0..`MAX_RETRY_AFTER_MS` (30 000). Defaults to 200.
    */
-  retryDelayMs?: number;
+  retryDelayMs?: number | undefined;
   /**
    * Number of HTTP redirects (301/302/303/307/308) to follow, a non-negative
    * integer (0 follows none). Defaults to 5. Any other 3xx, one with a missing or
    * malformed Location, and one past this limit surface as a ReiseApiError naming
    * the target.
    */
-  maxRedirects?: number;
+  maxRedirects?: number | undefined;
   /**
    * Hard cap on response body size in bytes (defends against memory exhaustion
    * from a hostile/buggy endpoint), a non-negative integer. Defaults to 100 MiB;
    * set to 0 for no limit.
    */
-  maxResponseBytes?: number;
+  maxResponseBytes?: number | undefined;
   /** Injectable sleep, primarily for deterministic tests. */
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: ((ms: number) => Promise<void>) | undefined;
   /**
    * Called once per retry, right before the backoff sleep, for each retried 429/503
    * and reset connection; never when there is no retry. A throw is swallowed.
    */
-  onRetry?: (event: RetryEvent) => void;
+  onRetry?: ((event: RetryEvent) => void) | undefined;
 }
 
 /** What `EngineOptions.onRetry` is told about one retry. */

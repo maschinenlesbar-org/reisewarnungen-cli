@@ -83,7 +83,9 @@ options before any request; it throws
 `timeoutMs` an integer `0`..`MAX_TIMEOUT_MS` (2^31 - 1), `maxRetries` `0`..`MAX_RETRIES`
 (10), `retryDelayMs` `0`..`MAX_RETRY_AFTER_MS` (30 000), and `maxRedirects` and
 `maxResponseBytes` non-negative integers.
-`undefined` keeps the default and `0` its documented meaning. A negative, `NaN` or
+`undefined` keeps the default and `0` its documented meaning; every optional field of
+`EngineOptions` and `SummariesOptions` is typed `?: T | undefined`, so a consumer compiled
+with `exactOptionalPropertyTypes` can pass `{ baseUrl: process.env.X }` as is. A negative, `NaN` or
 fractional value would otherwise switch the timeout or the size cap off, and `NaN` or
 `Infinity` would leave retries or redirects unbounded. The rule is the exported
 `intOption` / `intInRangeProblem`; the CLI's flags use the same one.
@@ -457,7 +459,8 @@ npm run coverage  # the same tests in one run, with a coverage report
 node --test apps/cli/dist/test/cli.test.js   # one file, after a build
 ```
 
-The client's tests are in `packages/client/test/` (`query`, `http`, `engine`, `client`),
+The client's tests are in `packages/client/test/` (`query`, `http`, `engine`, `client`,
+`types`: a consumer compiled by `tsc` with `exactOptionalPropertyTypes`),
 everything that drives the CLI is in `apps/cli/test/`.
 
 - **`query.test.ts`** — query-string serialisation.
