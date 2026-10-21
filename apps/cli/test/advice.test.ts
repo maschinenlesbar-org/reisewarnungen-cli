@@ -112,6 +112,31 @@ test("advice: a long sentence without a full stop is scanned in linear time, not
   assert.equal(adviceSentences(`<p>${far}</p>`).length, 1);
 });
 
+test("advice: odd HTML, long words and abbreviations are read in linear time too", () => {
+  // Found while fixing bug 4: an unclosed tag or comment rescanned the rest of the advisory from
+  // every "<", and the word before each full stop was found by rescanning the sentence so far
+  // („z. B. " 20 000 times: 6 s; a 40 000-character word: 3 s).
+  for (const [label, html] of [
+    ["unclosed tags", `<p>${"<a ".repeat(60_000)}`],
+    ["unclosed comments", `<p>${"<!--".repeat(60_000)}`],
+    ["a long word", `<p>${"x".repeat(200_000)} y. Z</p>`],
+    ["abbreviations", `<p>${"z. B. ".repeat(40_000)}Ende.</p>`],
+  ] as const) {
+    const started = performance.now();
+    adviceSentences(html);
+    const ms = performance.now() - started;
+    assert.ok(ms < 1500, `${label}: ${Math.round(ms)} ms`);
+  }
+  // The tokens are what they were: an unclosed tag or comment is text, a tag name ends at a non-word character.
+  assert.deepEqual(travel("<p>Von Reisen in die Region 3<4 wird abgeraten.</p>"), ["Von Reisen in die Region 3<4 wird abgeraten."]);
+  assert.deepEqual(travel("<p>Von Reisen <!-- x --> in die Region wird abgeraten.<!-- offen</p>"), [
+    "Von Reisen in die Region wird abgeraten.<!-- offen",
+  ]);
+  assert.deepEqual(travel("<p>Von Reisen in die <span_x>Region</span_x> wird abgeraten.</p>"), [
+    "Von Reisen in die <span_x>Region</span_x> wird abgeraten.",
+  ]);
+});
+
 test("splitSentences keeps abbreviations and ordinals inside a sentence", () => {
   assert.deepEqual(splitSentences("Seit dem 5. Oktober gilt u. a. dies. Zum Beispiel z.B. hier. Ende 2015. Neu."), [
     "Seit dem 5. Oktober gilt u. a. dies.",

@@ -114,6 +114,54 @@ interface Block {
   list: number | undefined;
 }
 
+/** The start of a tag: `<`, an optional `/`, a name, and no word character right after it. */
+const TAG_START = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)(?!\w)/y;
+
+/**
+ * The tokens of advisory HTML, in order, as `[token, closing, name]`: a tag (`<p class="x">`,
+ * closing `""` or `"/"`, its name), and with no name a comment, a run of text, or a `<` that
+ * starts none of these (text). The same tokens as the pattern
+ * `<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>|<!--[^]*?-->|[^<]+|<`, in linear time: with no `>` (or
+ * `-->`) left, that pattern rescanned the rest of the advisory from every `<a` (or `<!--`), which
+ * took quadratic time (60 000 unclosed tags: 16 s). Once a search finds none, none is searched for
+ * again.
+ */
+function* htmlTokens(html: string): Generator<[string, string | undefined, string | undefined]> {
+  let noTagEnd = false;
+  let noCommentEnd = false;
+  for (let i = 0; i < html.length; ) {
+    if (html[i] !== "<") {
+      const next = html.indexOf("<", i);
+      const end = next === -1 ? html.length : next;
+      yield [html.slice(i, end), undefined, undefined];
+      i = end;
+      continue;
+    }
+    TAG_START.lastIndex = i;
+    const tag = noTagEnd ? null : TAG_START.exec(html);
+    if (tag !== null) {
+      const end = html.indexOf(">", TAG_START.lastIndex);
+      if (end !== -1) {
+        yield [html.slice(i, end + 1), tag[1], tag[2]];
+        i = end + 1;
+        continue;
+      }
+      noTagEnd = true;
+    }
+    if (!noCommentEnd && html.startsWith("<!--", i)) {
+      const end = html.indexOf("-->", i + 4);
+      if (end !== -1) {
+        yield [html.slice(i, end + 3), undefined, undefined];
+        i = end + 3;
+        continue;
+      }
+      noCommentEnd = true;
+    }
+    yield ["<", undefined, undefined];
+    i += 1;
+  }
+}
+
 /** Split advisory HTML into text blocks, each with the heading path it stands under. */
 function blocksOf(html: string): Block[] {
   const blocks: Block[] = [];
@@ -133,8 +181,7 @@ function blocksOf(html: string): Block[] {
     blocks.push({ text, section: headings.filter((h) => h !== "").join(" › "), list: inItem ? currentList : undefined });
   };
 
-  for (const m of html.matchAll(/<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>|<!--[^]*?-->|[^<]+|</g)) {
-    const [token, closing, rawName] = m;
+  for (const [token, closing, rawName] of htmlTokens(html)) {
     if (rawName === undefined) {
       if (token.startsWith("<!--") || skip > 0) continue;
       const text = decodeEntities(token === "<" ? "<" : token);
@@ -202,15 +249,25 @@ function isAbbreviation(token: string): boolean {
   return ABBREVIATIONS.has(word.slice(0, -1).toLowerCase());
 }
 
+/**
+ * The word that ends at `end` (the run of non-space characters before it, not before `start`),
+ * found backwards from `end`: matching `(\S+)$` against the sentence so far rescanned it at every
+ * full stop, quadratic on a long word or a run of abbreviations („z. B. " 20 000 times: 6 s).
+ */
+function lastWord(text: string, start: number, end: number): string {
+  let from = end;
+  while (from > start && !/\s/.test(text[from - 1] as string)) from--;
+  return text.slice(from, end);
+}
+
 /** Split a block of text into sentences, not at abbreviations or ordinals. */
 export function splitSentences(text: string): string[] {
   const sentences: string[] = [];
   let start = 0;
   for (const m of text.matchAll(/[.!?](?=\s+["„»‚'(]?[\p{Lu}\d])/gu)) {
     const end = m.index + 1;
-    const piece = text.slice(start, end);
-    if (m[0] === "." && isAbbreviation(/(\S+)$/.exec(piece)?.[1] ?? "")) continue;
-    sentences.push(piece.trim());
+    if (m[0] === "." && isAbbreviation(lastWord(text, start, end))) continue;
+    sentences.push(text.slice(start, end).trim());
     start = end;
   }
   sentences.push(text.slice(start).trim());
