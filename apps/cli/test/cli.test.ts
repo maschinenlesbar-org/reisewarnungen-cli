@@ -25,17 +25,13 @@ function makeCli(responder: (req: HttpRequest) => HttpResponse) {
   const mt = makeMockTransport(responder);
 
   const deps: CliDeps = {
-    io: {
-      out: (s) => out.push(s),
-      err: (s) => err.push(s),
-      // Model the real exclusive-write semantics: without --force, a second write
-      // to an existing path throws an EEXIST error just as writeFileSync("wx") does.
-      writeFile: (p, d, force) => {
-        if (!force && files.has(p)) {
-          const err = new Error(`EEXIST: file already exists, open '${p}'`) as Error & { code: string };
-          err.code = "EEXIST";
-          throw err;
-        }
+    io: { out: (s) => out.push(s), err: (s) => err.push(s) },
+    // An in-memory file system for -o, with the real one's refusal of an existing path
+    // without --force (nodeFiles is output.test.ts's, on real files).
+    files: {
+      state: (p) => (files.has(p) ? "exists" : "absent"),
+      write: (p, d, overwrite) => {
+        if (!overwrite && files.has(p)) throw new Error(`Refusing to overwrite existing file "${p}"; pass --force to overwrite.`);
         files.set(p, d);
       },
     },
@@ -242,12 +238,13 @@ test("--output writes the file and confirms on stderr (stdout stays clean)", asy
   assert.match(untimed(cli.err.join("\n")), /^INFO  \[reisewarnungen\.output\] Wrote \d+ bytes to out\.json$/);
 });
 
-test("--output refuses to overwrite an existing file without --force (exit 1)", async () => {
+test("--output refuses to overwrite an existing file without --force (exit 1, no request)", async () => {
   const cli = makeCli(() => jsonResponse(listBody));
   cli.files.set("out.json", Buffer.from("existing"));
   const code = await run(["-o", "out.json", "countries"], cli.deps);
   assert.equal(code, 1);
-  assert.match(cli.err.join("\n"), /Refusing to overwrite existing file out\.json.*--force/);
+  assert.equal(cli.mt.calls.length, 0);
+  assert.match(cli.err.join("\n"), /Refusing to overwrite existing file "out\.json".*--force/);
   // The pre-existing file is left untouched.
   assert.equal(cli.files.get("out.json")?.toString(), "existing");
 });
@@ -260,18 +257,18 @@ test("--output with --force overwrites an existing file", async () => {
   assert.notEqual(cli.files.get("out.json")?.toString(), "existing");
 });
 
-test("-o pointing at a directory says so (exit 1), not 'pass --force'", async () => {
+test("-o pointing at a directory says so (exit 1, no request), not 'pass --force'", async () => {
   const { mkdtempSync, rmSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
-  const { defaultIO } = await import("../src/cli/io.js");
   const dir = mkdtempSync(join(tmpdir(), "reisewarnungen-cli-"));
   try {
     const cli = makeCli(() => jsonResponse(listBody));
-    cli.deps.io.writeFile = defaultIO.writeFile;
+    delete cli.deps.files;
     const code = await run(["-o", dir, "list"], cli.deps);
     assert.equal(code, 1);
-    assert.equal(untimed(cli.err.join("\n")), `ERROR [reisewarnungen.output] "${dir}" is a directory; give a file path to --output.`);
+    assert.equal(cli.mt.calls.length, 0);
+    assert.equal(untimed(cli.err.join("\n")), `ERROR [reisewarnungen.cli] "${dir}" is a directory; give a file path to --output.`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -279,13 +276,16 @@ test("-o pointing at a directory says so (exit 1), not 'pass --force'", async ()
 
 test("a failed --output write surfaces a clean error (exit 1), not 'Unexpected error'", async () => {
   const cli = makeCli(() => jsonResponse(listBody));
-  cli.deps.io.writeFile = () => {
-    throw new Error("EACCES: permission denied, open 'out.json'");
+  cli.deps.files = {
+    state: () => "absent",
+    write: () => {
+      throw new Error("Could not write to \"out.json\": EACCES: permission denied, open 'out.json'");
+    },
   };
   const code = await run(["-o", "out.json", "countries"], cli.deps);
   assert.equal(code, 1);
   const errText = cli.err.join("\n");
-  assert.match(untimed(errText), /^ERROR \[reisewarnungen\.output\] Could not write to out\.json/);
+  assert.match(untimed(errText), /^ERROR \[reisewarnungen\.output\] Could not write to "out\.json"/);
   assert.doesNotMatch(errText, /Unexpected error/);
 });
 
@@ -366,7 +366,7 @@ test("--help says that --timeout 0 means no limit", async () => {
 test("--max-redirects is parsed and passed through to the client", async () => {
   let seen: number | undefined;
   const deps: CliDeps = {
-    io: { out: () => {}, err: () => {}, writeFile: () => {} },
+    io: { out: () => {}, err: () => {} },
     createClient: (opts) => {
       seen = opts.maxRedirects;
       return new ReisewarnungenClient({ ...opts, transport: makeMockTransport(() => jsonResponse(listBody)).transport });
@@ -453,8 +453,11 @@ test("every -o failure is an ERROR record of reisewarnungen.output, exit 1 (L8)"
   ];
   for (const error of thrown) {
     const cli = makeCli(() => jsonResponse(listBody));
-    cli.deps.io.writeFile = () => {
-      throw error;
+    cli.deps.files = {
+      state: () => "absent",
+      write: () => {
+        throw error;
+      },
     };
     assert.equal(await run(["-o", "out.json", "countries"], cli.deps), 1);
     assert.match(untimed(cli.err.join("\n")), /^ERROR \[reisewarnungen\.output\] /);

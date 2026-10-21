@@ -25,7 +25,7 @@ function cli(env: Record<string, string> = {}) {
     return { status: 200, headers: { "content-type": "application/json" }, body: Buffer.from("{}") };
   };
   const deps = {
-    io: { out: (s: string) => out.push(s), err: (s: string) => err.push(s), writeFile: () => {} },
+    io: { out: (s: string) => out.push(s), err: (s: string) => err.push(s) },
     env,
     createClient: (opts: ConstructorParameters<typeof Client>[0]) => new Client({ ...opts, transport }),
   } as CliDeps;

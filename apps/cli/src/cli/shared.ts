@@ -3,8 +3,8 @@
 
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import { OutputError, logOf, type CliDeps } from "./io.js";
-import { ReiseError } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
+import { OutputError, isDirectoryMessage, logOf, nodeFiles, refuseOverwrite, type CliDeps } from "./io.js";
+import { ReiseError, ReiseValidationError } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
 import { baseUrlProblem, headerValueProblem, intInRangeProblem } from "@maschinenlesbar.org/reisewarnungen-client/internal/validate";
 import { DEFAULT_BASE_URL, cleartextProblem, type EngineOptions, type RetryEvent } from "@maschinenlesbar.org/reisewarnungen-client/internal/engine";
 
@@ -184,50 +184,53 @@ function holdsHugeString(value: unknown): boolean {
 }
 
 /**
- * Render a JSON value, pretty by default and compact with --compact. Writes to
- * the file given by --output (with a short confirmation on stderr so stdout stays
- * clean for piping) or to stdout otherwise. `-o -` means stdout, as in other CLIs: a
- * script passing `-o "$OUT"` with `OUT=-` used to get a file named `-` and no output.
+ * Check `-o` before any request, so a refused target costs none: `--force` without `-o`, a
+ * directory, and an existing path (a dangling link too) without `--force` are usage errors
+ * (a ReiseValidationError: an ERROR record of `reisewarnungen.cli`, exit 1). `-o -` is stdout.
+ * The write checks again: a file that appears during the request is not overwritten either
+ * (an OutputError then, exit 1).
  */
-export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown): void {
-  const text = escapeControlChars(stringifyJson(value, global.compact === true));
-  if (global.output !== undefined && global.output !== "-") {
-    const data = Buffer.from(text + "\n", "utf8");
-    writeOutputFile(deps, global.output, data, global.force === true);
-  } else {
-    deps.io.out(text);
+export function checkOutputTarget(deps: CliDeps, options: GlobalOptions): void {
+  if (options.force === true && options.output === undefined) {
+    throw new ReiseValidationError("--force needs --output (it only allows overwriting the -o file).");
   }
+  const path = fileOf(options);
+  if (path === undefined) return;
+  const state = (deps.files ?? nodeFiles).state(path);
+  if (state === "directory") throw new ReiseValidationError(isDirectoryMessage(path));
+  if (state === "exists" && options.force !== true) throw new ReiseValidationError(refuseOverwrite(path));
 }
 
 /**
- * Write the result to `--output`, with a short confirmation on stderr so stdout
- * stays clean for piping. A filesystem failure (bad path, missing directory,
- * permission denied) is a foreseeable user error, so it is surfaced as a clean
- * OutputError (an ERROR record of `reisewarnungen.output`, "Could not write …", exit 1)
- * rather than bubbling up as a raw Node errno through run()'s "Unexpected error"
- * fallback; whatever the `CliIO` threw, every `-o` failure is an OutputError.
+ * Render a JSON value, pretty by default and compact with --compact, to stdout or to the
+ * `-o` file (with an INFO record of `reisewarnungen.output` saying how many bytes went where,
+ * so stdout stays clean for a pipe). The file holds exactly what stdout would show, plus a
+ * newline. `-o -` means stdout, as in other CLIs: a script passing `-o "$OUT"` with `OUT=-`
+ * used to get a file named `-` and no output.
  *
- * The write is exclusive unless `force` is set: an existing file at `path` is
- * never silently overwritten (a mistyped `-o` path would otherwise destroy it).
- * The EEXIST case is surfaced with a message pointing at --force.
+ * The write is atomic and never overwrites by accident (`OutputFiles.write`): without
+ * `--force` the name is claimed exclusively, so a file that appeared during the request is
+ * kept; the data goes to a temporary file beside the target, renamed over it, so a write cut
+ * short (a full disk) leaves the old file as it was and no half-written file; `--force` keeps
+ * the old file's mode and writes through a symlink. Every failure is an OutputError (an ERROR
+ * record of `reisewarnungen.output`, exit 1) naming the file.
  */
-function writeOutputFile(deps: CliDeps, path: string, data: Buffer, force: boolean): void {
+export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown): void {
+  const text = escapeControlChars(stringifyJson(value, global.compact === true));
+  const path = fileOf(global);
+  if (path === undefined) return deps.io.out(text);
+  const data = Buffer.from(`${text}\n`, "utf8");
   try {
-    deps.io.writeFile(path, data, force);
+    (deps.files ?? nodeFiles).write(path, data, global.force === true);
   } catch (cause) {
-    if (cause instanceof OutputError) throw cause; // already a clean message (e.g. a directory)
-    if (cause instanceof ReiseError) throw new OutputError(cause.message, { cause });
-    const code = (cause as { code?: unknown } | null)?.code;
-    if (code === "EEXIST") {
-      throw new OutputError(
-        `Refusing to overwrite existing file ${path}; pass --force to overwrite.`,
-        { cause },
-      );
-    }
-    const reason = cause instanceof Error ? cause.message : String(cause);
-    throw new OutputError(`Could not write to ${path}: ${reason}`, { cause });
+    throw new OutputError(cause instanceof Error ? cause.message : String(cause), { cause });
   }
   logOf(deps).info("output", `Wrote ${data.length} bytes to ${path}`);
+}
+
+/** The `-o` file, or undefined for stdout (no `-o`, or `-o -`). */
+function fileOf(options: GlobalOptions): string | undefined {
+  return options.output === undefined || options.output === "-" ? undefined : options.output;
 }
 
 /** `HTTP 503 from host: retry 1 of 3 in 2 s` (host only; whole seconds, ms under 1 s). */
@@ -272,6 +275,8 @@ export function action(
     const command = args[args.length - 1] as Command;
     const positionals = args.slice(0, Math.max(0, args.length - 2)) as string[];
     const global = command.optsWithGlobals() as GlobalOptions;
+    // A refused -o target is a usage error before anything else happens.
+    checkOutputTarget(deps, global);
     const cleartext = cleartextProblem(global.baseUrl ?? DEFAULT_BASE_URL);
     if (cleartext !== undefined) logOf(deps).warn("http", cleartext);
     const options = toEngineOptions(global);

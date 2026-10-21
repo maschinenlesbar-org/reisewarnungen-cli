@@ -326,8 +326,18 @@ timestamps, far below 2^53.
 
 **CliDeps / CliIO.** The dependency-injection seam for the CLI
 ([`io.ts`](apps/cli/src/cli/io.ts)): a client factory plus an I/O object
-(`out`/`err`/`writeFile`). Lets the whole CLI run in tests with a
-mocked client and captured output — no subprocess.
+(`out`/`err`) and the file seam for `-o` (`files`, an `OutputFiles`: `state(path)` and an
+atomic `write(path, data, overwrite)`; unset, the real file system, `nodeFiles`). Lets the
+whole CLI run in tests with a mocked client and captured output — no subprocess.
+
+**`-o` integrity.** `action()` calls `checkOutputTarget` before the client is built:
+`--force` without `-o`, a directory, and an existing path (a dangling link too) without
+`--force` are a `ReiseValidationError` (a usage error, exit 1, no request); `-o -` is
+stdout. `nodeFiles.write` claims the name with an exclusive create unless `--force`
+(so a file that appeared during the request is kept: an `OutputError`, exit 1), writes a
+temporary file beside the target and renames it over it (an existing file's mode kept;
+with `--force` through a symlink to the file it names), and on any failure leaves neither
+the temporary file nor the claimed name behind.
 
 **Error types.** [`errors.ts`](packages/client/src/errors.ts): `ReiseApiError` (non-2xx,
 carries `status`/`detail`), `ReiseNotFoundError` (a 2xx response with no matching
@@ -468,12 +478,14 @@ everything that drives the CLI is in `apps/cli/test/`.
 - **`engine.test.ts`** — URL building, JSON decoding, error mapping, 429/503 retry, redirects — mocked transport.
 - **`client.test.ts`** — response unwrapping, the flattened `summaries()` view, the `get` entry lookup (not-found vs. entries under other keys) — mocked transport.
 - **`validate.test.ts`** — `assertValid`, the `ReiseValidationError` exit-code mapping and the `parity()` helper.
-- **`output.test.ts`** — rendering: an answer nested too deeply to pretty-print (a clean
+- **`output.test.ts`** — `-o` on real files in a temp dir (refused targets before any
+  request, `--force` keeping the mode and writing through a symlink, a file that appears
+  during the request, no temporary file left), and rendering: an answer nested too deeply to pretty-print (a clean
   ERROR that suggests `--compact`), and which `JSON.stringify` path `--compact` takes (V8's
   fast path, unless the answer holds a string or key of 64 Mi characters or more: on Node 26
   the fast path aborts the process on a ~250 MB string, but only it prints very deep nesting).
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, `-o -`, and exit codes (network/parse → 1, not-found → 4) — mocked client.
-- **`io.test.ts`** — `defaultIO.writeFile`, and `handleOutputErrors` and
+- **`io.test.ts`** — `nodeFiles` (a directory, an existing file), and `handleOutputErrors` and
   `stderrAfterStdout` on fake streams: the pipe cases, a stdout write error as an ERROR
   record of `reisewarnungen.output`, and a record held behind stdout's backlog.
 - **`log.test.ts`** — the record helpers of `apps/cli/src/cli/log.ts` on their own

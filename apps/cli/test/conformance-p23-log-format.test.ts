@@ -76,7 +76,9 @@ function makeDeps(out: string[], err: string[], now: () => Date, answer?: HttpRe
   };
   return {
     // this repo's CliDeps has no `env`.
-    io: { out: (s) => out.push(s), err: (s) => err.push(s), writeFile: () => {} },
+    io: { out: (s) => out.push(s), err: (s) => err.push(s) },
+    // -o writes nowhere: a file system where every path is free and a write is dropped.
+    files: { state: () => "absent", write: () => {} },
     now,
     createClient: (opts) => new Client({ ...opts, transport }),
   };

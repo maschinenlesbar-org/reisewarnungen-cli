@@ -232,10 +232,15 @@ These apply to every command and may be given before *or* after it:
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 
 The `-o/--output` path is **trusted input** — it is written verbatim with no
-traversal guard (you own your shell). An existing file is **never overwritten**
-unless you pass `--force`: without it the CLI exits `1` with `Refusing to overwrite
-existing file …; pass --force to overwrite.` A path that is a directory exits `1`
-with `"<path>" is a directory; give a file path to --output.`
+traversal guard (you own your shell). It is checked before any request: an existing
+file (a dangling link too) is **never overwritten** unless you pass `--force`: without
+it the CLI exits `1` with `Refusing to overwrite existing file "<path>"; pass --force to
+overwrite.` A path that is a directory exits `1` with `"<path>" is a directory; give a
+file path to --output.`, and `--force` without `-o` exits `1` too. The write is atomic:
+the data goes to a temporary file beside the target, renamed over it, so a write cut
+short (a full disk) leaves the old file as it was and no half-written file behind;
+`--force` keeps the old file's mode and writes through a symlink. A file that appears
+while the request runs is not overwritten either (exit `1`).
 
 ## Learn more
 

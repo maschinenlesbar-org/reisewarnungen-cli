@@ -20,7 +20,7 @@ async function exercise(extra: string[], failures: number, retryAfter?: string) 
       ? { status: 503, headers: retryAfter ? { "retry-after": retryAfter } : {}, body: Buffer.from("{}") }
       : jsonResponse(body);
   const deps: CliDeps = {
-    io: { out: (s) => out.push(s), err: (s) => err.push(s), writeFile: () => {} },
+    io: { out: (s) => out.push(s), err: (s) => err.push(s) },
     now: () => new Date("2026-01-02T03:04:05.678Z"),
     createClient: (opts) => new ReisewarnungenClient({ ...opts, transport, sleep: async () => {} }),
   };

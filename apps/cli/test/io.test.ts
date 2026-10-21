@@ -4,19 +4,17 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
-import { defaultIO, handleOutputErrors, stderrAfterStdout } from "../src/cli/io.js";
+import { handleOutputErrors, nodeFiles, stderrAfterStdout } from "../src/cli/io.js";
 import { createLogger } from "../src/cli/log.js";
-import { ReiseError } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
 
-test("writeFile names a directory instead of suggesting --force", () => {
+test("nodeFiles.write names a directory instead of suggesting --force", () => {
   const dir = mkdtempSync(join(tmpdir(), "reisewarnungen-io-"));
   try {
+    assert.equal(nodeFiles.state(dir), "directory");
     for (const force of [false, true]) {
       assert.throws(
-        () => defaultIO.writeFile(dir, Buffer.from("x"), force),
-        (err: unknown) =>
-          err instanceof ReiseError &&
-          err.message === `"${dir}" is a directory; give a file path to --output.`,
+        () => nodeFiles.write(dir, Buffer.from("x"), force),
+        (err: unknown) => err instanceof Error && err.message === `"${dir}" is a directory; give a file path to --output.`,
         `force=${force}`,
       );
     }
@@ -25,16 +23,19 @@ test("writeFile names a directory instead of suggesting --force", () => {
   }
 });
 
-test("writeFile still refuses an existing file with EEXIST and overwrites with force", () => {
+test("nodeFiles.write refuses an existing file without overwrite and replaces it with overwrite", () => {
   const dir = mkdtempSync(join(tmpdir(), "reisewarnungen-io-"));
   try {
     const file = join(dir, "a.json");
-    defaultIO.writeFile(file, Buffer.from("one"), false);
+    assert.equal(nodeFiles.state(file), "absent");
+    nodeFiles.write(file, Buffer.from("one"), false);
+    assert.equal(nodeFiles.state(file), "exists");
     assert.throws(
-      () => defaultIO.writeFile(file, Buffer.from("two"), false),
-      (err: unknown) => (err as NodeJS.ErrnoException).code === "EEXIST",
+      () => nodeFiles.write(file, Buffer.from("two"), false),
+      (err: unknown) => err instanceof Error && err.message === `Refusing to overwrite existing file "${file}"; pass --force to overwrite.`,
     );
-    defaultIO.writeFile(file, Buffer.from("two"), true);
+    assert.equal(readFileSync(file, "utf8"), "one");
+    nodeFiles.write(file, Buffer.from("two"), true);
     assert.equal(readFileSync(file, "utf8"), "two");
   } finally {
     rmSync(dir, { recursive: true, force: true });

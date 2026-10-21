@@ -134,7 +134,8 @@ reisewarnungen countries --warned-only --compact -o active.json
 ```
 
 `-o/--output` writes the command output to the given path instead of stdout. It
-refuses to overwrite an existing file (exit 1); pass `--force` to overwrite.
+refuses to overwrite an existing file (exit 1, before any request); pass `--force` to
+overwrite. The write is atomic: a write cut short leaves the old file as it was.
 
 ### 9. Extract just the warning text from a single advisory
 
@@ -184,13 +185,15 @@ Real flags only, from `reisewarnungen --help`:
 | `--compact` | Print JSON on a single line instead of pretty-printed. An answer nested too deeply to pretty-print is an ERROR record of `reisewarnungen.output` that suggests `--compact` (exit `1`) |
 | `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [reisewarnungen.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
 | `-o, --output <file>` | Write output to this file instead of stdout; `-o -` means stdout (no file named `-`) |
-| `--force` | Overwrite the `--output` file if it already exists |
+| `--force` | Overwrite the `--output` file if it already exists (keeping its mode; through a symlink to the file it points at); without `-o` a usage error |
 | `-h, --help` | Display help for a command |
 
 Note: `-o/--output` is **trusted input** — the path is written verbatim with no
 traversal guard (you own your shell). An existing file is **not** overwritten
 unless you pass `--force`; a directory is refused with `"<path>" is a directory;
-give a file path to --output.` (exit 1).
+give a file path to --output.` (exit 1). Both are checked before any request; the
+file is written to a temporary file beside it and renamed over it, so a write cut
+short (a full disk) leaves no half-written file and an old file as it was.
 
 Exit codes: `0` success, `4` when `get` finds no such country, `1` for any other
 error (a `404` on `list`/`countries` is `1`: the endpoint itself is missing); usage errors use commander's own non-zero code, while `--help` /

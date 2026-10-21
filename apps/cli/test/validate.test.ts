@@ -14,7 +14,7 @@ function throwingDeps(error: Error) {
   const out: string[] = [];
   const err: string[] = [];
   const deps: CliDeps = {
-    io: { out: (s) => out.push(s), err: (s) => err.push(s), writeFile: () => {} },
+    io: { out: (s) => out.push(s), err: (s) => err.push(s) },
     createClient: () => {
       throw error;
     },

@@ -52,7 +52,7 @@ function cli(env: Record<string, string> = {}) {
     body: Buffer.from(JSON.stringify(okBody)),
   });
   const deps = {
-    io: { out: (s: string) => out.push(s), err: (s: string) => err.push(s), writeFile: () => {} },
+    io: { out: (s: string) => out.push(s), err: (s: string) => err.push(s) },
     env,
     createClient: (opts: ConstructorParameters<typeof Client>[0]) => new Client({ ...opts, transport }),
   } as CliDeps;

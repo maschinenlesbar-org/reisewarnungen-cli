@@ -1,7 +1,12 @@
-// The output sink (renderJson in src/cli/shared.ts): rendering an answer, pretty or --compact.
+// The output sink (renderJson and checkOutputTarget in src/cli/shared.ts, the file seam in
+// io.ts): rendering, `-o` and `--force`. The `-o` cases run through run() against real files in
+// a temp dir; a write cut short is conformance test P26's.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { run } from "../src/cli/run.js";
 import { renderJson } from "../src/cli/shared.js";
 import type { CliDeps } from "../src/cli/io.js";
@@ -9,19 +14,144 @@ import { ReisewarnungenClient } from "@maschinenlesbar.org/reisewarnungen-client
 import type { HttpRequest, HttpResponse } from "@maschinenlesbar.org/reisewarnungen-client/internal/http";
 import { jsonResponse, makeMockTransport, untimed } from "./helpers.js";
 
-const ENTRY = { countryName: "Atlantis", warning: true, partialWarning: false };
+const ENTRY = { countryName: "Ein \u001b[31mrotes\u009b Land", warning: true, partialWarning: false };
 const DETAIL = { response: { "100": ENTRY } };
+const LIST = { response: { lastModified: 1, "100": ENTRY } };
 
-function makeCli(responder: (req: HttpRequest) => HttpResponse | Promise<HttpResponse> = () => jsonResponse(DETAIL)) {
+function makeCli(responder: (req: HttpRequest) => HttpResponse | Promise<HttpResponse> = (req) => jsonResponse(req.url.endsWith("/100") ? DETAIL : LIST)) {
   const out: string[] = [];
   const err: string[] = [];
   const mt = makeMockTransport(responder);
   const deps: CliDeps = {
-    io: { out: (s) => out.push(s), err: (s) => err.push(untimed(s)), writeFile: () => {} },
+    io: { out: (s) => out.push(s), err: (s) => err.push(untimed(s)) },
     createClient: (opts) => new ReisewarnungenClient({ ...opts, transport: mt.transport }),
   };
   return { deps, out, err, mt };
 }
+
+/** Run `body` with a fresh temp directory that is always removed. */
+async function inTempDir(body: (dir: string) => Promise<void>): Promise<void> {
+  const dir = mkdtempSync(join(tmpdir(), "reisewarnungen-output-"));
+  try {
+    await body(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("-o writes what stdout would show, plus a newline, and says so in an INFO record", async () => {
+  await inTempDir(async (dir) => {
+    const shown = makeCli();
+    assert.equal(await run(["countries"], shown.deps), 0);
+    const path = join(dir, "countries.json");
+    const cli = makeCli();
+    assert.equal(await run(["-o", path, "countries"], cli.deps), 0);
+    const written = readFileSync(path, "utf8");
+    assert.equal(written, `${shown.out.join("\n")}\n`);
+    assert.doesNotMatch(written, /[\u001b\u009b]/, "control characters are escaped in the file too");
+    assert.deepEqual(cli.out, []);
+    assert.deepEqual(cli.err, [`INFO  [reisewarnungen.output] Wrote ${Buffer.byteLength(written)} bytes to ${path}`]);
+    assert.deepEqual(readdirSync(dir), ["countries.json"], "no temporary file is left");
+  });
+});
+
+test("-o - prints to stdout and creates no file", async () => {
+  await inTempDir(async (dir) => {
+    const cli = makeCli();
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      assert.equal(await run(["--compact", "-o", "-", "countries"], cli.deps), 0);
+      assert.equal(await run(["--compact", "-o", "-", "--force", "countries"], cli.deps), 0);
+    } finally {
+      process.chdir(cwd);
+    }
+    assert.equal(cli.out.length, 2);
+    assert.deepEqual(cli.err, []);
+    assert.deepEqual(readdirSync(dir), []);
+  });
+});
+
+test("a refused -o target is a usage error before any request", async () => {
+  await inTempDir(async (dir) => {
+    const existing = join(dir, "existing.json");
+    writeFileSync(existing, "keep");
+    const dangling = join(dir, "dangling.json");
+    symlinkSync(join(dir, "nowhere"), dangling);
+    const sub = join(dir, "sub");
+    mkdirSync(sub);
+    const cases: Array<[string[], string]> = [
+      [["-o", "", "countries"], "Output path must not be empty."],
+      [["-o", "  ", "countries"], "Output path must not be empty."],
+      [["--force", "countries"], "--force needs --output (it only allows overwriting the -o file)."],
+      [["-o", existing, "countries"], `Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
+      [["-o", dangling, "countries"], `Refusing to overwrite existing file "${dangling}"; pass --force to overwrite.`],
+      [["-o", sub, "countries"], `"${sub}" is a directory; give a file path to --output.`],
+      [["-o", sub, "--force", "get", "100"], `"${sub}" is a directory; give a file path to --output.`],
+    ];
+    for (const [argv, message] of cases) {
+      const cli = makeCli();
+      assert.equal(await run(argv, cli.deps), 1, argv.join(" "));
+      assert.equal(cli.mt.calls.length, 0, `${argv.join(" ")} sent a request`);
+      assert.ok(cli.err.some((line) => line.startsWith("ERROR [reisewarnungen.cli]") && line.includes(message)), `${argv.join(" ")}: ${cli.err.join(" | ")}`);
+    }
+    assert.equal(readFileSync(existing, "utf8"), "keep");
+    assert.deepEqual(readdirSync(dir).sort(), ["dangling.json", "existing.json", "sub"]);
+  });
+});
+
+test("--force replaces an existing file, keeps its mode, and writes through a symlink", async () => {
+  await inTempDir(async (dir) => {
+    const path = join(dir, "out.json");
+    writeFileSync(path, "old");
+    chmodSync(path, 0o600);
+    assert.equal(await run(["--compact", "-o", path, "--force", "countries"], makeCli().deps), 0);
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), [{ id: "100", ...ENTRY }]);
+    assert.equal(statSync(path).mode & 0o777, 0o600);
+    const link = join(dir, "latest.json");
+    symlinkSync(path, link);
+    assert.equal(await run(["--compact", "-o", link, "--force", "get", "100"], makeCli().deps), 0);
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), ENTRY);
+    assert.deepEqual(readdirSync(dir).sort(), ["latest.json", "out.json"]);
+  });
+});
+
+test("--force to a new path creates the file; over a dangling link it replaces the link with the file", async () => {
+  await inTempDir(async (dir) => {
+    const fresh = join(dir, "fresh.json");
+    assert.equal(await run(["--compact", "-o", fresh, "--force", "countries"], makeCli().deps), 0);
+    assert.deepEqual(JSON.parse(readFileSync(fresh, "utf8")), [{ id: "100", ...ENTRY }]);
+    const dangling = join(dir, "dangling.json");
+    symlinkSync(join(dir, "nowhere"), dangling);
+    assert.equal(await run(["--compact", "-o", dangling, "--force", "countries"], makeCli().deps), 0);
+    assert.deepEqual(JSON.parse(readFileSync(dangling, "utf8")), [{ id: "100", ...ENTRY }]);
+    assert.deepEqual(readdirSync(dir).sort(), ["dangling.json", "fresh.json"]);
+  });
+});
+
+test("a file that appears during the request is not overwritten: exit 1, an ERROR of the output area", async () => {
+  await inTempDir(async (dir) => {
+    const path = join(dir, "race.json");
+    const cli = makeCli(() => {
+      writeFileSync(path, "theirs");
+      return jsonResponse(LIST);
+    });
+    assert.equal(await run(["-o", path, "countries"], cli.deps), 1);
+    assert.equal(readFileSync(path, "utf8"), "theirs");
+    assert.deepEqual(cli.err, [`ERROR [reisewarnungen.output] Refusing to overwrite existing file "${path}"; pass --force to overwrite.`]);
+    assert.deepEqual(readdirSync(dir), ["race.json"]);
+  });
+});
+
+test("a write the file system refuses is an ERROR of the output area naming the file, exit 1", async () => {
+  await inTempDir(async (dir) => {
+    const path = join(dir, "missing-dir", "out.json");
+    const cli = makeCli();
+    assert.equal(await run(["-o", path, "countries"], cli.deps), 1);
+    assert.equal(cli.err.length, 1);
+    assert.match(cli.err[0]!, new RegExp(`^ERROR \\[reisewarnungen\\.output\\] Could not write to ".*out\\.json": ENOENT`));
+  });
+});
 
 test("pretty-printing an answer nested too deeply is a clean error that suggests --compact", async () => {
   // A hostile or broken answer: JSON.parse reads it, the pretty printer's recursion can't.

@@ -146,7 +146,7 @@ test("advice <id> prints the result; a bad id is a usage error; not found exits 
   let body: unknown = entry(ANGOLA);
   const mt = makeMockTransport(() => jsonResponse(body));
   const deps: CliDeps = {
-    io: { out: (s) => out.push(s), err: (s) => err.push(s), writeFile: () => {} },
+    io: { out: (s) => out.push(s), err: (s) => err.push(s) },
     createClient: (opts) => new ReisewarnungenClient({ ...opts, transport: mt.transport }),
   };
   assert.equal(await run(["advice", "201962", "--compact"], deps), 0);
