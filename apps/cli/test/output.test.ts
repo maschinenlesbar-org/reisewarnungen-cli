@@ -184,3 +184,20 @@ test("--compact takes the gap path only for an answer holding a huge string, the
   assert.deepEqual(calls.map((args) => (args.length >= 3 ? args[2] : "none")), ["", "none", "", "", 2]);
   assert.deepEqual(out, ['"stub"', '"stub"', '"stub"', '"stub"', '"stub"']);
 });
+
+test("printed JSON escapes DEL, C1 and the bidi controls, on stdout and in the -o file", async () => {
+  // JSON.stringify leaves them raw, and a terminal acts on them: U+202E reverses the text after it.
+  const bidi = [0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069];
+  const name = `A\u007fB\u0085C\u009bD${String.fromCharCode(...bidi)}E`;
+  const cli = makeCli(() => jsonResponse({ response: { "100": { ...ENTRY, countryName: name } } }));
+  assert.equal(await run(["--compact", "get", "100"], cli.deps), 0);
+  const text = cli.out.join("\n");
+  assert.ok(text.includes(`"A\\u007fB\\u0085C\\u009bD${bidi.map((c) => `\\u${c.toString(16).padStart(4, "0")}`).join("")}E"`), text);
+  assert.doesNotMatch(text, /[\u007f-\u009f؜‎‏‪-‮⁦-⁩]/);
+  assert.equal((JSON.parse(text) as { countryName: string }).countryName, name);
+  await inTempDir(async (dir) => {
+    const path = join(dir, "out.json");
+    assert.equal(await run(["--compact", "-o", path, "get", "100"], makeCli(() => jsonResponse({ response: { "100": { ...ENTRY, countryName: name } } })).deps), 0);
+    assert.equal(readFileSync(path, "utf8"), `${text}\n`);
+  });
+});

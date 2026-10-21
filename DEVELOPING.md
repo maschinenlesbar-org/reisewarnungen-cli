@@ -483,7 +483,9 @@ everything that drives the CLI is in `apps/cli/test/`.
   during the request, no temporary file left), and rendering: an answer nested too deeply to pretty-print (a clean
   ERROR that suggests `--compact`), and which `JSON.stringify` path `--compact` takes (V8's
   fast path, unless the answer holds a string or key of 64 Mi characters or more: on Node 26
-  the fast path aborts the process on a ~250 MB string, but only it prints very deep nesting).
+  the fast path aborts the process on a ~250 MB string, but only it prints very deep nesting),
+  and `escapeControlChars`: DEL, C1 and the bidi controls (`isBidiControl`) printed as
+  `\uXXXX`, on stdout and in the `-o` file.
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, `-o -`, and exit codes (network/parse → 1, not-found → 4) — mocked client.
 - **`io.test.ts`** — `nodeFiles` (a directory, an existing file), and `handleOutputErrors` and
   `stderrAfterStdout` on fake streams: the pipe cases, a stdout write error as an ERROR

@@ -15,7 +15,9 @@ no warning flag is set — as clean JSON you can pipe straight into
 [`jq`](https://jqlang.github.io/jq/).
 
 - **Works out of the box** — no account, no API key, no configuration. Install and run.
-- **Clean JSON output** — pretty-printed by default, `--compact` for one-line/scripting.
+- **Clean JSON output** — pretty-printed by default, `--compact` for one-line/scripting;
+  characters a terminal would act on (DEL, C1 controls, bidi controls such as U+202E) are
+  printed as `\uXXXX` escapes, the same JSON value.
 - **Four focused commands** — `list`, `countries`, `get`, and `advice`.
 - **Save to file** — write output directly to a file with `-o/--output` instead of stdout.
 
