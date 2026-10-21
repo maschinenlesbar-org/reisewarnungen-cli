@@ -178,7 +178,7 @@ Real flags only, from `reisewarnungen --help`:
 | `--max-retries <n>` | Retries for transient `429`/`503` responses and reset connections (`0`–`10`; each waits a backoff — 200 ms, 400 ms, … for a `503`, from 1 s doubling for a `429` — or longer if the server's `Retry-After` asks, up to 30 s; a longer `Retry-After` is not retried; each retry logs one WARN record of `reisewarnungen.http` before it waits, `HTTP 503 from host: retry 1 of 3 in 2 s`) |
 | `--max-redirects <n>` | HTTP redirects to follow (`0` = none; default `5`) |
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
-| `--compact` | Print JSON on a single line instead of pretty-printed |
+| `--compact` | Print JSON on a single line instead of pretty-printed. An answer nested too deeply to pretty-print is an ERROR record of `reisewarnungen.output` that suggests `--compact` (exit `1`) |
 | `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [reisewarnungen.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
 | `-o, --output <file>` | Write output to this file instead of stdout; `-o -` means stdout (no file named `-`) |
 | `--force` | Overwrite the `--output` file if it already exists |

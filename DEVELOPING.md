@@ -427,7 +427,7 @@ the response doesn't hold, a `404` on the list endpoint, and a malformed answer 
 `ReiseParseError`: bad JSON, an unknown charset, a 2xx body without the documented shape,
 an error envelope sent with a 2xx status, an advisory without content), `http` (the connection,
 the cleartext warning) and `output` (the `-o` file written, or any failure to write it: an
-`OutputError`, and a failed write to stdout). Code logs through `logOf(deps)` and never
+`OutputError`, an answer nested too deeply to print, and a failed write to stdout). Code logs through `logOf(deps)` and never
 writes diagnostics with `io.err` directly. `run()` builds the logger from argv before
 commander parses it (`logFormatFromArgv`, which skips the value of the program's value
 options such as `--user-agent` and `-o`, used only for the records of a parse error; a
@@ -468,6 +468,10 @@ everything that drives the CLI is in `apps/cli/test/`.
 - **`engine.test.ts`** — URL building, JSON decoding, error mapping, 429/503 retry, redirects — mocked transport.
 - **`client.test.ts`** — response unwrapping, the flattened `summaries()` view, the `get` entry lookup (not-found vs. entries under other keys) — mocked transport.
 - **`validate.test.ts`** — `assertValid`, the `ReiseValidationError` exit-code mapping and the `parity()` helper.
+- **`output.test.ts`** — rendering: an answer nested too deeply to pretty-print (a clean
+  ERROR that suggests `--compact`), and which `JSON.stringify` path `--compact` takes (V8's
+  fast path, unless the answer holds a string or key of 64 Mi characters or more: on Node 26
+  the fast path aborts the process on a ~250 MB string, but only it prints very deep nesting).
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, `-o -`, and exit codes (network/parse → 1, not-found → 4) — mocked client.
 - **`io.test.ts`** — `defaultIO.writeFile`, and `handleOutputErrors` and
   `stderrAfterStdout` on fake streams: the pipe cases, a stdout write error as an ERROR
