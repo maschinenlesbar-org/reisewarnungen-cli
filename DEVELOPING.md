@@ -313,7 +313,14 @@ responses and maps errors. Sits between the client and the transport.
 status }`, the raw bytes `getJson()` then decodes: by the charset the Content-Type
 names (UTF-8 when it names none), a leading BOM dropped; an unknown charset label
 is a `ReiseParseError`, and so is a body that isn't JSON (naming a non-JSON
-Content-Type such as `text/html`, the usual maintenance page).
+Content-Type such as `text/html`, the usual maintenance page). So is a number `JSON.parse`
+can't carry exactly (`Unexpected response from <path>: the number <N> cannot be represented
+exactly.`): one out of a double's range (`1e400`), one past 2^53 that would print as another
+number (`12345678901234567890`, also as `…890.0` or `9007199254740993e0`, and
+`9007199254740992.5`), and a non-zero one too small for a double (`1e-400`, which became `0`).
+Below 2^53 a decimal fraction keeps a double's precision, as JSON means it, and a double a
+server printed in its shortest form (`1E23`) passes. The API's numbers are Unix-second
+timestamps, far below 2^53.
 
 **CliDeps / CliIO.** The dependency-injection seam for the CLI
 ([`io.ts`](apps/cli/src/cli/io.ts)): a client factory plus an I/O object
