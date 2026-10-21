@@ -163,7 +163,10 @@ $ reisewarnungen --base-url http://mirror.example countries
 
 Global options may be given before or after the command, so
 `reisewarnungen countries --compact` and `reisewarnungen --compact countries`
-are equivalent.
+are equivalent. Each option that takes a value may be given once: a second
+`--timeout`, `--base-url`, `-o`, … is a usage error (`--timeout may be given only
+once.`, exit `1`, no request), never "the last one wins". Flags (`--compact`,
+`--force`, `--warned-only`) may repeat.
 
 ## Global options
 

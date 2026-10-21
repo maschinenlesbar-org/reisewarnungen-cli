@@ -10,7 +10,7 @@ import { defaultIO } from "./io.js";
 import { ReisewarnungenClient } from "@maschinenlesbar.org/reisewarnungen-client/internal/client";
 import { MAX_TIMEOUT_MS } from "@maschinenlesbar.org/reisewarnungen-client/internal/http";
 import { MAX_RETRIES, MAX_RETRY_AFTER_MS } from "@maschinenlesbar.org/reisewarnungen-client/internal/engine";
-import { parseBoundedInt, parseIntArg, parseOutputPath, parseBaseUrl, parseHeaderValue } from "./shared.js";
+import { forbidRepeatedOptions, parseBoundedInt, parseIntArg, parseOutputPath, parseBaseUrl, parseHeaderValue } from "./shared.js";
 import { registerWarningCommands } from "./commands/warnings.js";
 import { DEFAULT_LOG_FORMAT, logFormatProblem } from "./log.js";
 
@@ -84,6 +84,7 @@ export function buildProgram(deps: CliDeps = defaultDeps): Command {
     .showHelpAfterError();
 
   registerWarningCommands(program, deps);
+  forbidRepeatedOptions(program);
 
   return program;
 }

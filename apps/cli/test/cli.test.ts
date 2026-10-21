@@ -481,3 +481,38 @@ test("a malformed answer is an ERROR record of reisewarnungen.api, exit 1 (L9)",
   assert.equal(await run(["get", "5"], other.deps), 1);
   assert.match(untimed(other.err.join("\n")), /^ERROR \[reisewarnungen\.api\] Unexpected response shape/);
 });
+
+test("a single-value option given twice is a usage error, never 'the last one wins'", async () => {
+  // commander keeps the last value silently: `--timeout 1000 --timeout 0` switched the timeout off.
+  for (const argv of [
+    ["--timeout", "1000", "--timeout", "0", "countries"],
+    ["--timeout=1000", "countries", "--timeout", "1000"],
+    ["--base-url", "https://www.auswaertiges-amt.de", "--base-url", "https://www.auswaertiges-amt.de", "countries"],
+    ["-o", "-", "--output", "-", "countries"],
+    ["--log-format", "jsonl", "--log-format", "text", "countries"],
+    ["--user-agent", "a", "get", "100", "--user-agent", "b"],
+    ["--max-retries", "1", "--max-retries", "2", "list"],
+  ]) {
+    const cli = makeCli(() => jsonResponse(listBody));
+    assert.equal(await run(argv, cli.deps), 1, argv.join(" "));
+    assert.equal(cli.mt.calls.length, 0, `${argv.join(" ")} sent a request`);
+    assert.match(cli.err.join("\n"), /may be given only once/, argv.join(" "));
+  }
+  // Flags may repeat.
+  const flags = makeCli(() => jsonResponse(listBody));
+  assert.equal(await run(["--compact", "--compact", "countries", "--warned-only", "--warned-only"], flags.deps), 0);
+});
+
+test("an option with an array default is repeatable: each value adds to the list", async () => {
+  const { buildProgram } = await import("../src/cli/program.js");
+  const { forbidRepeatedOptions } = await import("../src/cli/shared.js");
+  const program = buildProgram(makeCli(() => jsonResponse(listBody)).deps);
+  const seen: string[][] = [];
+  program
+    .command("collect")
+    .option("--tag <t>", "repeatable", (value: string, previous: string[]) => [...previous, value], [] as string[])
+    .action((opts: { tag: string[] }) => void seen.push(opts.tag));
+  forbidRepeatedOptions(program);
+  await program.parseAsync(["collect", "--tag", "a", "--tag", "b"], { from: "user" });
+  assert.deepEqual(seen, [["a", "b"]]);
+});

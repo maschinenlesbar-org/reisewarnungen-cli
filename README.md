@@ -178,7 +178,8 @@ reisewarnungen --compact countries --warned-only | jq -c '.[]'
 
 `--compact` (and every global option) works **before or after** the command —
 both `reisewarnungen --compact countries` and `reisewarnungen countries --compact`
-do the same thing.
+do the same thing. An option that takes a value may be given only once: a second
+`--timeout` is a usage error, never "the last one wins".
 
 **Exit codes** make the CLI easy to use in scripts:
 
