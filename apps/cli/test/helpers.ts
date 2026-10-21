@@ -74,3 +74,22 @@ export async function parity(
   }
   return { cli, lib };
 }
+
+/**
+ * `parity` in the shape the conformance tests P24/P25 describe: the library's error as
+ * `{ name, message }` (its class name and message) instead of the thrown value.
+ */
+export async function kitParity(
+  argv: string[],
+  call: (transport: Transport) => unknown,
+  responder?: (req: HttpRequest) => HttpResponse | Promise<HttpResponse>,
+): Promise<{
+  cli: CliOutcome;
+  lib: { ok: boolean; value?: unknown; error?: { name: string; message: string }; requests: HttpRequest[] };
+}> {
+  const { cli, lib } = await parity(argv, call, responder);
+  if (lib.ok) return { cli, lib };
+  const e = lib.error;
+  const error = e instanceof Error ? { name: e.constructor.name, message: e.message } : { name: typeof e, message: String(e) };
+  return { cli, lib: { ok: false, error, requests: lib.requests } };
+}
