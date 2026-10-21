@@ -86,6 +86,8 @@ eines `CountryEntry` und das Pflichtargument von `get <contentId>`. Er ist *kein
 ISO-Ländercode. Alles außer ASCII-Ziffern (leer, `226768x`, `..`) wird vor jeder Anfrage
 abgelehnt – von der CLI wie vom `get()` der Bibliothek –, statt an die Quelle gesendet zu
 werden, die eine führende Zahl großzügig liest oder `..` zu einem anderen Pfad auflöst.
+Content-IDs sind Zahlen, daher fallen führende Nullen weg (`0199124` wird als `199124`
+gesendet): Auf eine führende Null antwortet die API mit „nicht gefunden".
 
 **countryCode.** Der zweibuchstabige Ländercode nach ISO 3166-1 alpha-2, z. B. `TH`,
 `JO`. Kosovo, das keinen offiziellen ISO-Code hat, trägt `XK`.

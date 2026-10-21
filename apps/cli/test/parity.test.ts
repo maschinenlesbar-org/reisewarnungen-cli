@@ -210,3 +210,19 @@ for (const baseUrl of ["https://h.example//", "https://h.example/pre"]) {
     assert.deepEqual(cli.requests, lib.requests);
   });
 }
+
+test("parity: get and advice send a content id with leading zeros as its number, on both sides (bug 1)", async () => {
+  const body = { response: { "199124": { ...F, countryName: "Polen", content: "<p>Von Reisen wird abgeraten.</p>" } } };
+  for (const command of ["get", "advice"] as const) {
+    const { cli, lib } = await parity(
+      ["--compact", command, "0199124"],
+      (transport) => new ReisewarnungenClient({ transport })[command]("0199124"),
+      () => jsonResponse(body),
+    );
+    assert.equal(cli.code, 0, cli.err);
+    assert.ok(lib.ok);
+    assert.deepEqual(cli.requests.map((r) => new URL(r.url).pathname), ["/opendata/travelwarning/199124"]);
+    assert.deepEqual(lib.requests.map((r) => r.url), cli.requests.map((r) => r.url));
+    assert.equal((JSON.parse(cli.out) as { countryName: string }).countryName, "Polen");
+  }
+});

@@ -87,7 +87,8 @@ entry is stored in the `response` map (e.g. `226768`). It is the `id` field on a
 country code. Anything but ASCII digits (empty, `226768x`, `..`) is rejected
 before any request — by the CLI and by the library's `get()` alike — rather than
 sent upstream, which would read a leading integer leniently or resolve `..` to
-another path.
+another path. Content ids are numbers, so leading zeros are dropped (`0199124` is
+sent as `199124`): the API answers a leading zero with "not found".
 
 **countryCode.** The ISO 3166-1 alpha-2 (two-letter) country code, e.g. `TH`,
 `JO`. Kosovo, which has no official ISO code, uses `XK`.

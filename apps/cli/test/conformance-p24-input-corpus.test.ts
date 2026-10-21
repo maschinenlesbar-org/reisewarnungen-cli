@@ -42,8 +42,8 @@ const idInputs: Input[] = [
   { name: "get", argv: (v) => ["get", v], lib: (c, v) => c.get(v), sent: (u) => decodeURIComponent(u.pathname.slice(u.pathname.lastIndexOf("/") + 1)) },
   { name: "advice", argv: (v) => ["advice", v], lib: (c, v) => c.advice(v), sent: (u) => decodeURIComponent(u.pathname.slice(u.pathname.lastIndexOf("/") + 1)) },
 ];
-/** The id as the repo sends it: as typed (only ASCII digits pass assertContentId; nothing is trimmed). */
-const canonicalId = (value: string): string => value;
+/** The id as the repo sends it: only ASCII digits pass assertContentId, sent as the number (no leading zeros). */
+const canonicalId = (value: string): string => value.replace(/^0+(?=\d)/, "");
 /** A valid answer to any of these requests (a detail keyed by the id it was asked for). */
 const respond = (req: HttpRequest): HttpResponse => {
   const id = decodeURIComponent(new URL(req.url).pathname.split("/").pop() ?? "");

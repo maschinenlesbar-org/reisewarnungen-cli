@@ -77,6 +77,20 @@ test("get builds the per-id path and unwraps the matching entry", async () => {
   assert.equal(warning.content, "<p>hi</p>");
 });
 
+test("a content id with leading zeros is sent in its canonical form (bug 1)", async () => {
+  // Live, `get 0199124` was a 404 (exit 4, "not found") while 199124 is Polen: content ids are
+  // numbers, so the number is sent without its leading zeros, and its entry is the answer.
+  for (const [typed, sent] of [["0199124", "199124"], ["000226768", "226768"], ["0", "0"], ["000", "0"], ["199124", "199124"]] as const) {
+    const mt = makeMockTransport(() => jsonResponse({ response: { [sent]: { ...F, countryName: "Polen", content: "<p>Reisen wird abgeraten.</p>" } } }));
+    const client = clientWith(mt);
+    assert.equal((await client.get(typed)).countryName, "Polen", typed);
+    assert.equal(new URL(mt.last().url).pathname, `/opendata/travelwarning/${sent}`, typed);
+    assert.equal((await client.advice(typed)).id, sent, typed);
+  }
+  const notFound = makeMockTransport(() => jsonResponse({ response: { lastModified: 1 } }));
+  await assert.rejects(clientWith(notFound).get("0042"), (err: unknown) => err instanceof ReiseNotFoundError && err.contentId === "42");
+});
+
 test("get never returns a sole entry keyed by another id (a different country)", async () => {
   const mt = makeMockTransport(() =>
     jsonResponse({

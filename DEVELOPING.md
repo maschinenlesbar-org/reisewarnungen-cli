@@ -59,7 +59,9 @@ try {
 ```
 
 `get(contentId)` rejects a `contentId` that is not a string of ASCII digits
-(`ReiseValidationError`, no request; the check is exported as `assertContentId`) and resolves to the entry keyed by `contentId` and **never** to a
+(`ReiseValidationError`, no request; the check is exported as `assertContentId`), sends it as
+the number it is, without leading zeros (`canonicalContentId`: `0199124` is `199124`, which the
+API answered with a 404 when sent as typed), and resolves to the entry keyed by that id and **never** to a
 different country: an envelope with no country entry throws `ReiseNotFoundError`,
 one whose entries sit under other keys throws `ReiseParseError` rather than guessing.
 

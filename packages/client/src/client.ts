@@ -50,6 +50,17 @@ export function assertContentId(contentId: string): void {
 }
 
 /**
+ * A content id as it is sent and looked up: checked by {@link assertContentId}, then as the
+ * number it is, without leading zeros (`"0199124"` is `"199124"`, `"000"` is `"0"`). Content ids
+ * are numbers: the API answered `0199124` with a 404, so an id copied with a leading zero read as
+ * "not found" for a country that exists.
+ */
+export function canonicalContentId(contentId: string): string {
+  assertContentId(contentId);
+  return contentId.replace(/^0+(?=\d)/, "");
+}
+
+/**
  * Whether a country counts as "warned": true when **any** of the four warning flags
  * (`warning`, `partialWarning`, `situationWarning`, `situationPartWarning`) is
  * `true`. Only a real boolean `true` counts; the client refuses an answer whose flags
@@ -273,7 +284,8 @@ export class ReisewarnungenClient {
    * an empty success. Only the entry keyed by `contentId` is ever returned: an
    * envelope whose country entries sit under other keys is a wrong answer
    * (ReiseParseError), never read as the requested country. A `contentId` that is
-   * not all ASCII digits is rejected with a ReiseValidationError before any request.
+   * not all ASCII digits is rejected with a ReiseValidationError before any request; one with
+   * leading zeros is sent without them ({@link canonicalContentId}).
    */
   /**
    * One country's warning flags plus every sentence of its advisory that warns or advises
@@ -283,6 +295,7 @@ export class ReisewarnungenClient {
    * without `content` is a ReiseParseError, never an advisory without advice.
    */
   async advice(contentId: string): Promise<TravelAdvice> {
+    contentId = canonicalContentId(contentId);
     const entry = await this.get(contentId);
     if (typeof entry.content !== "string" || entry.content.trim() === "") {
       throw new ReiseParseError(
@@ -307,7 +320,7 @@ export class ReisewarnungenClient {
   }
 
   async get(contentId: string): Promise<TravelWarning> {
-    assertContentId(contentId);
+    contentId = canonicalContentId(contentId);
     const path = `${PATH}/${enc(contentId)}`;
     // Where the messages say the answer came from: the path, its id cut (idForMessage).
     const where = `${PATH}/${idForMessage(enc(contentId))}`;
