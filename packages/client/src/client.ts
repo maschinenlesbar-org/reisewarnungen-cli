@@ -85,7 +85,8 @@ export interface TravelAdvice {
   /**
    * Every sentence of the advisory that warns or advises against something (adviceSentences):
    * „abgeraten", „rät … ab", „gewarnt", „Reisewarnung", „(ver)meiden"/„gemieden", „verzichten",
-   * „unterlassen", „aufgefordert", „nicht … reisen/aufsuchen". Those with `travel: true` may
+   * „unterlassen", „aufgefordert", „nicht … reisen/aufsuchen", „sollten … ausreisen/verlassen",
+   * „sehen … von … ab"/„absehen". Those with `travel: true` may
    * advise against travel to the country or a region; with all four flags false, only an
    * advisory with no such sentence is "advice only".
    */

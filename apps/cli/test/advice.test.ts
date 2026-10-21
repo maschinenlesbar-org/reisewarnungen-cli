@@ -88,6 +88,30 @@ test("advice: every documented phrasing is caught", () => {
   assert.deepEqual(adviceSentences("<h2>Sicherheit</h2><p>Die Kriminalitätsrate ist niedrig. Reisen Sie entspannt.</p>"), []);
 });
 
+test("advice: the advice to leave („sollten … ausreisen“) and „sehen … ab“ are caught (bug 6)", () => {
+  // Israel, live on 2026-10-21 (all four flags false): said four times, printed by none.
+  const israel = "Deutsche Staatsangehörige, die sich derzeit im Gazastreifen oder im Westjordanland aufhalten, sollten – sofern möglich - ausreisen.";
+  assert.deepEqual(adviceSentences(`<p>${israel}</p>`).map((s) => s.text), [israel]);
+  for (const sentence of [
+    "Deutsche sollten das Land verlassen.",
+    "Sehen Sie von Reisen in die Grenzregion ab.",
+    "Sehen Sie vom Baden und Schwimmen in Binnengewässern ab.",
+    "Sehen Sie vom Baden in Süßwassergewässern konsequent ab, solange die Warnung gilt.",
+    "Von Reisen in den Norden ist abzusehen.",
+    "Reisende sollten von Fahrten in die Region absehen.",
+  ]) {
+    assert.equal(adviceSentences(`<p>${sentence}</p>`).length, 1, sentence);
+  }
+  // „ab" as a preposition, „abgesehen von", „nicht abzusehen" (not foreseeable) are no advice.
+  for (const sentence of [
+    "Sehen Sie ab 18 Uhr die Lichter der Stadt.",
+    "Abgesehen von den Grenzgebieten ist die Lage ruhig.",
+    "Ein Ende der Kämpfe ist nicht abzusehen.",
+  ]) {
+    assert.deepEqual(adviceSentences(`<p>${sentence}</p>`), [], sentence);
+  }
+});
+
 test("advice: entities are decoded, soft hyphens dropped, odd input gives []", () => {
   assert.deepEqual(travel("<p>Von Reisen in die Grenz&shy;region wird &quot;dringend&quot; abgeraten.</p>"), [
     'Von Reisen in die Grenzregion wird "dringend" abgeraten.',
@@ -100,7 +124,7 @@ test("advice: a long sentence without a full stop is scanned in linear time, not
   // „nicht … reisen" and „rät … ab" have a gap between two words; a sentence of 192 KB with
   // 32 000 „nicht" and no „reisen" took 9 s (each „nicht" rescanned the rest of the sentence),
   // and --timeout did not bound it. 400 KB took over half a minute; it now takes milliseconds.
-  for (const word of ["nicht ", "rät ", "Rät "]) {
+  for (const word of ["nicht ", "rät ", "Rät ", "sollten ", "sehen von ", "von "]) {
     const html = `<p>${word.repeat(Math.ceil(400_000 / word.length))}</p>`;
     const started = performance.now();
     assert.deepEqual(adviceSentences(html), []);

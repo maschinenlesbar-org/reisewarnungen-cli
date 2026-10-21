@@ -124,7 +124,9 @@ Teil des Landes beschränkt.
 **Abraten ohne Flag.** Unterhalb der formalen Stufen rät der Text des Hinweises von
 Reisen ab – ins ganze Land oder in Regionen –, ohne dass ein Flag gesetzt ist: „Von
 Reisen … wird (dringend) abgeraten", „Das Auswärtige Amt rät … ab", „Vermeiden Sie …
-Reisen", „Meiden Sie möglichst Reisen …", „… sollte … gemieden werden". Türkei, Angola,
+Reisen", „Meiden Sie möglichst Reisen …", „… sollte … gemieden werden", „Sehen Sie von
+Reisen … ab"; dazu der Rat, eine Region zu verlassen: „… sollten – sofern möglich –
+ausreisen" (Israel für Gazastreifen und Westjordanland, 21.10.2026). Türkei, Angola,
 Bangladesch, Jordanien und Mexiko hatten am 06.10.2026 alle vier Flags `false` und
 solche Sätze im Text. „Kein Flag" heißt also „keine formale Warnung", nicht
 „unbedenklich". Der Befehl `advice` (Bibliothek: `client.advice`, `adviceSentences`)

@@ -117,7 +117,9 @@ advice-against-travel sentences; the CLI's `advice`).
 `effective`/`lastModified` and `sentences` from the exported `adviceSentences(html)`
 ([`advice.ts`](packages/client/src/advice.ts)): every sentence that matches one of
 `ADVICE_PATTERNS` (abraten, warnen, Reisewarnung, (ver)meiden/gemieden/vermieden,
-verzichten, unterlassen/unterbleiben, aufgefordert, nicht … reisen/aufsuchen/besuchen;
+verzichten, unterlassen/unterbleiben, aufgefordert, nicht … reisen/aufsuchen/besuchen,
+sollten … ausreisen/verlassen, sehen … von … ab (the „ab" at the end of a clause), von …
+absehen/abzusehen;
 case-insensitive, Unicode word boundaries), with its heading path (`section`) and
 `travel` (`TRAVEL_PATTERN`: Reise, Aufenthalt, Region, Gebiet, Provinz, Grenze, Landesteil,
 …). The HTML is split at block elements (paragraphs, list items, headings, accordion

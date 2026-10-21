@@ -32,8 +32,11 @@ export interface AdviceSentence {
  * The phrasings that mark a warning or advice against something, matched case-insensitively
  * per sentence: the passive and active „abraten" forms, „warnen", the formal terms, every
  * form of „meiden"/„vermeiden" (Meiden Sie, vermeiden Sie, gemieden, vermieden), „verzichten",
- * „unterlassen"/„unterbleiben", „aufgefordert" (… das Land zu verlassen), and „nicht" with
- * „reisen"/„aufsuchen"/„besuchen". Exported so the documentation and tests name the same list.
+ * „unterlassen"/„unterbleiben", „aufgefordert" (… das Land zu verlassen), „nicht" with
+ * „reisen"/„aufsuchen"/„besuchen", the advice to leave („sollten … ausreisen", „sollten … das Land
+ * verlassen") and „absehen" („Sehen Sie von Reisen … ab", „von Reisen … ist abzusehen"; „ab" only
+ * at the end of a clause, so „ab 18 Uhr" is no advice). Exported so the documentation and tests
+ * name the same list.
  */
 export const ADVICE_PATTERNS: readonly RegExp[] = [
   /abgeraten|abzuraten/iu,
@@ -46,6 +49,9 @@ export const ADVICE_PATTERNS: readonly RegExp[] = [
   /unterlassen|unterbleiben/iu,
   /aufgefordert/iu,
   words("nicht", "reisen|bereisen|bereist|aufsuchen|aufgesucht|besuchen|besucht"),
+  words("sollten|sollte", "ausreisen|verlassen"),
+  words("sehen|sieht", "von|vom", "ab(?=\\s*(?:[.,;:!?)]|$))"),
+  words("von|vom", "absehen|abzusehen"),
 ];
 
 /** A whole-word alternation (`\b` is ASCII-only in JavaScript, so `\brät\b` never matches before a space). */

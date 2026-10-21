@@ -92,7 +92,8 @@ reisewarnungen advice 201962 --compact | jq '.sentences[] | select(.travel)'
 `advice` prints the country's flags, `effective`/`lastModified` and `sentences`:
 every sentence of the advisory that warns or advises against something
 („abgeraten", „rät … ab", „gewarnt", „Reisewarnung", „meiden"/„vermeiden"/„gemieden",
-„verzichten", „unterlassen", „aufgefordert", „nicht … reisen/aufsuchen"), as whole
+„verzichten", „unterlassen", „aufgefordert", „nicht … reisen/aufsuchen", „sollten …
+ausreisen/verlassen", „sehen … von … ab"/„absehen"), as whole
 sentences — not cut at „z. B." or „o.g.", and a sentence that introduces a list
 („… wird abgeraten:") carries the list's items. Each has its `section` (the
 headings above it) and `travel: true` when it also mentions travel, a stay or a

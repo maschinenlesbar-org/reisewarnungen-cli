@@ -130,7 +130,8 @@ reisewarnungen advice 201962 --compact \
 `advice` prints the flags, `effective`/`lastModified` and `sentences`: **every** sentence
 of the advisory that warns or advises against something — „abgeraten", „rät … ab",
 „gewarnt", „Reisewarnung", „meiden"/„vermeiden"/„gemieden"/„vermieden", „verzichten",
-„unterlassen"/„unterbleiben", „aufgefordert", „nicht … reisen/aufsuchen/besuchen" — as
+„unterlassen"/„unterbleiben", „aufgefordert", „nicht … reisen/aufsuchen/besuchen", the
+advice to leave („sollten … ausreisen/verlassen") and „Sehen Sie von … ab"/„absehen" — as
 whole sentences, with the `section` (headings) they stand under. A sentence that
 introduces a list („Von Reisen in folgende Regionen wird dringend abgeraten:") carries
 the list's items. `travel: true` marks the sentences that also mention travel, a stay or
