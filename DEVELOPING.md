@@ -402,7 +402,11 @@ and lone surrogates written as JSON escapes (`\ud800`) become U+FFFD (the result
 well-formed, so `jq` reads it), and the engine option `onWarning(message)` gets one message
 naming the count and the request (`GET <url>: 2 characters of the answer were not valid text
 (invalid bytes or a lone surrogate) and replaced with U+FFFD.`); the CLI's `action()` logs it as
-a `WARN` record of `reisewarnungen.api`. One bad character never sinks a whole answer.
+a `WARN` record of `reisewarnungen.api`. One bad character never sinks a whole answer. A body
+too large to become one string (512 MB and more, possible only with `maxResponseBytes: 0` or
+`--max-response-bytes 0`) is a `ReiseParseError`, `GET <url>: the answer is too large to read as
+text (N bytes; the longest string is 536870888 characters).`, not a plain `Error` ("Unexpected
+error" in the CLI); an error status with such a body keeps its `ReiseApiError`, without the body.
 Each retry is announced: the engine option `onRetry(event: RetryEvent)` (exported type:
 `{ retry` (1-based), `maxRetries`, `delayMs`, `status?` (absent for a reset), `url` (userinfo
 redacted) `}`) is called once per retry right before the sleep, never when there is none, and
