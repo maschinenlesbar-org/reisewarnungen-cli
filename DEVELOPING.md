@@ -511,7 +511,9 @@ everything that drives the CLI is in `apps/cli/test/`.
   fast path, unless the answer holds a string or key of 64 Mi characters or more: on Node 26
   the fast path aborts the process on a ~250 MB string, but only it prints very deep nesting),
   and `escapeControlChars`: DEL, C1 and the bidi controls (`isBidiControl`) printed as
-  `\uXXXX`, on stdout and in the `-o` file.
+  `\uXXXX`, on stdout and in the `-o` file, built in 64 Ki chunks (the same text as one pass);
+  an answer that escaped would pass V8's longest string is an ERROR record of
+  `reisewarnungen.output` ("too large to print"), measured before anything is built.
 - **`cli.test.ts`** — end-to-end command parsing, per-flag `--warned-only` filtering, pretty vs `--compact` output, `-o -`, and exit codes (network/parse → 1, not-found → 4) — mocked client.
 - **`io.test.ts`** — `nodeFiles` (a directory, an existing file), and `handleOutputErrors` and
   `stderrAfterStdout` on fake streams: the pipe cases, a stdout write error as an ERROR
@@ -519,7 +521,11 @@ everything that drives the CLI is in `apps/cli/test/`.
 - **`log.test.ts`** — the record helpers of `apps/cli/src/cli/log.ts` on their own
   (`escapeForRecord`, `formatLogRecord`, `installWarningLog`); the CLI-level checks are P23's.
 - **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.
-- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL, P23 the log on stderr — its body takes the usage-error exit code from the adapter's `USAGE_EXIT`, `1` here; P24 the input corpus — every content id, on `get` and `advice`, is sent as typed or refused on both sides, never empty, a dot segment or with a slash; this API has no text filter, so its text list is empty; P25 the response corpus — a number a double can't carry exactly, or an empty answer, is an ERROR of `reisewarnungen.api` and exit 1, never a changed value; P26 `-o` integrity — spawns the built bin under `ulimit -f`: a write cut short leaves the old file and no temporary file, an existing file without `--force` is refused before any request). Only their `adapter` block is repo-specific; `kitParity` in `apps/cli/test/helpers.ts` gives P24/P25 the library's error as `{ name, message }`.
+- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL, P23 the log on stderr — its body takes the usage-error exit code from the adapter's `USAGE_EXIT`, `1` here; P24 the input corpus — every content id, on `get` and `advice`, is sent as typed or refused on both sides, never empty, a dot segment or with a slash; this API has no text filter, so its text list is empty; P25 the response corpus — a number a double can't carry exactly, or an empty answer, is an ERROR of `reisewarnungen.api` and exit 1, never a changed value; P26 `-o` integrity — spawns the built bin under `ulimit -f`: a write cut short leaves the old file and no temporary file, an existing file without `--force` is refused before any request; P27 big and odd answers —
+spawns the built bin under a small heap: a large flat answer prints with `--compact`, an answer
+full of DEL characters prints escaped or, past V8's longest string, is an ERROR record of
+`reisewarnungen.output`, and a lone surrogate or invalid bytes become U+FFFD with a WARN record of
+`reisewarnungen.api`). Only their `adapter` block is repo-specific; `kitParity` in `apps/cli/test/helpers.ts` gives P24/P25 the library's error as `{ name, message }`.
 
 ## Continuous integration
 
