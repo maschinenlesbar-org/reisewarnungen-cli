@@ -78,6 +78,16 @@ export function parseOutputPath(value: string): string {
   if (value.trim() === "") {
     throw new InvalidArgumentError("Output path must not be empty.");
   }
+  // Any other dash-leading value is the next option, taken as the file name: commander hands a
+  // value option the next argument whatever it looks like, so `countries -o --compact` wrote a
+  // pretty-printed file named "--compact" with exit 0. It hands the same string for `-o -x` and
+  // `--output=-x`, so a file whose name starts with a dash is written as `./-x`.
+  if (value !== "-" && value.startsWith("-")) {
+    throw new InvalidArgumentError(
+      `looks like a missing value — ${JSON.stringify(value)} is the next option, consumed because ` +
+        "this one was left without a value. For a file whose name starts with a dash, write ./-name.",
+    );
+  }
   return value;
 }
 

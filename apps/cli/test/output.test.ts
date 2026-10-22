@@ -83,6 +83,9 @@ test("a refused -o target is a usage error before any request", async () => {
     const cases: Array<[string[], string]> = [
       [["-o", "", "countries"], "Output path must not be empty."],
       [["-o", "  ", "countries"], "Output path must not be empty."],
+      // The next option, taken as the file name (T13): `-o --compact` wrote a file "--compact".
+      [["countries", "-o", "--compact"], 'looks like a missing value — "--compact" is the next option'],
+      [["--output=-v", "countries"], "For a file whose name starts with a dash, write ./-name."],
       [["--force", "countries"], "--force needs --output (it only allows overwriting the -o file)."],
       [["-o", existing, "countries"], `Refusing to overwrite existing file "${existing}"; pass --force to overwrite.`],
       [["-o", dangling, "countries"], `Refusing to overwrite existing file "${dangling}"; pass --force to overwrite.`],
