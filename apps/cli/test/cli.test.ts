@@ -539,3 +539,24 @@ test("a lone surrogate or invalid bytes in an answer are printed as U+FFFD with 
     "WARN  [reisewarnungen.api] GET https://www.auswaertiges-amt.de/opendata/travelwarning/100: 2 characters of the answer were not valid text (invalid bytes or a lone surrogate) and replaced with U+FFFD.",
   );
 });
+
+test("a URL with a password anywhere inside an argument is redacted in every message (T15)", async () => {
+  // redactionFor looked for credentials only in an argument that starts with a scheme, so a
+  // padded, dash-led or mid-text URL reached the messages that quote the value raw.
+  const url = "https://bob:hunter2pw@h.example/x";
+  const cases: string[][] = [
+    ["get", ` ${url}`], // the refusal of the content id quotes it
+    ["advice", `1 ${url}`],
+    ["--timeout", `x ${url}`, "list"], // commander's echo of a rejected value
+    ["list", "-o", `-${url}`], // the -o refusal (T13) quotes it
+    ["--log-format", "jsonl", "get", `\t${url}`],
+  ];
+  for (const argv of cases) {
+    const cli = makeCli(() => jsonResponse(listBody));
+    assert.notEqual(await run(argv, cli.deps), 0, argv.join(" "));
+    const err = cli.err.join("\n");
+    assert.ok(err.length > 0, argv.join(" "));
+    assert.ok(!err.includes("hunter2pw"), `${argv.join(" ")}: ${err}`);
+    assert.ok(err.includes("***"), `${argv.join(" ")}: ${err}`);
+  }
+});

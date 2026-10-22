@@ -15,6 +15,7 @@ import {
   ReiseValidationError,
   credentialsIn,
   echoedCredentialForms,
+  quoteValue,
   redactCredentials,
   redactSecrets,
 } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
@@ -78,8 +79,9 @@ export interface Redaction {
  * (`argument '<url>' is invalid`), the CLI's own messages name unknown commands and option
  * values, and library errors name the request URL: whatever path a credential takes to
  * stdout or stderr, the exact userinfo of every URL (as `credentialsIn` finds it, plus its
- * JSON-quoted form) is replaced by `***`. Only a value with a scheme is a URL (a bare
- * `a:b@c` is an `-o` file name or a User-Agent as often as a credential), except as the
+ * JSON-quoted and `quoteValue` forms) is replaced by `***`. A URL counts wherever it starts
+ * inside an argument (`urlsWithin`: padded, after a dash, mid-text), but only with a scheme (a
+ * bare `a:b@c` is an `-o` file name or a User-Agent as often as a credential), except as the
  * `--base-url` value. A pattern alone can't delimit a password with spaces,
  * quotes, `#`, `?` or `/`; the exact strings can (`redactUserinfo` is the backstop
  * behind them). Without credentials the text passes through unchanged. Files written with
@@ -96,10 +98,12 @@ export function redactionFor(argv: readonly string[]): Redaction {
   const passwords = new Set<string>();
   // A base URL typed without its scheme is read as if it had one.
   const baseUrls = flagValues(argv, BASE_URL_FLAGS).map((value) => (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value) ? value : `http://${value}`));
-  for (const source of [...values, ...baseUrls]) {
+  for (const source of [...values.flatMap(urlsWithin), ...baseUrls]) {
     for (const secret of credentialsIn(source)) {
       secrets.add(secret);
       secrets.add(JSON.stringify(secret).slice(1, -1));
+      // As a refusal quotes a value (quoteValue: format characters and C1 escaped too).
+      secrets.add(quoteValue(secret).replace(/^"|"…?$/g, ""));
       // What a server echoes back: the Basic value and the decoded user:password on
       // stdout and stderr, the password alone (it may well occur in the data) on stderr.
       const [basic, pair, password] = echoedCredentialForms(secret);
@@ -115,6 +119,32 @@ export function redactionFor(argv: readonly string[]): Redaction {
   const passwordList = [...passwords].sort((a, b) => b.length - a.length);
   const out = (text: string): string => redactSecrets(redactUserinfo(redactCredentials(text, list)), echoedList);
   return { out, err: (text) => redactSecrets(out(text), passwordList) };
+}
+
+/** The most URLs `urlsWithin` reads inside one argument, after the one it may start with. */
+const MAX_URLS_WITHIN = 64;
+
+/** A character a URL scheme may hold after its first letter. */
+const SCHEME_CHAR = /[A-Za-z0-9+.-]/;
+
+/**
+ * `value` and the rest of it from each place a URL starts inside it (`<scheme>://`, the scheme
+ * starting with a letter), for `credentialsIn`, which reads a URL at the start of its input only.
+ * A content id is sent trimmed and a refusal quotes the value whole, so a padded
+ * `" https://user:pw@host"`, one after a dash (`-o -https://…`) or inside a phrase reached the
+ * messages that quote it with its password. Each `://` is found with indexOf and its scheme by
+ * walking back, never by a pattern retried at every position; at most MAX_URLS_WITHIN are read
+ * from one argument, since each is parsed whole (`a://b@` 160 000 times would take minutes).
+ */
+function urlsWithin(value: string): string[] {
+  const found = [value];
+  for (let at = value.indexOf("://"); at !== -1 && found.length <= MAX_URLS_WITHIN; at = value.indexOf("://", at + 3)) {
+    let start = at;
+    while (start > 0 && SCHEME_CHAR.test(value[start - 1] as string)) start--;
+    while (start < at && !/[A-Za-z]/.test(value[start] as string)) start++;
+    if (start > 0 && start < at) found.push(value.slice(start));
+  }
+  return found;
 }
 
 /**

@@ -159,10 +159,11 @@ no `--api-key` flag, no env var, and nothing to configure.
 that password: `run()` wraps its output (`withRedactedOutput`) so every line — commander's
 usage errors that echo a rejected value, its own messages, library errors naming the
 request URL — has the exact userinfo of every URL argument replaced by `***`, whatever
-characters the password holds (`#`, `?`, `/`, spaces, quotes). Only a value that starts
-with a scheme counts (a bare `a:b@c` is an `-o` file name or a User-Agent as often as a
-credential), except as the `--base-url` value, where a `user:password@host` typed without
-its scheme is still a credential. The log replaces it in
+characters the password holds (`#`, `?`, `/`, spaces, quotes). A URL counts wherever it
+starts inside an argument — padded (`get " https://u:pw@h"`), after a dash (`-o -https://…`)
+or mid-text — but only with a scheme (a bare `a:b@c` is an `-o` file name or a User-Agent as
+often as a credential), except as the `--base-url` value, where a `user:password@host` typed
+without its scheme is still a credential. The log replaces it in
 each record's *message* (`redactionFor`), before the record is cut and escaped, and writes
 the record to the raw stderr: the frame (time, level, topic) is never touched, and a
 password with DEL, C1 or bidi characters is matched in its raw form. The library exports the
