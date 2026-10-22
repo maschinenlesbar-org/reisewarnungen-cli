@@ -331,7 +331,10 @@ number (`12345678901234567890`, also as `…890.0` or `9007199254740993e0`, and
 a subnormal one (below 2.2250738585072014e-308) that does not print as written (`3e-324`, which
 became `5e-324`; `5e-324` itself passes).
 Below 2^53 a decimal fraction keeps a double's precision, as JSON means it, and a double a
-server printed in its shortest form (`1E23`) passes. The API's numbers are Unix-second
+server printed in its shortest form (`1E23`) passes. The engine option `bigIntegerKeys` (a set
+of member names) declares members whose numbers may pass 2^53: such a value is delivered as its
+exact literal, as a JSON string, whatever its size (one linear scan, `scanNumbers`, before
+`JSON.parse`); this client declares none. The API's numbers are Unix-second
 timestamps, far below 2^53.
 
 **CliDeps / CliIO.** The dependency-injection seam for the CLI
