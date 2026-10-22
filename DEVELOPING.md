@@ -504,8 +504,10 @@ everything that drives the CLI is in `apps/cli/test/`.
 - **`validate.test.ts`** — `assertValid`, the `ReiseValidationError` exit-code mapping and the `parity()` helper.
 - **`output.test.ts`** — `-o` on real files in a temp dir (refused targets before any
   request, `--force` keeping the mode and writing through a symlink, a file that appears
-  during the request, no temporary file left), and rendering: an answer nested too deeply to pretty-print (a clean
-  ERROR that suggests `--compact`), and which `JSON.stringify` path `--compact` takes (V8's
+  during the request, no temporary file left), and rendering: an answer nested too deeply or
+  too large to print (a clean ERROR naming the cause, which suggests `--compact` only where
+  `--compact` prints this very answer: probed, since a `list` answer's integer-like keys take
+  `JSON.stringify` off its iterative path), and which `JSON.stringify` path `--compact` takes (V8's
   fast path, unless the answer holds a string or key of 64 Mi characters or more: on Node 26
   the fast path aborts the process on a ~250 MB string, but only it prints very deep nesting),
   and `escapeControlChars`: DEL, C1 and the bidi controls (`isBidiControl`) printed as

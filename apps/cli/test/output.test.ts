@@ -153,17 +153,53 @@ test("a write the file system refuses is an ERROR of the output area naming the 
   });
 });
 
-test("pretty-printing an answer nested too deeply is a clean error that suggests --compact", async () => {
-  // A hostile or broken answer: JSON.parse reads it, the pretty printer's recursion can't.
+test("an answer nested too deeply is a clean error; it suggests --compact only where --compact prints it (D7, bug 3)", async () => {
+  // A hostile or broken answer: JSON.parse reads it, the pretty printer's recursion can't. Whether
+  // the compact printer can depends on the Node version (iterative only from Node 26) and on the
+  // answer: every `list` answer has integer-like keys ("226768"), which take JSON.stringify off its
+  // iterative path, so on `list` --compact failed at the same depth and the hint never helped.
+  // Probed here, never assumed.
   const depth = 200_000;
-  const cli = makeCli(() => ({
-    status: 200,
-    headers: { "content-type": "application/json" },
-    body: Buffer.from(`{"response":{"100":{"warning":true,"partialWarning":false,"x":${"[".repeat(depth)}${"]".repeat(depth)}}}}`),
-  }));
-  assert.equal(await run(["get", "100"], cli.deps), 1);
-  assert.deepEqual(cli.out, []);
-  assert.deepEqual(cli.err, ["ERROR [reisewarnungen.output] The answer is nested too deeply to pretty-print; try --compact."]);
+  const deep = `${"[".repeat(depth)}${"]".repeat(depth)}`;
+  // What each command prints: get the entry, list the whole response.
+  for (const [argv, body, printed] of [
+    [["get", "100"], `{"response":{"100":{"warning":true,"partialWarning":false,"x":${deep}}}}`, (r: Record<string, unknown>) => r["100"]],
+    [["list"], `{"response":{"lastModified":1,"100":{"warning":true,"partialWarning":false,"x":${deep}}}}`, (r: Record<string, unknown>) => r],
+  ] as const) {
+    let compactPrints = true;
+    try {
+      JSON.stringify(printed((JSON.parse(body) as { response: Record<string, unknown> }).response));
+    } catch {
+      compactPrints = false;
+    }
+    const answer = () => ({ status: 200, headers: { "content-type": "application/json" }, body: Buffer.from(body) });
+    const pretty = makeCli(answer);
+    assert.equal(await run([...argv], pretty.deps), 1);
+    assert.deepEqual(pretty.out, []);
+    assert.deepEqual(pretty.err, [
+      `ERROR [reisewarnungen.output] The answer is nested too deeply to pretty-print${compactPrints ? "; try --compact" : ""}.`,
+    ], argv.join(" "));
+    const compact = makeCli(answer);
+    assert.equal(await run(["--compact", ...argv], compact.deps), compactPrints ? 0 : 1, argv.join(" "));
+    if (!compactPrints) assert.deepEqual(compact.err, ["ERROR [reisewarnungen.output] The answer is nested too deeply to print."]);
+  }
+});
+
+test("an answer too large to print is called too large, not too deep; the hint only where --compact prints (D7)", (t) => {
+  const { deps } = makeCli();
+  const real = JSON.stringify;
+  // V8's own error for a text past its longest string, stood in for: a real one needs 512 MB.
+  const tooLarge = (gap: unknown): boolean => gap === 2 || gap === "big";
+  t.mock.method(JSON, "stringify", (value: unknown, replacer: never, gap: unknown) => {
+    if (tooLarge(gap) || (gap === undefined && (value as { all?: boolean }).all === true)) throw new RangeError("Invalid string length");
+    return real(value, replacer, gap as number);
+  });
+  assert.throws(() => renderJson(deps, {}, { id: "a1" }), (err: Error) =>
+    /^The answer is too large \(more than \d+ characters of JSON\) to pretty-print; try --compact\.$/.test(err.message));
+  assert.throws(() => renderJson(deps, {}, { all: true }), (err: Error) =>
+    /^The answer is too large \(more than \d+ characters of JSON\) to pretty-print\.$/.test(err.message));
+  assert.throws(() => renderJson(deps, { compact: true }, { all: true }), (err: Error) =>
+    /^The answer is too large \(more than \d+ characters of JSON\) to print\.$/.test(err.message));
 });
 
 test("--compact takes the gap path only for an answer holding a huge string, the fast path otherwise", (t) => {
