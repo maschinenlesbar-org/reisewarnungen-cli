@@ -131,7 +131,7 @@ test("get on a body without the response envelope is a parse error (exit 1), not
     assert.equal(code, 1, JSON.stringify(body));
     assert.equal(
       untimed(cli.err.join("\n")),
-      'ERROR [reisewarnungen.api] Unexpected response shape from /opendata/travelwarning/100: expected a JSON object with a "response" object.',
+      'ERROR [reisewarnungen.api] GET https://www.auswaertiges-amt.de/opendata/travelwarning/100: unexpected response shape: expected a JSON object with a "response" object.',
     );
   }
 });
@@ -479,10 +479,10 @@ test("a malformed answer is an ERROR record of reisewarnungen.api, exit 1 (L9)",
   // advice on an entry without content, get on entries under other keys.
   const advice = makeCli(() => jsonResponse({ response: { "5": { ...F, countryName: "A" } } }));
   assert.equal(await run(["advice", "5"], advice.deps), 1);
-  assert.match(untimed(advice.err.join("\n")), /^ERROR \[reisewarnungen\.api\] The advisory for content id "5" has no content/);
+  assert.match(untimed(advice.err.join("\n")), /^ERROR \[reisewarnungen\.api\] GET https:\/\/www\.auswaertiges-amt\.de\/opendata\/travelwarning\/5: the advisory for content id "5" has no content/);
   const other = makeCli(() => jsonResponse({ response: { "9": { ...F, countryName: "B" } } }));
   assert.equal(await run(["get", "5"], other.deps), 1);
-  assert.match(untimed(other.err.join("\n")), /^ERROR \[reisewarnungen\.api\] Unexpected response shape/);
+  assert.match(untimed(other.err.join("\n")), /^ERROR \[reisewarnungen\.api\] GET https:\/\/www\.auswaertiges-amt\.de\/opendata\/travelwarning\/5: unexpected response shape/);
 });
 
 test("a single-value option given twice is a usage error, never 'the last one wins'", async () => {

@@ -102,7 +102,7 @@ test("get never returns a sole entry keyed by another id (a different country)",
     (err: unknown) =>
       err instanceof ReiseParseError &&
       err.message ===
-        'Unexpected response shape from /opendata/travelwarning/226768: expected the entry for content id "226768", got country entries under other keys only.',
+        'GET https://www.auswaertiges-amt.de/opendata/travelwarning/226768: unexpected response shape: expected the entry for content id "226768", got country entries under other keys only.',
   );
 });
 
@@ -124,14 +124,14 @@ test("get and list reject a body that is not the response envelope (ReiseParseEr
       (err: unknown) =>
         err instanceof ReiseParseError &&
         err.message ===
-          'Unexpected response shape from /opendata/travelwarning/226768: expected a JSON object with a "response" object.',
+          'GET https://www.auswaertiges-amt.de/opendata/travelwarning/226768: unexpected response shape: expected a JSON object with a "response" object.',
       JSON.stringify(body),
     );
     await assert.rejects(
       () => clientWith(mt).list(),
       (err: unknown) =>
         err instanceof ReiseParseError &&
-        /^Unexpected response shape from \/opendata\/travelwarning: expected a JSON object/.test(err.message),
+        /^GET https:\/\/www\.auswaertiges-amt\.de\/opendata\/travelwarning: unexpected response shape: expected a JSON object/.test(err.message),
       JSON.stringify(body),
     );
   }
@@ -307,6 +307,30 @@ test("a country entry under a key that is not a content id is a parse error, nev
         return true;
       });
     }
+  }
+});
+
+test("every error about an answer names the request, GET and the URL (D9)", async () => {
+  const LIST = "GET https://www.auswaertiges-amt.de/opendata/travelwarning: ";
+  const GET = "GET https://www.auswaertiges-amt.de/opendata/travelwarning/5: ";
+  const cases: Array<[string, unknown, (c: ReisewarnungenClient) => Promise<unknown>, string]> = [
+    ["no envelope", { data: 1 }, (c) => c.list(), LIST],
+    ["error envelope", { response: { error: "down" } }, (c) => c.list(), LIST],
+    ["no country", { response: { lastModified: 1 } }, (c) => c.list(), LIST],
+    ["partial", { response: { contentList: ["1", "2"], "1": { ...F } } }, (c) => c.list(), LIST],
+    ["flag", { response: { "1": { warning: "yes", partialWarning: false } } }, (c) => c.summaries(), LIST],
+    ["not an object", { response: { "1": 5 } }, (c) => c.list(), LIST],
+    ["get, error envelope", { response: { error: "down" } }, (c) => c.get("5"), GET],
+    ["get, other keys", { response: { "9": { ...F } } }, (c) => c.get("5"), GET],
+    ["get, flag", { response: { "5": { warning: 1, partialWarning: false } } }, (c) => c.get("5"), GET],
+    ["advice, no content", { response: { "5": { ...F } } }, (c) => c.advice("5"), GET],
+  ];
+  for (const [label, body, call, request] of cases) {
+    await assert.rejects(call(clientWith(makeMockTransport(() => jsonResponse(body)))), (err: unknown) => {
+      assert.ok(err instanceof ReiseParseError, `${label}: ${String(err)}`);
+      assert.ok(err.message.startsWith(request), `${label}: ${err.message}`);
+      return true;
+    });
   }
 });
 

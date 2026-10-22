@@ -118,8 +118,9 @@ function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function shapeError(path: string, expected: string): ReiseParseError {
-  return new ReiseParseError(`Unexpected response shape from ${path}: expected ${expected}.`);
+/** An answer of the wrong shape, named by its request (`GET <url>`, userinfo redacted; D9). */
+function shapeError(request: string, expected: string): ReiseParseError {
+  return new ReiseParseError(`${request}: unexpected response shape: expected ${expected}.`);
 }
 
 /**
@@ -128,9 +129,9 @@ function shapeError(path: string, expected: string): ReiseParseError {
  * wrong-API response, not an empty result: it raises ReiseParseError rather than
  * reading as "no data" or "not found".
  */
-function unwrap(body: unknown, path: string): JsonObject {
+function unwrap(body: unknown, request: string): JsonObject {
   if (!isObject(body) || !isObject(body["response"])) {
-    throw shapeError(path, 'a JSON object with a "response" object');
+    throw shapeError(request, 'a JSON object with a "response" object');
   }
   return body["response"];
 }
@@ -148,21 +149,21 @@ const OPTIONAL_FLAGS = ["situationWarning", "situationPartWarning"] as const;
  * skill's jq read `"false"` as a warning. Such an answer is a format change upstream; no
  * rule can read it safely, so it is refused.
  */
-function checkFlags(entry: JsonObject, contentId: string, path: string): void {
+function checkFlags(entry: JsonObject, contentId: string, request: string): void {
   for (const flag of REQUIRED_FLAGS) {
-    if (typeof entry[flag] !== "boolean") throw flagError(entry, contentId, flag, path);
+    if (typeof entry[flag] !== "boolean") throw flagError(entry, contentId, flag, request);
   }
   for (const flag of OPTIONAL_FLAGS) {
-    if (entry[flag] !== undefined && typeof entry[flag] !== "boolean") throw flagError(entry, contentId, flag, path);
+    if (entry[flag] !== undefined && typeof entry[flag] !== "boolean") throw flagError(entry, contentId, flag, request);
   }
 }
 
-function flagError(entry: JsonObject, contentId: string, flag: string, path: string): ReiseParseError {
+function flagError(entry: JsonObject, contentId: string, flag: string, request: string): ReiseParseError {
   const name = typeof entry["countryName"] === "string" ? ` (${serverTextForMessage(entry["countryName"])})` : "";
   const value = entry[flag];
   const got = value === undefined ? "it is missing" : `got ${serverTextForMessage(JSON.stringify(value))}`;
   return new ReiseParseError(
-    `Unexpected response shape from ${path}: the "${flag}" flag of content id "${idForMessage(contentId)}"${name} ` +
+    `${request}: unexpected response shape: the "${flag}" flag of content id "${idForMessage(contentId)}"${name} ` +
       `must be true or false, ${got}; the warning level can't be read safely.`,
   );
 }
@@ -184,33 +185,33 @@ const ENVELOPE_KEYS = new Set(["lastModified", "contentList"]);
  * - a `contentList` naming an id that has no entry (a partial answer that would drop
  *   countries silently).
  */
-function checkList(response: JsonObject, path: string): JsonObject {
+function checkList(response: JsonObject, request: string): JsonObject {
   const error = response["error"];
   if (error !== undefined) {
     const text = typeof error === "string" ? error : JSON.stringify(error);
     throw new ReiseParseError(
-      `The API answered ${path} with an error envelope instead of the travel-warning list: ${serverTextForMessage(text)}`,
+      `${request}: the API answered with an error envelope instead of the travel-warning list: ${serverTextForMessage(text)}`,
     );
   }
   let countries = 0;
   for (const [key, value] of Object.entries(response)) {
     if (ENVELOPE_KEYS.has(key)) continue;
     if (/^\d+$/.test(key)) {
-      if (!isObject(value)) throw shapeError(path, `an object for content id "${key}"`);
-      checkFlags(value, key, path);
+      if (!isObject(value)) throw shapeError(request, `an object for content id "${key}"`);
+      checkFlags(value, key, request);
       countries += 1;
     } else if (isObject(value)) {
       // summaries() would return it as a country: its flags were never checked (so
       // --warned-only dropped a malformed one silently) and its id is one get() refuses.
       throw shapeError(
-        path,
+        request,
         `a content id (digits) for every country entry, got one under "${serverTextForMessage(key)}", which is not a content id`,
       );
     }
   }
   if (countries === 0) {
     throw new ReiseParseError(
-      `Unexpected response shape from ${path}: the travel-warning list holds no country ` +
+      `${request}: unexpected response shape: the travel-warning list holds no country ` +
         "(a broken or partial answer, not \"no warnings\"); try again later.",
     );
   }
@@ -219,7 +220,7 @@ function checkList(response: JsonObject, path: string): JsonObject {
     const missing = contentList.map(String).filter((id) => !isObject(response[id]));
     if (missing.length > 0) {
       throw new ReiseParseError(
-        `Unexpected response shape from ${path}: contentList names ${missing.length} id(s) without an entry ` +
+        `${request}: unexpected response shape: contentList names ${missing.length} id(s) without an entry ` +
           `(${serverTextForMessage(missing.slice(0, 10).join(", "))}${missing.length > 10 ? ", …" : ""}), a partial answer.`,
       );
     }
@@ -241,7 +242,8 @@ export class ReisewarnungenClient {
    * empty result.
    */
   async list(): Promise<TravelWarningList> {
-    return checkList(unwrap(await this.engine.getJson<unknown>(PATH), PATH), PATH);
+    const request = `GET ${this.engine.describeUrl(PATH)}`;
+    return checkList(unwrap(await this.engine.getJson<unknown>(PATH), request), request);
   }
 
   /**
@@ -299,7 +301,8 @@ export class ReisewarnungenClient {
     const entry = await this.get(contentId);
     if (typeof entry.content !== "string" || entry.content.trim() === "") {
       throw new ReiseParseError(
-        `The advisory for content id "${idForMessage(contentId)}" has no content, so its advice can't be read.`,
+        `GET ${this.engine.describeUrl(`${PATH}/${enc(contentId)}`)}: the advisory for content id ` +
+          `"${idForMessage(contentId)}" has no content, so its advice can't be read.`,
       );
     }
     const pick = <K extends keyof TravelWarning>(key: K): Partial<Pick<TravelWarning, K>> =>
@@ -322,14 +325,14 @@ export class ReisewarnungenClient {
   async get(contentId: string): Promise<TravelWarning> {
     contentId = canonicalContentId(contentId);
     const path = `${PATH}/${enc(contentId)}`;
-    // Where the messages say the answer came from: the path, its id cut (idForMessage).
-    const where = `${PATH}/${idForMessage(enc(contentId))}`;
+    // What the messages say the answer came from: the request, its URL cut at 500 characters.
+    const where = `GET ${this.engine.describeUrl(path)}`;
     const response = unwrap(await this.engine.getJson<unknown>(path), where);
     // An error envelope sent with a 2xx status is a failure, not "this country doesn't exist".
     if (response["error"] !== undefined) {
       const error = response["error"];
       throw new ReiseParseError(
-        `The API answered ${where} with an error envelope instead of a travel warning: ` +
+        `${where}: the API answered with an error envelope instead of a travel warning: ` +
           serverTextForMessage(typeof error === "string" ? error : JSON.stringify(error)),
       );
     }

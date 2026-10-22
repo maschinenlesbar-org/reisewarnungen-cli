@@ -316,11 +316,15 @@ serialises queries, applies retry/backoff, follows redirects, decodes JSON
 responses and maps errors. Sits between the client and the transport.
 
 **RawResponse.** The result of `request()` — `{ data: Buffer, contentType,
-status }`, the raw bytes `getJson()` then decodes: by the charset the Content-Type
+contentEncoding, status }`, the raw bytes `getJson()` then decodes: by the charset the Content-Type
 names (UTF-8 when it names none), a leading BOM dropped; an unknown charset label
-is a `ReiseParseError`, and so is a body that isn't JSON (naming a non-JSON
-Content-Type such as `text/html`, the usual maintenance page). So is a number `JSON.parse`
-can't carry exactly (`Unexpected response from <path>: the number <N> cannot be represented
+is a `ReiseParseError`, and so are an empty body, a compressed one (`Content-Encoding`; the
+client sends no `Accept-Encoding` and does not decompress) and a body that isn't JSON (naming a non-JSON
+Content-Type such as `text/html`, the usual maintenance page). Every error about an answer — these,
+and the client's own shape, flag and envelope errors — starts with the request it answered,
+`GET <url>: ` (absolute, userinfo redacted, cut at 500 characters; `describeUrl`), like the
+network and HTTP errors, so a message names the host that gave a bad answer. So is a number `JSON.parse`
+can't carry exactly (`GET <url>: the number <N> cannot be represented
 exactly.`): one out of a double's range (`1e400`), one past 2^53 that would print as another
 number (`12345678901234567890`, also as `…890.0` or `9007199254740993e0`, and
 `9007199254740992.5`), a non-zero one too small for a double (`1e-400`, which became `0`), and
@@ -361,7 +365,7 @@ well-formed; a redirect target, a Content-Type or a charset the message names at
 that quote the server (the text of an error envelope sent with a 2xx status, a country
 name and a malformed flag value, the ids a `contentList` names without an entry) go
 through the exported `serverTextForMessage`: one line, no control (C0, DEL, C1) or bidi
-characters, at most 200 characters (cut the same way). A content id (or the path that
+characters, at most 200 characters (cut the same way). A content id (or the request URL that
 ends in one) is quoted at most 500 characters long in every message — not found, shape
 and parse errors, `assertContentId`'s — while `ReiseNotFoundError.contentId` keeps it
 whole. The CLI maps a `404` (real or synthetic) on `get` to exit

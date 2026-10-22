@@ -145,7 +145,7 @@ test("a number the JSON cannot carry exactly is a parse error, never a changed v
     const e = new RequestEngine({ transport: makeMockTransport(() => rawResponse(body(n), "application/json")).transport });
     await assert.rejects(e.getJson("/opendata/travelwarning/1"), (err: unknown) => {
       assert.ok(err instanceof ReiseParseError, n);
-      assert.equal(err.message, `Unexpected response from /opendata/travelwarning/1: the number ${n} cannot be represented exactly.`);
+      assert.equal(err.message, `GET https://www.auswaertiges-amt.de/opendata/travelwarning/1: the number ${n} cannot be represented exactly.`);
       return true;
     });
   }
@@ -538,7 +538,7 @@ test("the Content-Type and charset a parse error names are cut at 200 characters
     err instanceof ReiseParseError && err.message.length < 400 && /got Content-Type "text\/htmlX+…"/.test(err.message));
   const charset = new RequestEngine({ transport: async () => ({ status: 200, headers: { "content-type": `application/json; charset=x${long}` }, body: Buffer.from("{}") }) });
   await assert.rejects(charset.getJson("/opendata/travelwarning"), (err: Error) =>
-    err instanceof ReiseParseError && err.message.length < 400 && /Unsupported response charset "xX+…"/.test(err.message));
+    err instanceof ReiseParseError && err.message.length < 400 && /unsupported response charset "xX+…"/.test(err.message));
 });
 
 test("credentials a server echoes are scrubbed from the error: Basic, user:password, password (L13)", async () => {
@@ -658,4 +658,28 @@ test("a header named __proto__ is an ordinary header, never the prototype of the
   const fetchLike = new Headers([["__proto__", "x"], ["content-type", "application/json"]]);
   const f = new RequestEngine({ transport: async () => ({ status: 200, headers: fetchLike as unknown as Record<string, string>, body: Buffer.from('{"a":1}') }) });
   assert.deepEqual(await f.getJson("/x"), { a: 1 });
+});
+
+test("an answer error names the request: method and URL, userinfo redacted (D9)", async () => {
+  const answers: Array<[string, () => HttpResponse]> = [
+    ["not valid JSON", () => rawResponse("<html>", "text/html")],
+    ["empty response body", () => rawResponse(" ", "application/json")],
+    ["cannot be represented exactly", () => rawResponse('{"n":1e400}', "application/json")],
+    ["unsupported response charset", () => rawResponse("{}", "application/json; charset=x-bogus")],
+    ["unsupported Content-Encoding", () => ({ status: 200, headers: { "content-type": "application/json", "content-encoding": "br" }, body: Buffer.from("{}") })],
+  ];
+  const base = new URL("https://www.auswaertiges-amt.de");
+  base.username = "alice";
+  base.password = "s3cret";
+  for (const [what, respond] of answers) {
+    const e = new RequestEngine({ baseUrl: base.href, transport: makeMockTransport(respond).transport });
+    await assert.rejects(e.getJson("/opendata/travelwarning", { q: "x" }), (err: unknown) => {
+      assert.ok(err instanceof ReiseParseError, what);
+      // The engine sends the userinfo as a header, so the URL it names carries none at all.
+      assert.ok(err.message.startsWith(`GET ${base.protocol}//${base.host}/`), err.message);
+      assert.ok(err.message.includes("/opendata/travelwarning?q=x: ") && err.message.includes(what), err.message);
+      assert.ok(!err.message.includes("s3cret") && !err.message.includes("alice"), err.message);
+      return true;
+    });
+  }
 });

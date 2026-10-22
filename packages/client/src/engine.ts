@@ -37,6 +37,8 @@ const DEFAULT_USER_AGENT = "reisewarnungen-cli";
 export interface RawResponse {
   data: Buffer;
   contentType: string;
+  /** The Content-Encoding header ("" when absent). */
+  contentEncoding: string;
   status: number;
 }
 
@@ -534,6 +536,15 @@ export class RequestEngine {
   }
 
   /**
+   * The URL of a request for `path` (and `query`) as error messages show it: absolute, userinfo
+   * redacted, cut at 500 characters. The client's own errors about an answer start with
+   * `GET <this>: `, like the engine's, so a message names the host that gave a bad answer.
+   */
+  describeUrl(path: string, query?: QueryParams): string {
+    return this.describe(this.buildUrl(path, query));
+  }
+
+  /**
    * Call the transport under the overall deadline (`timeoutMs`): the request gets an
    * AbortSignal that fires at the deadline, and the call rejects then whether the transport
    * stops or not — a custom transport (fetch, a node:http wrapper) that ignores `timeoutMs`
@@ -724,17 +735,35 @@ export class RequestEngine {
         throw this.toApiError(method, url, status, body, location, undefined, hint);
       }
 
-      return { data: body, contentType, status };
+      const contentEncoding = String(headerValue(responseHeaders["content-encoding"]) ?? "");
+      return { data: body, contentType, contentEncoding, status };
     }
   }
 
   /**
    * Perform a GET expecting JSON and parse it into `T`. The body is decoded by the charset
-   * its Content-Type names (UTF-8 when it names none; see decodeBody).
+   * its Content-Type names (UTF-8 when it names none; see decodeBody). An empty (or
+   * whitespace-only) body is a ReiseParseError: every endpoint answers with a JSON document.
+   * Every error about the answer names the request (`GET <url>: …`, userinfo redacted).
    */
   async getJson<T>(path: string, query?: QueryParams): Promise<T> {
     const res = await this.request("GET", path, { query, accept: "application/json" });
-    const text = decodeBody(res.data, res.contentType, path);
+    const request = `GET ${this.describeUrl(path, query)}`;
+    // The client sends no Accept-Encoding and does not decompress; a compressed body can
+    // only come from a misbehaving proxy. Name it rather than fail as "not JSON".
+    // A list of codings is allowed (RFC 9110 §8.4); only `identity` ones mean "not encoded".
+    const codings = res.contentEncoding.split(",").map((c) => c.trim()).filter((c) => c !== "");
+    if (codings.some((c) => !/^identity$/i.test(c))) {
+      throw new ReiseParseError(
+        `${request}: unsupported Content-Encoding "${cutForMessage(sanitizeServerText(res.contentEncoding))}" (the client does not decompress responses).`,
+      );
+    }
+    const text = decodeBody(res.data, res.contentType, request);
+    if (text.trim() === "") {
+      // A broken answer, not "no results": printed as nothing with exit 0, it would let a
+      // script carry on as if the API had found nothing.
+      throw new ReiseParseError(`${request}: empty response body.`);
+    }
     let parsed: T;
     try {
       parsed = JSON.parse(text) as T;
@@ -742,16 +771,14 @@ export class RequestEngine {
       // An HTML maintenance or proxy page is the usual non-JSON answer: name its type, so it
       // reads as an upstream problem rather than a client bug.
       const type = res.contentType.split(";")[0]?.trim() ?? "";
-      const hint = type !== "" && !/json/i.test(type) ? `: expected JSON, got Content-Type "${cutForMessage(sanitizeServerText(type))}"` : "";
-      throw new ReiseParseError(`Failed to parse JSON response from ${cutServerText(path)}${hint}`, { cause });
+      const hint = type !== "" && !/json/i.test(type) ? ` (expected JSON, got Content-Type "${cutForMessage(sanitizeServerText(type))}")` : "";
+      throw new ReiseParseError(`${request}: the answer is not valid JSON${hint}.`, { cause });
     }
     // JSON.parse rounds and overflows numbers silently: refuse the answer rather than print a
     // changed value.
     const inexact = firstInexactNumber(text);
     if (inexact !== undefined) {
-      throw new ReiseParseError(
-        `Unexpected response from ${cutServerText(path)}: the number ${cutForMessage(inexact)} cannot be represented exactly.`,
-      );
+      throw new ReiseParseError(`${request}: the number ${cutForMessage(inexact)} cannot be represented exactly.`);
     }
     return parsed;
   }
@@ -799,15 +826,15 @@ export class RequestEngine {
  * TextDecoder drops a leading byte order mark, which Buffer#toString keeps and JSON.parse
  * then rejects, so a BOM added by a proxy cannot turn a valid answer into a parse error. A
  * declared `charset=iso-8859-1` body used to come out as `T\uFFFDrkei`. An unknown charset
- * label is a ReiseParseError.
+ * label is a ReiseParseError naming `request`.
  */
-function decodeBody(body: Buffer, contentType: string, path: string): string {
+function decodeBody(body: Buffer, contentType: string, request: string): string {
   const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1] ?? "utf-8";
   let decoder: TextDecoder;
   try {
     decoder = new TextDecoder(charset);
   } catch {
-    throw new ReiseParseError(`Unsupported response charset "${cutForMessage(sanitizeServerText(charset))}" from ${cutServerText(path)}.`);
+    throw new ReiseParseError(`${request}: unsupported response charset "${cutForMessage(sanitizeServerText(charset))}".`);
   }
   return decoder.decode(body);
 }

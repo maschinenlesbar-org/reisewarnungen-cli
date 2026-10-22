@@ -24,6 +24,9 @@ const fromLib = (value: unknown): unknown => (value as { n: unknown }).n;
 const BIN = "reisewarnungen";
 /** The exit code of a malformed answer in this repo (most repos use 1). */
 const PARSE_EXIT = 1;
+/** The request an answer error names: the method and the host of the default base URL. */
+const REQUEST = `GET ${new URL(DEFAULT_BASE_URL).protocol}//${new URL(DEFAULT_BASE_URL).host}/`;
+import { DEFAULT_BASE_URL } from "@maschinenlesbar.org/reisewarnungen-client/internal/engine";
 // --------------------------------------------------------------------------------------
 
 const INEXACT = [
@@ -51,6 +54,9 @@ test("P25: a number the answer can't carry exactly is an error, never a changed 
     assert.match(o.cli.err, new RegExp(`^ERROR \\[${BIN}\\.api\\] .*the number ${literal.replace(/[.+]/g, "\\$&")} cannot be represented exactly`), literal);
     assert.equal(o.lib.ok, false, `${literal}: the library resolved`);
     assert.match(o.lib.error?.name ?? "", /ParseError$/, literal);
+    // The error names the request, on both sides (D9).
+    assert.ok(o.cli.err.includes(REQUEST), `${literal}: ${o.cli.err}`);
+    assert.ok(o.lib.error?.message.startsWith(REQUEST), `${literal}: ${o.lib.error?.message}`);
   }
 });
 
@@ -71,5 +77,15 @@ test("P25: an empty answer is an error, never 'nothing found'", async () => {
     assert.equal(o.cli.out, "", JSON.stringify(raw));
     assert.match(o.cli.err, new RegExp(`^ERROR \\[${BIN}\\.api\\] `), JSON.stringify(raw));
     assert.equal(o.lib.ok, false, JSON.stringify(raw));
+    assert.ok(o.cli.err.includes(REQUEST) && o.lib.error?.message.startsWith(REQUEST), `${o.cli.err} | ${o.lib.error?.message}`);
+  }
+});
+
+test("P25: a malformed answer names the request (method and URL) on both sides", async () => {
+  for (const [raw, type] of [["<html>maintenance</html>", "text/html"], ["{", "application/json"]] as const) {
+    const o = await parity(argv, (t) => lib(new Client({ transport: t })), () => rawResponse(raw, type));
+    assert.equal(o.cli.code, PARSE_EXIT, raw);
+    assert.ok(o.cli.err.includes(REQUEST), `${raw}: ${o.cli.err}`);
+    assert.ok(o.lib.error?.message.startsWith(REQUEST), `${raw}: ${o.lib.error?.message}`);
   }
 });
