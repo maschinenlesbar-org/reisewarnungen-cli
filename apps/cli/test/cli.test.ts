@@ -519,3 +519,20 @@ test("an option with an array default is repeatable: each value adds to the list
   await program.parseAsync(["collect", "--tag", "a", "--tag", "b"], { from: "user" });
   assert.deepEqual(seen, [["a", "b"]]);
 });
+
+test("a lone surrogate or invalid bytes in an answer are printed as U+FFFD with one WARN record of api (D2)", async () => {
+  const body = Buffer.concat([
+    Buffer.from('{"response":{"100":{"warning":false,"partialWarning":false,"countryName":"a\\ud800b","t":"'),
+    Buffer.from([0xff]),
+    Buffer.from('"}}}'),
+  ]);
+  const cli = makeCli(() => ({ status: 200, headers: { "content-type": "application/json" }, body }));
+  assert.equal(await run(["--compact", "get", "100"], cli.deps), 0, cli.err.join("\n"));
+  const printed = cli.out.join("\n");
+  assert.ok(!/\\ud800|[\ud800-\udfff]/i.test(printed), printed);
+  assert.deepEqual(JSON.parse(printed), { warning: false, partialWarning: false, countryName: "a�b", t: "�" });
+  assert.equal(
+    untimed(cli.err.join("\n")),
+    "WARN  [reisewarnungen.api] GET https://www.auswaertiges-amt.de/opendata/travelwarning/100: 2 characters of the answer were not valid text (invalid bytes or a lone surrogate) and replaced with U+FFFD.",
+  );
+});

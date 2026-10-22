@@ -397,6 +397,12 @@ never makes a zero-delay burst. A `Retry-After` above `MAX_RETRY_AFTER_MS` (30 s
 retried: the error surfaces at once, and its message names the requested wait and says that
 retrying sooner won't help. `retryDelayMs` is an integer `0`..`MAX_RETRY_AFTER_MS`.
 `ReiseApiError` exposes `isRetryable` (true for `429`/`503`).
+An answer delivered changed is announced too: bytes that aren't valid in the answer's charset
+and lone surrogates written as JSON escapes (`\ud800`) become U+FFFD (the result is
+well-formed, so `jq` reads it), and the engine option `onWarning(message)` gets one message
+naming the count and the request (`GET <url>: 2 characters of the answer were not valid text
+(invalid bytes or a lone surrogate) and replaced with U+FFFD.`); the CLI's `action()` logs it as
+a `WARN` record of `reisewarnungen.api`. One bad character never sinks a whole answer.
 Each retry is announced: the engine option `onRetry(event: RetryEvent)` (exported type:
 `{ retry` (1-based), `maxRetries`, `delayMs`, `status?` (absent for a reset), `url` (userinfo
 redacted) `}`) is called once per retry right before the sleep, never when there is none, and

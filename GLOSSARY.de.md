@@ -227,6 +227,10 @@ Zeichensatz, eine Zahl, die JSON nicht genau tragen kann), `http` (die Verbindun
 `output` (die `-o`-Datei, ein fehlgeschlagenes Schreiben auf stdout). Ein Eintrag ist
 immer eine Zeile; Steuerzeichen darin werden maskiert.
 
+**Ersetzter Text.** Bytes einer Antwort, die in ihrem Zeichensatz ungültig sind, und halbe
+Zeichen (einzelne Surrogate) werden durch U+FFFD ersetzt und in einem `WARN`-Eintrag von
+`reisewarnungen.api` mit Anzahl und Anfrage gemeldet; der Lauf gelingt trotzdem.
+
 ---
 
 > **Bibliothek & Interna.** Begriffe zum TypeScript-Client und seinen Interna –
