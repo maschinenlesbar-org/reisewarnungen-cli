@@ -30,6 +30,7 @@ function makeCli(responder: (req: HttpRequest) => HttpResponse) {
     // without --force (nodeFiles is output.test.ts's, on real files).
     files: {
       state: (p) => (files.has(p) ? "exists" : "absent"),
+      parentProblem: () => undefined,
       write: (p, d, overwrite) => {
         if (!overwrite && files.has(p)) throw new Error(`Refusing to overwrite existing file "${p}"; pass --force to overwrite.`);
         files.set(p, d);
@@ -278,6 +279,7 @@ test("a failed --output write surfaces a clean error (exit 1), not 'Unexpected e
   const cli = makeCli(() => jsonResponse(listBody));
   cli.deps.files = {
     state: () => "absent",
+    parentProblem: () => undefined,
     write: () => {
       throw new Error("Could not write to \"out.json\": EACCES: permission denied, open 'out.json'");
     },
@@ -455,6 +457,7 @@ test("every -o failure is an ERROR record of reisewarnungen.output, exit 1 (L8)"
     const cli = makeCli(() => jsonResponse(listBody));
     cli.deps.files = {
       state: () => "absent",
+      parentProblem: () => undefined,
       write: () => {
         throw error;
       },

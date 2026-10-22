@@ -135,7 +135,8 @@ reisewarnungen countries --warned-only --compact -o active.json
 
 `-o/--output` writes the command output to the given path instead of stdout. It
 refuses to overwrite an existing file (exit 1, before any request); pass `--force` to
-overwrite. The write is atomic: a write cut short leaves the old file as it was.
+overwrite. The write is atomic: a write cut short or interrupted (Ctrl-C) leaves the old file
+as it was, and no empty or temporary file under the name.
 
 ### 9. Extract just the warning text from a single advisory
 
@@ -184,16 +185,17 @@ Real flags only, from `reisewarnungen --help`:
 | `--max-response-bytes <n>` | Cap response body size in bytes (`0` = unlimited; default 100 MiB) |
 | `--compact` | Print JSON on a single line instead of pretty-printed. An answer nested too deeply or too large to print is an ERROR record of `reisewarnungen.output` (exit `1`) that names the cause, and suggests `--compact` only where `--compact` prints that answer |
 | `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [reisewarnungen.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
-| `-o, --output <file>` | Write output to this file instead of stdout; `-o -` means stdout (no file named `-`) |
-| `--force` | Overwrite the `--output` file if it already exists (keeping its mode; through a symlink to the file it points at); without `-o` a usage error |
+| `-o, --output <file>` | Write output to this file instead of stdout; `-o -` means stdout (no file named `-`). An existing file is refused before any request unless `--force` is given, and so is a file whose directory is missing or not writable; the file is replaced only once complete, and an interrupted run leaves no half-written or temporary file. A device, a FIFO or `/dev/stdout` is written in place, without `--force` |
+| `--force` | Overwrite the `--output` file if it already exists (keeping its mode; through a symlink, creating the file it points at); without `-o` a usage error |
 | `-h, --help` | Display help for a command |
 
 Note: `-o/--output` is **trusted input** — the path is written verbatim with no
 traversal guard (you own your shell). An existing file is **not** overwritten
 unless you pass `--force`; a directory is refused with `"<path>" is a directory;
-give a file path to --output.` (exit 1). Both are checked before any request; the
-file is written to a temporary file beside it and renamed over it, so a write cut
-short (a full disk) leaves no half-written file and an old file as it was.
+give a file path to --output.` (exit 1), and so is a file whose directory is missing or
+not writable. All are checked before any request; the file is written to a temporary file
+beside it and renamed over it, so a write cut short (a full disk) or interrupted (Ctrl-C,
+`SIGTERM`, `SIGHUP`) leaves no half-written or temporary file and an old file as it was.
 
 Exit codes: `0` success, `4` when `get` finds no such country, `1` for any other
 error (a `404` on `list`/`countries` is `1`: the endpoint itself is missing); usage errors use commander's own non-zero code, while `--help` /

@@ -339,18 +339,26 @@ timestamps, far below 2^53.
 
 **CliDeps / CliIO.** The dependency-injection seam for the CLI
 ([`io.ts`](apps/cli/src/cli/io.ts)): a client factory plus an I/O object
-(`out`/`err`) and the file seam for `-o` (`files`, an `OutputFiles`: `state(path)` and an
-atomic `write(path, data, overwrite)`; unset, the real file system, `nodeFiles`). Lets the
+(`out`/`err`) and the file seam for `-o` (`files`, an `OutputFiles`: `state(path)`,
+`parentProblem(path, overwrite)` and `write(path, data, overwrite)`, atomic for a file; unset,
+the real file system, `nodeFiles`). Lets the
 whole CLI run in tests with a mocked client and captured output — no subprocess.
 
 **`-o` integrity.** `action()` calls `checkOutputTarget` before the client is built:
-`--force` without `-o`, a directory, and an existing path (a dangling link too) without
-`--force` are a `ReiseValidationError` (a usage error, exit 1, no request); `-o -` is
-stdout. `nodeFiles.write` claims the name with an exclusive create unless `--force`
-(so a file that appeared during the request is kept: an `OutputError`, exit 1), writes a
-temporary file beside the target and renames it over it (an existing file's mode kept;
-with `--force` through a symlink to the file it names), and on any failure leaves neither
-the temporary file nor the claimed name behind.
+`--force` without `-o`, a directory, an existing path (a dangling link too) without
+`--force`, and a file whose directory is missing, not a directory or not writable (with
+`--force`, through the link chain, which may not loop; `OutputFiles.parentProblem`) are a
+`ReiseValidationError` (a usage error, exit 1, no request); `-o -` is stdout. A stream — a
+character device, a FIFO, a socket, `/dev/stdout`, `/dev/stderr`, `/dev/fd/N` — is written in
+place (`writeInPlace`, every byte), with no claim, no temporary file and no `--force` needed.
+For a file, `nodeFiles.write` claims the name with an exclusive create unless `--force` (so a
+file that appeared during the request is kept: an `OutputError`, exit 1), writes a temporary
+file beside the target (`.<name>.<pid>-<hex>.tmp`, shortened to stay within 255 bytes) and
+renames it over it (an existing file's mode kept; with `--force` through a symlink to the file
+it names, created if the link dangles), and on any failure leaves neither the temporary file nor
+the claimed name behind. From the first file write on, SIGINT, SIGTERM and SIGHUP remove the
+claim and the temporary file, then exit 130, 143 or 129 (before, an interrupted write left an
+empty file under the name, which the next run refused, and the whole temporary file).
 
 **Error types.** [`errors.ts`](packages/client/src/errors.ts): `ReiseApiError` (non-2xx,
 carries `status`/`detail`), `ReiseNotFoundError` (a 2xx response with no matching
@@ -524,7 +532,7 @@ everything that drives the CLI is in `apps/cli/test/`.
 - **`log.test.ts`** — the record helpers of `apps/cli/src/cli/log.ts` on their own
   (`escapeForRecord`, `formatLogRecord`, `installWarningLog`); the CLI-level checks are P23's.
 - **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.
-- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL, P23 the log on stderr — its body takes the usage-error exit code from the adapter's `USAGE_EXIT`, `1` here; P24 the input corpus — every content id, on `get` and `advice`, is sent as typed or refused on both sides, never empty, a dot segment or with a slash; this API has no text filter, so its text list is empty; P25 the response corpus — a number a double can't carry exactly, or an empty answer, is an ERROR of `reisewarnungen.api` and exit 1, never a changed value; P26 `-o` integrity — spawns the built bin under `ulimit -f`: a write cut short leaves the old file and no temporary file, an existing file without `--force` is refused before any request; P27 big and odd answers —
+- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL, P23 the log on stderr — its body takes the usage-error exit code from the adapter's `USAGE_EXIT`, `1` here; P24 the input corpus — every content id, on `get` and `advice`, is sent as typed or refused on both sides, never empty, a dot segment or with a slash; this API has no text filter, so its text list is empty; P25 the response corpus — a number a double can't carry exactly, or an empty answer, is an ERROR of `reisewarnungen.api` and exit 1, never a changed value; P26 `-o` integrity — spawns the built bin: under `ulimit -f` a write cut short leaves the old file and no temporary file, and stdout cut short exits 1; an existing file without `--force` and a missing directory are refused before any request; `/dev/null`, a FIFO and `/dev/stdout` are written in place; `--force` through a dangling link creates the file it names; a signal during the write leaves no claim and no temporary file; P27 big and odd answers —
 spawns the built bin under a small heap: a large flat answer prints with `--compact`, an answer
 full of DEL characters prints escaped or, past V8's longest string, is an ERROR record of
 `reisewarnungen.output`, and a lone surrogate or invalid bytes become U+FFFD with a WARN record of

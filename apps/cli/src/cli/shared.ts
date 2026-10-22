@@ -251,10 +251,12 @@ function holdsHugeString(value: unknown): boolean {
 
 /**
  * Check `-o` before any request, so a refused target costs none: `--force` without `-o`, a
- * directory, and an existing path (a dangling link too) without `--force` are usage errors
- * (a ReiseValidationError: an ERROR record of `reisewarnungen.cli`, exit 1). `-o -` is stdout.
- * The write checks again: a file that appears during the request is not overwritten either
- * (an OutputError then, exit 1).
+ * directory, an existing path (a dangling link too) without `--force`, and a file whose directory
+ * is missing, not a directory or not writable (or, with `--force`, a link chain that loops) are
+ * usage errors (a ReiseValidationError: an ERROR record of `reisewarnungen.cli`, exit 1). A
+ * stream (`/dev/null`, a FIFO, `/dev/stdout`, `>(…)`) needs no `--force`: it is written in place,
+ * and nothing in it can be lost. `-o -` is stdout. The write checks again: a file that appears
+ * during the request is not overwritten either (an OutputError then, exit 1).
  */
 export function checkOutputTarget(deps: CliDeps, options: GlobalOptions): void {
   if (options.force === true && options.output === undefined) {
@@ -262,9 +264,13 @@ export function checkOutputTarget(deps: CliDeps, options: GlobalOptions): void {
   }
   const path = fileOf(options);
   if (path === undefined) return;
-  const state = (deps.files ?? nodeFiles).state(path);
+  const files = deps.files ?? nodeFiles;
+  const state = files.state(path);
   if (state === "directory") throw new ReiseValidationError(isDirectoryMessage(path));
+  if (state === "stream") return;
   if (state === "exists" && options.force !== true) throw new ReiseValidationError(refuseOverwrite(path));
+  const problem = files.parentProblem(path, options.force === true);
+  if (problem !== undefined) throw new ReiseValidationError(problem);
 }
 
 /**
@@ -274,12 +280,14 @@ export function checkOutputTarget(deps: CliDeps, options: GlobalOptions): void {
  * newline. `-o -` means stdout, as in other CLIs: a script passing `-o "$OUT"` with `OUT=-`
  * used to get a file named `-` and no output.
  *
- * The write is atomic and never overwrites by accident (`OutputFiles.write`): without
- * `--force` the name is claimed exclusively, so a file that appeared during the request is
- * kept; the data goes to a temporary file beside the target, renamed over it, so a write cut
- * short (a full disk) leaves the old file as it was and no half-written file; `--force` keeps
- * the old file's mode and writes through a symlink. Every failure is an OutputError (an ERROR
- * record of `reisewarnungen.output`, exit 1) naming the file.
+ * A file is written atomically and never overwritten by accident (`OutputFiles.write`):
+ * without `--force` the name is claimed exclusively, so a file that appeared during the request
+ * is kept; the data goes to a temporary file beside the target, renamed over it, so a write cut
+ * short (a full disk) leaves the old file as it was and no half-written file, and a signal
+ * (SIGINT, SIGTERM, SIGHUP) removes the claim and the temporary file; `--force` keeps the old
+ * file's mode and writes through a symlink (a dangling one too: the file it names is created).
+ * A stream (a device, a FIFO, a descriptor path) is written in place. Every failure is an
+ * OutputError (an ERROR record of `reisewarnungen.output`, exit 1) naming the file.
  */
 export function renderJson(deps: CliDeps, global: GlobalOptions, value: unknown): void {
   const text = escapeControlChars(stringifyJson(value, global.compact === true));

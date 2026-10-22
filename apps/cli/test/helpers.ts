@@ -58,7 +58,7 @@ export async function parity(
   const deps: CliDeps = {
     io: { out: (s) => out.push(s), err: (s) => err.push(s) },
     // Files the CLI writes go nowhere: every path is free, a write is dropped.
-    files: { state: () => "absent", write: () => {} },
+    files: { state: () => "absent", parentProblem: () => undefined, write: () => {} },
     createClient: (opts) => defaultDeps.createClient({ ...opts, transport: mt.transport }),
   };
   const code = await run(argv, deps);

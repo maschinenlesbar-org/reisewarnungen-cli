@@ -232,8 +232,8 @@ These apply to every command and may be given before *or* after it:
 | `-h, --help` | Show help for the program or a command |
 | `--compact` | Print JSON on a single line instead of pretty-printed |
 | `--log-format <format>` | How errors, warnings and notes are written to stderr: `text` (default; log4j style, `2026-10-09T14:03:12.481Z WARN  [reisewarnungen.http] …`) or `jsonl` (one JSON object per line: `ts`, `level`, `topic`, `msg`). stdout is not affected |
-| `-o, --output <file>` | Write output to this file instead of stdout; `-o -` means stdout (no file named `-`) |
-| `--force` | Overwrite the `--output` file if it already exists |
+| `-o, --output <file>` | Write output to this file instead of stdout; `-o -` means stdout (no file named `-`). An existing file is refused before any request unless `--force` is given, and so is a file whose directory is missing or not writable; a device, a FIFO or the shell's own descriptor (`/dev/null`, `/dev/stdout`, `>(gzip > x.gz)`) is written in place, without `--force` |
+| `--force` | Overwrite the `--output` file if it already exists (through a symlink, to the file it points at, which is created if the link dangles; keeping the file's mode); without `-o` a usage error |
 | `--base-url <url>` | API base URL (default `https://www.auswaertiges-amt.de`; `http`/`https`, a path prefix is fine, no `?query` or `#fragment`, no surrounding whitespace). A `user:password@` in it is sent as HTTP Basic auth and never printed (`***`); write a literal `%` in it as `%25`. A plain `http:` base URL to a remote host logs one `WARN` record of `reisewarnungen.http` on stderr (`… sent unencrypted to <host> (http:, not https:)`) before the first request (naming the base URL's credentials when it carries any, never printing them); loopback hosts (`localhost`, `127.x`, `::1`) don't warn, and stdout and the exit code are unchanged |
 | `--timeout <ms>` | Time limit per request, reading the whole response included (default `30000`; at most `2147483647`; `0` = no limit, the request may wait forever) |
 | `--user-agent <ua>` | `User-Agent` header value (non-blank, Latin-1, no control characters) |
@@ -246,10 +246,14 @@ traversal guard (you own your shell). It is checked before any request: an exist
 file (a dangling link too) is **never overwritten** unless you pass `--force`: without
 it the CLI exits `1` with `Refusing to overwrite existing file "<path>"; pass --force to
 overwrite.` A path that is a directory exits `1` with `"<path>" is a directory; give a
-file path to --output.`, and `--force` without `-o` exits `1` too. The write is atomic:
-the data goes to a temporary file beside the target, renamed over it, so a write cut
-short (a full disk) leaves the old file as it was and no half-written file behind;
-`--force` keeps the old file's mode and writes through a symlink. A file that appears
+file path to --output.`, and `--force` without `-o` exits `1` too, and so does a file whose
+directory is missing or not writable (`Cannot write to "<path>": the directory "<dir>" does not
+exist.`). The write is atomic: the data goes to a temporary file beside the target, renamed over
+it, so a write cut short (a full disk) or interrupted (Ctrl-C, `SIGTERM`, `SIGHUP`: exit `130`,
+`143`, `129`) leaves the old file as it was and no half-written or temporary file behind;
+`--force` keeps the old file's mode and writes through a symlink (a dangling one too: the file
+it names is created). A device, a FIFO or the shell's own descriptor (`/dev/null`,
+`/dev/stdout`, `>(gzip > x.gz)`) is written in place, without `--force`. A file that appears
 while the request runs is not overwritten either (exit `1`).
 
 ## Learn more
