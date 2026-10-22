@@ -145,7 +145,9 @@ Each line on stderr is a **log record**: a timestamp (UTC), a level (`ERROR`, `W
 `INFO`) and a topic, the program and the area it comes from (`reisewarnungen.cli` for
 usage errors, `reisewarnungen.api` for the API's answers, a malformed answer included,
 `reisewarnungen.http` for the
-connection, `reisewarnungen.output` for `-o` and a failed write to stdout). An error about
+connection, `reisewarnungen.output` for `-o` and a failed or cut-short write to stdout: stdout
+redirected to a file that can't take it all, a full disk or a file-size limit, exits `1`, never
+`0` with half the data). An error about
 an answer names the request (`GET <url>: the answer is not valid JSON`). Text in an answer is
 never changed silently: bytes that are not valid in its charset and half characters (lone
 surrogates) are replaced with U+FFFD, so the output stays readable for `jq`, and a `WARN`

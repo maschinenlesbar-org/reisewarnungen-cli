@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/cli/run.js";
 import { renderJson } from "../src/cli/shared.js";
-import type { CliDeps } from "../src/cli/io.js";
+import { stdoutWriter, type CliDeps } from "../src/cli/io.js";
 import { ReisewarnungenClient } from "@maschinenlesbar.org/reisewarnungen-client/internal/client";
 import type { HttpRequest, HttpResponse } from "@maschinenlesbar.org/reisewarnungen-client/internal/http";
 import { jsonResponse, makeMockTransport, untimed } from "./helpers.js";
@@ -249,5 +249,32 @@ test("printed JSON escapes DEL, C1 and the bidi controls, on stdout and in the -
     const path = join(dir, "out.json");
     assert.equal(await run(["--compact", "-o", path, "get", "100"], makeCli(() => jsonResponse({ response: { "100": { ...ENTRY, countryName: name } } })).deps), 0);
     assert.equal(readFileSync(path, "utf8"), `${text}\n`);
+  });
+});
+
+test("stdout to a regular file gets every byte or an error: a short write is never exit 0 (D6)", async () => {
+  await inTempDir(async (dir) => {
+    const { openSync, closeSync } = await import("node:fs");
+    const path = join(dir, "stdout.txt");
+    const fd = openSync(path, "w");
+    try {
+      const errors: Error[] = [];
+      const streamed: string[] = [];
+      const fake = { fd, write: (text: string) => streamed.push(text), emit: (_event: "error", err: Error) => errors.push(err) };
+      // The real writer: every byte reaches the file, none goes through the stream.
+      stdoutWriter(fake)("x".repeat(100_000));
+      assert.equal(readFileSync(path, "utf8").length, 100_000);
+      assert.deepEqual(streamed, []);
+      // A write the file system cuts short: the error reaches stdout's "error" event (exit 1 there).
+      const efbig = Object.assign(new Error("EFBIG: file too large, write"), { code: "EFBIG" });
+      stdoutWriter(fake, () => { throw efbig; })("more");
+      assert.deepEqual(errors, [efbig]);
+    } finally {
+      closeSync(fd);
+    }
+    // Not a file (a pipe, a terminal): the stream writes it, as before.
+    const piped: string[] = [];
+    stdoutWriter({ write: (text: string) => piped.push(text), emit: () => true })("data");
+    assert.deepEqual(piped, ["data"]);
   });
 });

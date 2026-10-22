@@ -476,7 +476,10 @@ format. `CliDeps.now`
 makes the timestamps testable. stdout carries data only, and a record waits for it: the
 default `io.err` (`stderrAfterStdout`) holds a record while stdout still has data queued
 and writes it, in order, once that is out, so with `2>&1 |` and a slow reader a record
-never lands inside the JSON. A failed write to stdout other
+never lands inside the JSON. When stdout is a regular file (`> out.json`), the default `io.out`
+(`stdoutWriter`) writes every byte itself (`writeAll`): Node's stream ignored a short write, so
+a file-size limit or a full disk cut the output with exit 0; a failure is emitted as stdout's
+`error` instead. A pipe or a terminal goes through the stream as before. A failed write to stdout other
 than a closed pipe (`handleOutputErrors`, in the bin shim, outside `run()`) is an ERROR
 record of `reisewarnungen.output` (`Could not write to stdout: …`), in the format argv asks
 for and redacted like the run's log (`processLogger`). So are Node's own process warnings
