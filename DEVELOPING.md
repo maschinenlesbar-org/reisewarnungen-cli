@@ -323,7 +323,9 @@ Content-Type such as `text/html`, the usual maintenance page). So is a number `J
 can't carry exactly (`Unexpected response from <path>: the number <N> cannot be represented
 exactly.`): one out of a double's range (`1e400`), one past 2^53 that would print as another
 number (`12345678901234567890`, also as `…890.0` or `9007199254740993e0`, and
-`9007199254740992.5`), and a non-zero one too small for a double (`1e-400`, which became `0`).
+`9007199254740992.5`), a non-zero one too small for a double (`1e-400`, which became `0`), and
+a subnormal one (below 2.2250738585072014e-308) that does not print as written (`3e-324`, which
+became `5e-324`; `5e-324` itself passes).
 Below 2^53 a decimal fraction keeps a double's precision, as JSON means it, and a double a
 server printed in its shortest form (`1E23`) passes. The API's numbers are Unix-second
 timestamps, far below 2^53.
