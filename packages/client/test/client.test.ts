@@ -4,7 +4,6 @@ import { ReisewarnungenClient, isWarned } from "../src/client.js";
 import type { TravelWarning } from "../src/types.js";
 import {
   ReiseApiError,
-  ReiseError,
   ReiseNetworkError,
   ReiseNotFoundError,
   ReiseParseError,
@@ -174,16 +173,40 @@ test("a 404 raises ReiseApiError with status 404", async () => {
 });
 
 test("get rejects a non-numeric content id before any request (no dot segments)", async () => {
-  for (const id of ["..", ".", "", " 1", "226768x", "%2e%2e", "__proto__", "１２"]) {
+  for (const id of ["..", ".", "226768x", "%2e%2e", "__proto__", "１２", "1 2"]) {
     const mt = makeMockTransport(() => jsonResponse({ response: {} }));
     await assert.rejects(
       () => clientWith(mt).get(id),
       (err: unknown) =>
-        err instanceof ReiseError &&
+        err instanceof ReiseValidationError &&
         err.message === `Invalid contentId ${JSON.stringify(id)}. Expected a numeric content id (e.g. 226768).`,
       id,
     );
     assert.equal(mt.calls.length, 0, id);
+  }
+});
+
+test("a content id is a token (D8): trimmed; blank or with an invisible or control character refused, shown visibly (D10)", async () => {
+  // Surrounding whitespace, as pasted, is trimmed (as every other repo's ids are): the id is sent.
+  for (const id of [" 226768", "226768 ", "\t226768\n", "\u00a0226768"]) {
+    const mt = makeMockTransport(() => jsonResponse({ response: { "226768": { ...F, countryName: "X" } } }));
+    assert.equal((await clientWith(mt).get(id)).countryName, "X", JSON.stringify(id));
+    assert.equal(new URL(mt.last().url).pathname, "/opendata/travelwarning/226768");
+  }
+  const cases: Array<[string, string]> = [
+    ["", "Invalid contentId: Expected a non-empty value."],
+    ["  ", "Invalid contentId: Expected a non-empty value."],
+    ["\u200b", "Invalid contentId: Expected a non-empty value."],
+    ["2267\u200b68", 'Invalid contentId: "2267\\u200b68" contains an invisible or control character (U+200B).'],
+    ["\u202e226768", 'Invalid contentId: "\\u202e226768" contains an invisible or control character (U+202E).'],
+    ["226768\u00ad", 'Invalid contentId: "226768\\u00ad" contains an invisible or control character (U+00AD).'],
+    ["22\ud80068", 'Invalid contentId: "22\\ud80068" contains half of a character (a lone surrogate).'],
+  ];
+  for (const [id, message] of cases) {
+    const mt = makeMockTransport(() => jsonResponse({ response: {} }));
+    await assert.rejects(clientWith(mt).get(id), (err: unknown) => err instanceof ReiseValidationError && err.message === message, JSON.stringify(id));
+    await assert.rejects(clientWith(mt).advice(id), ReiseValidationError, JSON.stringify(id));
+    assert.equal(mt.calls.length, 0, JSON.stringify(id));
   }
 });
 

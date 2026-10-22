@@ -10,7 +10,7 @@
 //   Methods that return a promise call it inside the async body, so they reject
 //   rather than throw synchronously; constructors throw.
 
-import { ReiseValidationError } from "./errors.js";
+import { ReiseValidationError, quoteValue } from "./errors.js";
 
 /** A validation rule: the reason `value` is invalid, or `undefined` when it is valid. */
 export type Problem<T = unknown> = (value: T) => string | undefined;
@@ -125,4 +125,53 @@ export function assertKnownKeys(name: string, options: unknown, known: readonly 
       `Invalid ${name}: Unknown option ${label}` + (hint === undefined ? `; the options are ${known.join(", ")}.` : ` (did you mean ${hint}?).`),
     );
   }
+}
+
+/** Characters that never make a value non-blank: whitespace, controls, format characters, combining marks. */
+const INVISIBLE = /[\s\p{Cc}\p{Cf}\p{M}]/gu;
+
+/** A lone surrogate: half of a character, which would be sent as U+FFFD. */
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+
+/**
+ * True when nothing in `value` would match anything: it holds only whitespace, control and
+ * format characters (a zero-width space, a soft hyphen) and combining marks. Such a value is
+ * refused as blank.
+ */
+function isBlank(value: string): boolean {
+  return value.replace(INVISIBLE, "") === "";
+}
+
+/** `U+200B` for the first character of `text` that `pattern` matches. */
+function codePointOf(text: string, pattern: RegExp): string {
+  const ch = pattern.exec(text)?.[0] ?? "";
+  return `U+${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}`;
+}
+
+/** A control or format character in a token (after trimming): every Cc and every Cf. */
+const TOKEN_INVISIBLE = /[\p{Cc}\p{Cf}]/u;
+
+/**
+ * Why `value` cannot be sent as a token, or undefined when it can. A token is an id, a code, an
+ * enum value: a value the API compares exactly (here the content id). The rules apply to the
+ * value with surrounding whitespace trimmed, as it is sent ({@link normalizeToken}): not blank
+ * (and not only invisible characters or combining marks), no lone surrogate, and no control or
+ * format character at all (a zero-width space, ZWJ, a soft hyphen, a bidi control), since an
+ * invisible character in an id only ever makes it match nothing. The reason quotes the value
+ * visibly (`quoteValue`).
+ */
+export function tokenProblem(value: string): string | undefined {
+  if (typeof value !== "string") return "Expected a string.";
+  if (isBlank(value)) return "Expected a non-empty value.";
+  const token = value.trim();
+  if (LONE_SURROGATE.test(token)) return `${quoteValue(value)} contains half of a character (a lone surrogate).`;
+  if (TOKEN_INVISIBLE.test(token)) {
+    return `${quoteValue(value)} contains an invisible or control character (${codePointOf(token, TOKEN_INVISIBLE)}).`;
+  }
+  return undefined;
+}
+
+/** A token as it is sent: trimmed and in composed Unicode (NFC). Check it with {@link tokenProblem} first. */
+export function normalizeToken(value: string): string {
+  return value.trim().normalize("NFC");
 }

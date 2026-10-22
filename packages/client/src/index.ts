@@ -29,6 +29,8 @@ export {
   booleanProblem,
   headerValueProblem,
   intInRangeProblem,
+  normalizeToken,
+  tokenProblem,
 } from "./validate.js";
 export type { Problem } from "./validate.js";
 export {
@@ -45,6 +47,7 @@ export {
   echoedCredentialForms,
   redactCredentials,
   redactSecrets,
+  quoteValue,
   redactUrl,
   toWellFormed,
 } from "./errors.js";

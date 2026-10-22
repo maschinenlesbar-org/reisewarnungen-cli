@@ -136,6 +136,37 @@ function isHighSurrogate(c: number): boolean {
   return c >= 0xd800 && c <= 0xdbff;
 }
 
+/** Unicode General Category Cf (format): bidi controls, zero-width characters, U+00AD, U+FEFF, … */
+const FORMAT_CHAR = /\p{Cf}/u;
+
+/** The most characters of a value {@link quoteValue} quotes, like a content id in a message. */
+const MAX_QUOTED_VALUE_LENGTH = 500;
+
+/**
+ * Quote a value for an error message, as `JSON.stringify` does, and also escape what it
+ * leaves raw although a terminal acts on it: DEL, the C1 controls, every Unicode
+ * format character (bidi overrides, zero-width characters, the soft hyphen) and the line and
+ * paragraph separators U+2028/U+2029, which a viewer may break the line at. A refusal quotes
+ * the value the user typed; an invisible character in it is shown (`\u200b`), never raw (D10).
+ * A value longer than 500 characters is cut, and the "…" goes after the closing quote
+ * (`"AAAA"…`), so it does not read as part of the value. The quoted part stays a valid JSON
+ * string.
+ */
+export function quoteValue(value: string): string {
+  const cut = value.length > MAX_QUOTED_VALUE_LENGTH;
+  let out = "";
+  for (const ch of JSON.stringify(cut ? cutText(value, MAX_QUOTED_VALUE_LENGTH) : value)) {
+    const n = ch.codePointAt(0) ?? 0;
+    if ((n >= 0x7f && n <= 0x9f) || n === 0x2028 || n === 0x2029 || FORMAT_CHAR.test(ch)) {
+      // One escape per UTF-16 unit, so a character above U+FFFF stays valid JSON.
+      for (let i = 0; i < ch.length; i++) out += `\\u${ch.charCodeAt(i).toString(16).padStart(4, "0")}`;
+    } else {
+      out += ch;
+    }
+  }
+  return cut ? `${out}…` : out;
+}
+
 /**
  * `text` with every lone surrogate (half of a character) replaced by U+FFFD, like
  * `String.prototype.toWellFormed` (ES2024, so not in this package's `lib`).

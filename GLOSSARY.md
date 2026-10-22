@@ -84,7 +84,8 @@ produced by `summaries()` — the flattened, array-shaped view of the list.
 **content id (`contentId`).** The numeric-string key under which a country's
 entry is stored in the `response` map (e.g. `226768`). It is the `id` field on a
 `CountryEntry` and the required argument to `get <contentId>`. It is *not* an ISO
-country code. Anything but ASCII digits (empty, `226768x`, `..`) is rejected
+country code. Surrounding whitespace is trimmed; anything else but ASCII digits (empty,
+`226768x`, `..`, an invisible character such as a zero-width space) is rejected
 before any request — by the CLI and by the library's `get()` alike — rather than
 sent upstream, which would read a leading integer leniently or resolve `..` to
 another path. Content ids are numbers, so leading zeros are dropped (`0199124` is

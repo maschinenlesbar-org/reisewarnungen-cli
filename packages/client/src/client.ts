@@ -7,8 +7,8 @@
 //   client.get("226768")     // one country's full warning (HTML content)
 
 import { RequestEngine, serverTextForMessage, type EngineOptions } from "./engine.js";
-import { ReiseNotFoundError, ReiseParseError, ReiseValidationError, cutForMessage } from "./errors.js";
-import { assertKnownKeys, assertValid, booleanProblem } from "./validate.js";
+import { ReiseNotFoundError, ReiseParseError, ReiseValidationError, cutForMessage, quoteValue } from "./errors.js";
+import { assertKnownKeys, assertValid, booleanProblem, normalizeToken, tokenProblem } from "./validate.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
 import { adviceSentences, type AdviceSentence } from "./advice.js";
 
@@ -28,13 +28,16 @@ function idForMessage(id: string): string {
 }
 
 /**
- * Check a content id before it becomes a path segment. Content ids are numeric (the
- * keys of `list()`, the `id` of `summaries()`), so only ASCII digits pass: `""`,
- * `"."` and `".."` would otherwise reach the list endpoint or its parent directory
- * (URL dot-segment normalisation), and the upstream reads a *leading* integer
- * leniently (`226768x` returns 226768's country). Throws ReiseValidationError (a
- * ReiseError), like every other rejected input; a number (`226768`) is refused with a
- * message that says it must be a string. The echoed value is cut at 500 characters.
+ * Check a content id before it becomes a path segment. A content id is a token (D8): surrounding
+ * whitespace is trimmed (as pasted); a blank value, or one with an invisible or control
+ * character or a lone surrogate, is refused (`tokenProblem`: `Invalid contentId: "2267\u200b68"
+ * contains an invisible or control character (U+200B).`, the value shown visibly). Content ids
+ * are numeric (the keys of `list()`, the `id` of `summaries()`), so then only ASCII digits pass:
+ * `"."` and `".."` would otherwise reach the list endpoint or its parent directory (URL
+ * dot-segment normalisation), and the upstream reads a *leading* integer leniently (`226768x`
+ * returns 226768's country). Throws ReiseValidationError (a ReiseError), like every other
+ * rejected input; a number (`226768`) is refused with a message that says it must be a string.
+ * The echoed value is cut at 500 characters (`quoteValue`).
  */
 export function assertContentId(contentId: string): void {
   if (typeof contentId !== "string") {
@@ -42,22 +45,21 @@ export function assertContentId(contentId: string): void {
       `Invalid contentId: Expected a string of digits (e.g. "226768"), got ${contentId === null ? "null" : typeof contentId}.`,
     );
   }
-  if (!/^\d+$/.test(contentId)) {
-    const cut = idForMessage(contentId);
-    const shown = cut === contentId ? JSON.stringify(contentId) : `${JSON.stringify(cut.slice(0, -1))}…`;
-    throw new ReiseValidationError(`Invalid contentId ${shown}. Expected a numeric content id (e.g. 226768).`);
+  assertValid("contentId", contentId, tokenProblem);
+  if (!/^\d+$/.test(normalizeToken(contentId))) {
+    throw new ReiseValidationError(`Invalid contentId ${quoteValue(contentId)}. Expected a numeric content id (e.g. 226768).`);
   }
 }
 
 /**
- * A content id as it is sent and looked up: checked by {@link assertContentId}, then as the
- * number it is, without leading zeros (`"0199124"` is `"199124"`, `"000"` is `"0"`). Content ids
- * are numbers: the API answered `0199124` with a 404, so an id copied with a leading zero read as
- * "not found" for a country that exists.
+ * A content id as it is sent and looked up: checked by {@link assertContentId}, then trimmed and
+ * as the number it is, without leading zeros (`" 0199124"` is `"199124"`, `"000"` is `"0"`).
+ * Content ids are numbers: the API answered `0199124` with a 404, so an id copied with a leading
+ * zero read as "not found" for a country that exists.
  */
 export function canonicalContentId(contentId: string): string {
   assertContentId(contentId);
-  return contentId.replace(/^0+(?=\d)/, "");
+  return normalizeToken(contentId).replace(/^0+(?=\d)/, "");
 }
 
 /**

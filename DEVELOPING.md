@@ -58,9 +58,10 @@ try {
 }
 ```
 
-`get(contentId)` rejects a `contentId` that is not a string of ASCII digits
-(`ReiseValidationError`, no request; the check is exported as `assertContentId`), sends it as
-the number it is, without leading zeros (`canonicalContentId`: `0199124` is `199124`, which the
+`get(contentId)` trims the `contentId` and rejects one that is blank, holds an invisible or
+control character or a lone surrogate (`tokenProblem`, the value quoted visibly: `"2267\u200b68"`),
+or is not a string of ASCII digits (`ReiseValidationError`, no request; the check is exported as
+`assertContentId`), sends it as the number it is, without leading zeros (`canonicalContentId`: `0199124` is `199124`, which the
 API answered with a 404 when sent as typed), and resolves to the entry keyed by that id and **never** to a
 different country: an envelope with no country entry throws `ReiseNotFoundError`,
 one whose entries sit under other keys throws `ReiseParseError` rather than guessing.
@@ -391,7 +392,11 @@ is invalid (or `undefined`). The library enforces it with `assertValid(name,
 value, problem)`, which throws `ReiseValidationError` with the message
 `Invalid <name>: <reason>` before any request (methods that return a promise
 reject; constructors throw). The CLI's option parsers call the same functions and
-turn the reason into a usage error, so the CLI keeps no rules of its own. Tests
+turn the reason into a usage error, so the CLI keeps no rules of its own. A value the API
+compares exactly (the content id) is a token: `tokenProblem` refuses a blank one (also one of
+only invisible characters or combining marks), a lone surrogate and every control or format
+character, quoting the value with `quoteValue` (exported), which shows such a character as an
+escape (`\u200b`), never raw; `normalizeToken` (trim, NFC) is what is sent. Tests
 check this with the `parity()` helper in `apps/cli/test/helpers.ts`, which sends one input
 through `run()` and through the library on one recording mock transport.
 
@@ -532,7 +537,7 @@ everything that drives the CLI is in `apps/cli/test/`.
 - **`log.test.ts`** — the record helpers of `apps/cli/src/cli/log.ts` on their own
   (`escapeForRecord`, `formatLogRecord`, `installWarningLog`); the CLI-level checks are P23's.
 - **`advice.test.ts`** — `adviceSentences` on the advisory shapes seen live (Türkei, Angola, Bangladesch, Mexiko's region lists, Tunesien's sentence split around a list), every documented phrasing, abbreviations, `client.advice` and the `advice` command.
-- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL, P23 the log on stderr — its body takes the usage-error exit code from the adapter's `USAGE_EXIT`, `1` here; P24 the input corpus — every content id, on `get` and `advice`, is sent as typed or refused on both sides, never empty, a dot segment or with a slash; this API has no text filter, so its text list is empty; P25 the response corpus — a number a double can't carry exactly, or an empty answer, is an ERROR of `reisewarnungen.api` and exit 1, never a changed value; P26 `-o` integrity — spawns the built bin: under `ulimit -f` a write cut short leaves the old file and no temporary file, and stdout cut short exits 1; an existing file without `--force` and a missing directory are refused before any request; `/dev/null`, a FIFO and `/dev/stdout` are written in place; `--force` through a dangling link creates the file it names; a signal during the write leaves no claim and no temporary file; P27 big and odd answers —
+- **`conformance-p*.test.ts`** — the shared checks of the 2026-10-05 fix plan, one file per pattern (P1 CLI redaction, P2 library redaction, P3 credentials across redirects, P4 base-URL rules, P5 transport contract, P6 retry policy, P7 pipes and exit codes — spawns the built bin, P8/P9/P13 responses and error classes, P10 strict options, P20 the stderr warning for a plain-`http:` base URL, P21 README links only to files the npm package ships — others by their GitHub URL, P23 the log on stderr — its body takes the usage-error exit code from the adapter's `USAGE_EXIT`, `1` here; P24 the input corpus — every content id, on `get` and `advice`, is sent trimmed and as its number or refused on both sides, never empty, a dot segment or with a slash, and a blank, invisible, control or half character is refused with the character shown escaped; this API has no text filter, so its text list is empty; P25 the response corpus — a number a double can't carry exactly, or an empty answer, is an ERROR of `reisewarnungen.api` and exit 1, never a changed value; P26 `-o` integrity — spawns the built bin: under `ulimit -f` a write cut short leaves the old file and no temporary file, and stdout cut short exits 1; an existing file without `--force` and a missing directory are refused before any request; `/dev/null`, a FIFO and `/dev/stdout` are written in place; `--force` through a dangling link creates the file it names; a signal during the write leaves no claim and no temporary file; P27 big and odd answers —
 spawns the built bin under a small heap: a large flat answer prints with `--compact`, an answer
 full of DEL characters prints escaped or, past V8's longest string, is an ERROR record of
 `reisewarnungen.output`, and a lone surrogate or invalid bytes become U+FFFD with a WARN record of

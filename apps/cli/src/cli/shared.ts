@@ -5,7 +5,7 @@ import { constants } from "node:buffer";
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
 import { OutputError, isDirectoryMessage, logOf, nodeFiles, refuseOverwrite, type CliDeps } from "./io.js";
-import { ReiseError, ReiseValidationError } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
+import { ReiseError, ReiseValidationError, quoteValue } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
 import { baseUrlProblem, headerValueProblem, intInRangeProblem } from "@maschinenlesbar.org/reisewarnungen-client/internal/validate";
 import { DEFAULT_BASE_URL, cleartextProblem, isBidiControl, type EngineOptions, type RetryEvent } from "@maschinenlesbar.org/reisewarnungen-client/internal/engine";
 
@@ -84,7 +84,7 @@ export function parseOutputPath(value: string): string {
   // `--output=-x`, so a file whose name starts with a dash is written as `./-x`.
   if (value !== "-" && value.startsWith("-")) {
     throw new InvalidArgumentError(
-      `looks like a missing value — ${JSON.stringify(value)} is the next option, consumed because ` +
+      `looks like a missing value — ${quoteValue(value)} is the next option, consumed because ` +
         "this one was left without a value. For a file whose name starts with a dash, write ./-name.",
     );
   }
@@ -102,7 +102,7 @@ export function assertEnum<T extends string>(
   argName: string,
 ): T {
   if (!(allowed as readonly string[]).includes(value)) {
-    throw new ReiseError(`Invalid ${argName} "${value}". Expected one of: ${allowed.join(", ")}.`);
+    throw new ReiseError(`Invalid ${argName} ${quoteValue(value)}. Expected one of: ${allowed.join(", ")}.`);
   }
   return value as T;
 }
