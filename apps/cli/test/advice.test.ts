@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adviceSentences, splitSentences } from "@maschinenlesbar.org/reisewarnungen-client/internal/advice";
+import { MAX_SECTION_LENGTH, adviceSentences, splitSentences } from "@maschinenlesbar.org/reisewarnungen-client/internal/advice";
 import { ReisewarnungenClient } from "@maschinenlesbar.org/reisewarnungen-client/internal/client";
-import { ReiseNotFoundError, ReiseParseError } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
+import { ReiseNotFoundError, ReiseParseError, toWellFormed } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
 import { run } from "../src/cli/run.js";
 import type { CliDeps } from "../src/cli/io.js";
 import { makeMockTransport, jsonResponse } from "./helpers.js";
@@ -159,6 +159,32 @@ test("advice: odd HTML, long words and abbreviations are read in linear time too
   assert.deepEqual(travel("<p>Von Reisen in die <span_x>Region</span_x> wird abgeraten.</p>"), [
     "Von Reisen in die <span_x>Region</span_x> wird abgeraten.",
   ]);
+});
+
+test("advice: long headings are cut, so the output grows with the advisory, not sentences times headings", () => {
+  // Every sentence carried its whole heading path: two 64 KiB headings and 500 short advice
+  // paragraphs (145 KB) exhausted a 256 MB heap; 50 paragraphs printed 6.5 MB.
+  const paragraphs = Array.from({ length: 200 }, (_, i) => `<p>Es wird abgeraten ${i}.</p>`).join("");
+  const html = `<h2>${"X".repeat(65_536)}</h2><h3>${"Y".repeat(65_536)}</h3>${paragraphs}`;
+  const sentences = adviceSentences(html);
+  assert.equal(sentences.length, 200);
+  const section = sentences[0]!.section;
+  assert.ok(section.length <= MAX_SECTION_LENGTH + 1, `${section.length}`);
+  assert.match(section, /^X+… › Y+…$/);
+  for (const s of sentences) assert.equal(s.section, section);
+  assert.ok(JSON.stringify(sentences).length < 2 * html.length, `${JSON.stringify(sentences).length} for ${html.length}`);
+  // A heading of six levels is cut as a whole too; a cut never leaves half of a character.
+  const deep = [1, 2, 3, 4, 5, 6].map((n) => `<h${n}>${"😀".repeat(300)}</h${n}>`).join("") + "<p>Es wird abgeraten.</p>";
+  const [only] = adviceSentences(deep);
+  assert.ok(only !== undefined && only.section.length <= MAX_SECTION_LENGTH + 1, `${only?.section.length}`);
+  assert.equal(only.section, toWellFormed(only.section));
+  assert.ok(only.section.endsWith("…"));
+  // Short headings are kept whole, and a duplicate is dropped only within its section.
+  const twice = "<h2>A</h2><p>Es wird abgeraten.</p><p>Es wird abgeraten.</p><h2>B</h2><p>Es wird abgeraten.</p>";
+  assert.deepEqual(
+    adviceSentences(twice).map((s) => s.section),
+    ["A", "B"],
+  );
 });
 
 test("splitSentences keeps abbreviations and ordinals inside a sentence", () => {

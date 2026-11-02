@@ -13,9 +13,15 @@
 // a region (`travel`), so a reader can drop the ones about crowds or drugs — but nothing that
 // advises against travel is ever dropped by the extraction itself.
 
+import { cutForMessage } from "./errors.js";
+
 /** One sentence of an advisory that uses an advise-against or warning phrasing. */
 export interface AdviceSentence {
-  /** The headings it stands under, outermost first, joined with " › " (`Sicherheit › Terrorismus`). */
+  /**
+   * The headings it stands under, outermost first, joined with " › " (`Sicherheit › Terrorismus`).
+   * A heading longer than MAX_HEADING_LENGTH and a path longer than MAX_SECTION_LENGTH are cut
+   * (never inside a surrogate pair) and end in "…".
+   */
   section: string;
   /** The sentence as plain text (tags removed, entities decoded, whitespace collapsed). */
   text: string;
@@ -113,6 +119,19 @@ function cleanText(text: string): string {
   return text.replace(/[­​-‍⁠﻿]/g, "").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Longest heading (in UTF-16 units) a section path keeps; a longer one is cut and ends in "…".
+ * The advisories' headings are short (`Südosten und Osten/Grenzgebiete zu Syrien und Irak`).
+ */
+export const MAX_HEADING_LENGTH = 200;
+
+/**
+ * Longest section path (in UTF-16 units) a sentence carries; a longer one is cut and ends in "…".
+ * Every sentence carries its path: uncut, two 64 KiB headings over 500 short paragraphs (a
+ * 145 KB answer) made hundreds of megabytes of output and exhausted the heap.
+ */
+export const MAX_SECTION_LENGTH = 500;
+
 interface Block {
   text: string;
   section: string;
@@ -168,10 +187,14 @@ function* htmlTokens(html: string): Generator<[string, string | undefined, strin
   }
 }
 
-/** Split advisory HTML into text blocks, each with the heading path it stands under. */
+/**
+ * Split advisory HTML into text blocks, each with the heading path it stands under. The path is
+ * made once per closed heading, cut, and shared by every block under it.
+ */
 function blocksOf(html: string): Block[] {
   const blocks: Block[] = [];
   const headings: string[] = [];
+  let section = "";
   let heading: { level: number; text: string } | undefined;
   let buffer = "";
   let currentList: number | undefined;
@@ -184,7 +207,7 @@ function blocksOf(html: string): Block[] {
     const text = cleanText(buffer);
     buffer = "";
     if (text === "") return;
-    blocks.push({ text, section: headings.filter((h) => h !== "").join(" › "), list: inItem ? currentList : undefined });
+    blocks.push({ text, section, list: inItem ? currentList : undefined });
   };
 
   for (const [token, closing, rawName] of htmlTokens(html)) {
@@ -209,7 +232,8 @@ function blocksOf(html: string): Block[] {
       } else if (heading !== undefined) {
         headings.length = heading.level - 1;
         for (let i = 0; i < heading.level - 1; i++) headings[i] ??= "";
-        headings[heading.level - 1] = cleanText(heading.text);
+        headings[heading.level - 1] = cutForMessage(cleanText(heading.text), MAX_HEADING_LENGTH);
+        section = cutForMessage(headings.filter((h) => h !== "").join(" › "), MAX_SECTION_LENGTH);
         heading = undefined;
       }
       continue;
@@ -298,12 +322,14 @@ export function adviceSentences(html: string): AdviceSentence[] {
   if (typeof html !== "string" || html === "") return [];
   const blocks = blocksOf(html);
   const result: AdviceSentence[] = [];
-  const seen = new Set<string>();
+  // The texts seen per section: a key of section and text would copy the path per sentence.
+  const seen = new Map<string, Set<string>>();
   const add = (section: string, text: string): void => {
     if (!isAdviceSentence(text)) return;
-    const key = `${section}\u0000${text}`;
-    if (seen.has(key)) return;
-    seen.add(key);
+    let texts = seen.get(section);
+    if (texts === undefined) seen.set(section, (texts = new Set()));
+    if (texts.has(text)) return;
+    texts.add(text);
     result.push({ section, text, travel: TRAVEL_PATTERN.test(text) });
   };
   for (let i = 0; i < blocks.length; i++) {

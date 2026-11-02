@@ -123,7 +123,10 @@ advice-against-travel sentences; the CLI's `advice`).
 verzichten, unterlassen/unterbleiben, aufgefordert, nicht … reisen/aufsuchen/besuchen,
 sollten … ausreisen/verlassen, sehen … von … ab (the „ab" at the end of a clause), von …
 absehen/abzusehen;
-case-insensitive, Unicode word boundaries), with its heading path (`section`) and
+case-insensitive, Unicode word boundaries), with its heading path (`section`: each heading
+cut at `MAX_HEADING_LENGTH`, 200 characters, the path at `MAX_SECTION_LENGTH`, 500, ending in
+„…", so a hostile advisory's long headings, copied into every sentence, can't blow up memory
+and output; made once per heading and shared) and
 `travel` (`TRAVEL_PATTERN`: Reise, Aufenthalt, Region, Gebiet, Provinz, Grenze, Landesteil,
 …). The HTML is split at block elements (paragraphs, list items, headings, accordion
 buttons), entities decoded and soft hyphens dropped; sentences split at `.`/`!`/`?` before
