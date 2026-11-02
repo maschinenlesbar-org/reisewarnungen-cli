@@ -196,6 +196,12 @@ export class ReiseApiError extends ReiseError {
   /** The request URL, userinfo redacted (`https://***@host/…`). */
   readonly url: string;
   readonly method: string;
+  /**
+   * The response body, the base URL's credentials scrubbed. It is the body as sent, unless it
+   * is JSON whose decoded text still holds an echoed credential (hidden behind an escape such
+   * as `\u002d`): then it is the decoded JSON written again (`JSON.stringify`) with the echo
+   * replaced by `***`, and `""` when it is nested too deeply to write again.
+   */
   readonly body: string;
   readonly location: string | undefined;
 

@@ -6,7 +6,7 @@
 //   client.summaries({ warnedOnly: true })  // only countries with a warning in force
 //   client.get("226768")     // one country's full warning (HTML content)
 
-import { RequestEngine, serverTextForMessage, type EngineOptions } from "./engine.js";
+import { RequestEngine, type EngineOptions } from "./engine.js";
 import { ReiseNotFoundError, ReiseParseError, ReiseValidationError, cutForMessage, quoteValue } from "./errors.js";
 import { assertKnownKeys, assertValid, booleanProblem, normalizeToken, tokenProblem } from "./validate.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
@@ -138,6 +138,12 @@ function unwrap(body: unknown, request: string): JsonObject {
   return body["response"];
 }
 
+/**
+ * How the client quotes server text into its messages: the engine's `quoteServerValue`, which
+ * scrubs the base URL's credentials before it makes the text safe and short.
+ */
+type Quote = (text: string) => string;
+
 /** The flags every country entry must carry as booleans. */
 const REQUIRED_FLAGS = ["warning", "partialWarning"] as const;
 /** The flags that must be booleans when present (all `false` in the live data so far). */
@@ -151,19 +157,21 @@ const OPTIONAL_FLAGS = ["situationWarning", "situationPartWarning"] as const;
  * skill's jq read `"false"` as a warning. Such an answer is a format change upstream; no
  * rule can read it safely, so it is refused.
  */
-function checkFlags(entry: JsonObject, contentId: string, request: string): void {
+function checkFlags(entry: JsonObject, contentId: string, request: string, quote: Quote): void {
   for (const flag of REQUIRED_FLAGS) {
-    if (typeof entry[flag] !== "boolean") throw flagError(entry, contentId, flag, request);
+    if (typeof entry[flag] !== "boolean") throw flagError(entry, contentId, flag, request, quote);
   }
   for (const flag of OPTIONAL_FLAGS) {
-    if (entry[flag] !== undefined && typeof entry[flag] !== "boolean") throw flagError(entry, contentId, flag, request);
+    if (entry[flag] !== undefined && typeof entry[flag] !== "boolean") {
+      throw flagError(entry, contentId, flag, request, quote);
+    }
   }
 }
 
-function flagError(entry: JsonObject, contentId: string, flag: string, request: string): ReiseParseError {
-  const name = typeof entry["countryName"] === "string" ? ` (${serverTextForMessage(entry["countryName"])})` : "";
+function flagError(entry: JsonObject, contentId: string, flag: string, request: string, quote: Quote): ReiseParseError {
+  const name = typeof entry["countryName"] === "string" ? ` (${quote(entry["countryName"])})` : "";
   const value = entry[flag];
-  const got = value === undefined ? "it is missing" : `got ${serverTextForMessage(JSON.stringify(value))}`;
+  const got = value === undefined ? "it is missing" : `got ${quote(JSON.stringify(value))}`;
   return new ReiseParseError(
     `${request}: unexpected response shape: the "${flag}" flag of content id "${idForMessage(contentId)}"${name} ` +
       `must be true or false, ${got}; the warning level can't be read safely.`,
@@ -187,12 +195,12 @@ const ENVELOPE_KEYS = new Set(["lastModified", "contentList"]);
  * - a `contentList` naming an id that has no entry (a partial answer that would drop
  *   countries silently).
  */
-function checkList(response: JsonObject, request: string): JsonObject {
+function checkList(response: JsonObject, request: string, quote: Quote): JsonObject {
   const error = response["error"];
   if (error !== undefined) {
     const text = typeof error === "string" ? error : JSON.stringify(error);
     throw new ReiseParseError(
-      `${request}: the API answered with an error envelope instead of the travel-warning list: ${serverTextForMessage(text)}`,
+      `${request}: the API answered with an error envelope instead of the travel-warning list: ${quote(text)}`,
     );
   }
   let countries = 0;
@@ -200,14 +208,14 @@ function checkList(response: JsonObject, request: string): JsonObject {
     if (ENVELOPE_KEYS.has(key)) continue;
     if (/^\d+$/.test(key)) {
       if (!isObject(value)) throw shapeError(request, `an object for content id "${key}"`);
-      checkFlags(value, key, request);
+      checkFlags(value, key, request, quote);
       countries += 1;
     } else if (isObject(value)) {
       // summaries() would return it as a country: its flags were never checked (so
       // --warned-only dropped a malformed one silently) and its id is one get() refuses.
       throw shapeError(
         request,
-        `a content id (digits) for every country entry, got one under "${serverTextForMessage(key)}", which is not a content id`,
+        `a content id (digits) for every country entry, got one under "${quote(key)}", which is not a content id`,
       );
     }
   }
@@ -223,7 +231,7 @@ function checkList(response: JsonObject, request: string): JsonObject {
     if (missing.length > 0) {
       throw new ReiseParseError(
         `${request}: unexpected response shape: contentList names ${missing.length} id(s) without an entry ` +
-          `(${serverTextForMessage(missing.slice(0, 10).join(", "))}${missing.length > 10 ? ", …" : ""}), a partial answer.`,
+          `(${quote(missing.slice(0, 10).join(", "))}${missing.length > 10 ? ", …" : ""}), a partial answer.`,
       );
     }
   }
@@ -232,9 +240,12 @@ function checkList(response: JsonObject, request: string): JsonObject {
 
 export class ReisewarnungenClient {
   private readonly engine: RequestEngine;
+  /** Server text quoted into a message, the base URL's credentials scrubbed first. */
+  private readonly quote: Quote;
 
   constructor(options: EngineOptions = {}) {
     this.engine = new RequestEngine(options);
+    this.quote = (text) => this.engine.quoteServerValue(text);
   }
 
   /**
@@ -245,7 +256,7 @@ export class ReisewarnungenClient {
    */
   async list(): Promise<TravelWarningList> {
     const request = `GET ${this.engine.describeUrl(PATH)}`;
-    return checkList(unwrap(await this.engine.getJson<unknown>(PATH), request), request);
+    return checkList(unwrap(await this.engine.getJson<unknown>(PATH), request), request, this.quote);
   }
 
   /**
@@ -335,13 +346,13 @@ export class ReisewarnungenClient {
       const error = response["error"];
       throw new ReiseParseError(
         `${where}: the API answered with an error envelope instead of a travel warning: ` +
-          serverTextForMessage(typeof error === "string" ? error : JSON.stringify(error)),
+          this.quote(typeof error === "string" ? error : JSON.stringify(error)),
       );
     }
 
     const direct = Object.hasOwn(response, contentId) ? response[contentId] : undefined;
     if (isObject(direct)) {
-      checkFlags(direct, contentId, where);
+      checkFlags(direct, contentId, where, this.quote);
       return direct as TravelWarning;
     }
 

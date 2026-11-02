@@ -336,6 +336,19 @@ export function serverTextForMessage(text: string, max = MAX_QUOTED_LENGTH): str
   return cutForMessage(clean.trim(), max);
 }
 
+/**
+ * `form` and its spelling in a URL (`encodeURIComponent`): a server that puts a credential into
+ * a URL, a redirect's Location, percent-encodes it. A form that has no such spelling (a lone
+ * surrogate) is kept as it is.
+ */
+function urlSpellings(form: string): string[] {
+  try {
+    return [form, encodeURIComponent(form)];
+  } catch {
+    return [form];
+  }
+}
+
 /** Longest server text (in characters) an error message keeps; `ReiseApiError.body` keeps all. */
 const MAX_DETAIL_LENGTH = 500;
 
@@ -485,16 +498,19 @@ export class RequestEngine {
         ? undefined
         : `Basic ${Buffer.from(`${decodeUserinfo(parsed.username)}:${decodeUserinfo(parsed.password)}`).toString("base64")}`;
     this.#baseUrl = withoutUserinfo(baseUrl);
-    this.#credentials = credentialsIn(baseUrl).flatMap((raw) => {
+    // The userinfo as typed and as WHATWG writes it (it percent-encodes some of its characters),
+    // the spelling a server or proxy that echoes the URL repeats.
+    const userinfos = [...new Set([...credentialsIn(baseUrl), ...credentialsIn(parsed.href)])];
+    this.#credentials = userinfos.flatMap((raw) => {
       try {
         return [raw, decodeURIComponent(raw)];
       } catch {
         return [raw];
       }
     });
-    this.#echoed = credentialsIn(baseUrl)
-      .flatMap(echoedCredentialForms)
-      .sort((a, b) => b.length - a.length);
+    this.#echoed = [...new Set(userinfos.flatMap(echoedCredentialForms).flatMap(urlSpellings))].sort(
+      (a, b) => b.length - a.length,
+    );
     this.transport = functionOption("transport", options.transport, nodeHttpTransport);
     // Only undefined selects the default; a blank or unsendable value is refused
     // here rather than sent blank or failing late with Node's raw TypeError.
@@ -557,6 +573,42 @@ export class RequestEngine {
    */
   private scrub(text: string): string {
     return this.#credentials.length === 0 ? text : redactSecrets(redactCredentials(text, this.#credentials), this.#echoed);
+  }
+
+  /**
+   * An error body, already scrubbed as sent, as `ReiseApiError.body` keeps it: when it is JSON
+   * with an escape in it, checked decoded too. An escape (`\"`, `\u00e4`) hides an echoed
+   * credential from the scrub of the text as sent, while a caller who parses the body sees it.
+   * Such a body is kept as the decoded JSON written again (`JSON.stringify`, one spelling per
+   * character) with the credential scrubbed in that spelling. A body that doesn't parse is text
+   * nobody decodes, and stays as sent; one too deeply nested to write again is left out.
+   */
+  private scrubBody(scrubbed: string): string {
+    if (this.#echoed.length === 0 || !scrubbed.includes("\\")) return scrubbed;
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(scrubbed);
+    } catch {
+      return scrubbed;
+    }
+    let rewritten: string;
+    try {
+      rewritten = JSON.stringify(decoded);
+    } catch {
+      return "";
+    }
+    const spelled = this.#echoed.map((form) => JSON.stringify(form).slice(1, -1));
+    return spelled.some((form) => rewritten.includes(form)) ? redactSecrets(rewritten, spelled) : scrubbed;
+  }
+
+  /**
+   * Server text the client's own messages quote — an error envelope sent with a 2xx status, a
+   * country name, a malformed flag value — the base URL's credentials scrubbed first (a 2xx
+   * answer is decoded JSON, which no other scrub sees), then made safe and short by
+   * {@link serverTextForMessage}. API code quotes server values with this.
+   */
+  quoteServerValue(value: string): string {
+    return serverTextForMessage(this.scrub(value));
   }
 
   /**
@@ -877,9 +929,10 @@ export class RequestEngine {
     } catch {
       // Non-JSON error body; leave detail undefined.
     }
-    // `detail` came from the response body; strip control characters so a hostile
-    // endpoint cannot inject terminal escape sequences via the stderr error message.
-    if (detail !== undefined) detail = cutServerText(sanitizeServerText(detail));
+    // `detail` came from the response body, decoded: scrubbed again (a JSON escape hid the
+    // credential from the scrub above), then stripped of control characters so a hostile
+    // endpoint cannot inject terminal escape sequences via the stderr error message, and cut.
+    if (detail !== undefined) detail = cutServerText(sanitizeServerText(this.scrub(detail)));
     // Name the target of a redirect that was not followed.
     const location =
       status >= 300 && status < 400 && locationHeader ? redirectTarget(url, locationHeader) : undefined;
@@ -887,7 +940,7 @@ export class RequestEngine {
       status,
       url,
       method,
-      body: text,
+      body: this.scrubBody(text),
       detail,
       ...(location !== undefined ? { location } : {}),
       ...(redirectsFollowed !== undefined ? { redirectsFollowed } : {}),

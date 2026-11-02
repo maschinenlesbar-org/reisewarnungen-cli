@@ -426,3 +426,34 @@ test("a long content id is quoted at most 500 characters long in every message (
   const mt = makeMockTransport(() => jsonResponse({ response: { lastModified: 1 } }));
   await assert.rejects(clientWith(mt).get(id), (err: unknown) => err instanceof ReiseNotFoundError && err.contentId === id);
 });
+
+test("a credential a 2xx answer echoes is scrubbed from the client's own messages", async () => {
+  const base = "https://dummyuser:dummypass-0001@mirror.example";
+  const basic = Buffer.from("dummyuser:dummypass-0001").toString("base64");
+  const cases: Array<[string, unknown, (c: ReisewarnungenClient) => Promise<unknown>]> = [
+    ["list error envelope, the pair", { response: { error: "bad login dummyuser:dummypass-0001" } }, (c) => c.list()],
+    ["summaries error envelope, Basic", { response: { error: `Authorization: Basic ${basic}` } }, (c) => c.summaries()],
+    ["list error envelope, an object", { response: { error: { pw: "dummypass-0001" } } }, (c) => c.list()],
+    ["get error envelope", { response: { error: "pw dummypass-0001" } }, (c) => c.get("1")],
+    [
+      "a country name in a flag error",
+      { response: { lastModified: 1, contentList: ["1"], "1": { countryName: "pw dummypass-0001", warning: "yes", partialWarning: false } } },
+      (c) => c.summaries(),
+    ],
+    [
+      "a flag value",
+      { response: { "1": { countryName: "X", warning: "dummypass-0001", partialWarning: false } } },
+      (c) => c.get("1"),
+    ],
+    ["a key that is not a content id", { response: { "pw dummypass-0001": { ...F } } }, (c) => c.list()],
+    ["contentList ids", { response: { contentList: ["dummypass-0001"], "1": { ...F } } }, (c) => c.list()],
+  ];
+  for (const [label, body, call] of cases) {
+    const mt = makeMockTransport(() => jsonResponse(body));
+    const client = new ReisewarnungenClient({ baseUrl: base, maxRetries: 0, transport: mt.transport });
+    const err = await call(client).catch((caught: unknown) => caught);
+    assert.ok(err instanceof ReiseParseError, `${label}: ${String(err)}`);
+    for (const secret of ["dummypass-0001", basic]) assert.ok(!err.message.includes(secret), `${label}: ${err.message}`);
+    assert.ok(err.message.includes("***"), `${label}: ${err.message}`);
+  }
+});

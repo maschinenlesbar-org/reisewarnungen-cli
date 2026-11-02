@@ -175,10 +175,17 @@ URL in a real `#private` field (so `console.log(client)`, `util.inspect` and
 `JSON.stringify` don't show it), `ReiseApiError.url` and its message carry the URL with
 the userinfo replaced by `***`, a redirect target is shown the same way, and error
 bodies, details, transport error text and the `cause` chain are scrubbed of the
-userinfo (raw and percent-decoded) before they reach an error — and with it of the forms
-a server echoes it back in (`echoedCredentialForms`, exported): the `Authorization: Basic`
-value, the decoded `user:password`, and the password alone from 4 characters on
-(`redactSecrets`, exported). The CLI replaces the Basic value and the pair on stdout and
+userinfo (raw, percent-decoded and as WHATWG writes it in the URL) before they reach an
+error — and with it of the forms a server echoes it back in (`echoedCredentialForms`,
+exported), each also percent-encoded: the `Authorization: Basic` value, the decoded
+`user:password`, and the password alone from 4 characters on (`redactSecrets`, exported).
+A JSON error body is scrubbed as sent and its `detail` again after decoding, since a JSON
+escape (`\u002d`) hides an echo from the first scrub. `ReiseApiError.body` stays as sent
+(scrubbed) unless it is JSON whose decoded text still holds such an echo: then it is the
+decoded JSON written again (`JSON.stringify`) with the echo replaced, or `""` when it is
+nested too deeply to write again. Server text the client quotes from a 2xx answer (an error
+envelope, a country name, a flag value) goes through `RequestEngine.quoteServerValue`, which
+scrubs before it cuts. The CLI replaces the Basic value and the pair on stdout and
 stderr, the bare password on stderr only (on stdout a short password may well occur in
 the data).
 
@@ -374,10 +381,11 @@ option, option key or type, content id, or `isWarned` argument — never a raw
 `detail`, a redirect target, a transport's error text) and the URL it names are cut
 at 500 characters, never inside a surrogate pair (`cutText`), so the message stays
 well-formed; a redirect target, a Content-Type or a charset the message names at
-`MAX_QUOTED_LENGTH` (200, `cutForMessage`, both exported); `ReiseApiError.body` keeps the full body. The client's own messages
+`MAX_QUOTED_LENGTH` (200, `cutForMessage`, both exported); `ReiseApiError.body` keeps the full body (scrubbed, see above). The client's own messages
 that quote the server (the text of an error envelope sent with a 2xx status, a country
 name and a malformed flag value, the ids a `contentList` names without an entry) go
-through the exported `serverTextForMessage`: one line, no control (C0, DEL, C1) or bidi
+through `RequestEngine.quoteServerValue` — the base URL's credentials scrubbed, then the
+exported `serverTextForMessage`: one line, no control (C0, DEL, C1) or bidi
 characters, at most 200 characters (cut the same way). A content id (or the request URL that
 ends in one) is quoted at most 500 characters long in every message — not found, shape
 and parse errors, `assertContentId`'s — while `ReiseNotFoundError.contentId` keeps it
