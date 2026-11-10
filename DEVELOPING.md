@@ -382,6 +382,9 @@ whole CLI run in tests with a mocked client and captured output — no subproces
 `ReiseValidationError` (a usage error, exit 1, no request); `-o -` is stdout. A stream — a
 character device, a FIFO, a socket, `/dev/stdout`, `/dev/stderr`, `/dev/fd/N` — is written in
 place (`writeInPlace`, every byte), with no claim, no temporary file and no `--force` needed.
+The open creates nothing (`O_WRONLY | O_APPEND`, no `O_CREAT`) and the descriptor is checked
+(`fstat`): a path that is no stream by then (a link switched to a regular file) takes the way of
+a file, so without `--force` it is refused.
 For a file, `nodeFiles.write` claims the name with an exclusive create unless `--force` (so a
 file that appeared during the request is kept: an `OutputError`, exit 1), writes a temporary
 file beside the target (`.<name>.<pid>-<hex>.tmp`, shortened to stay within 255 bytes) and
