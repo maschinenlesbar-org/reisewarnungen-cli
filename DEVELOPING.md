@@ -593,7 +593,15 @@ spawns the built bin under a small heap: a large flat answer prints with `--comp
 full of DEL characters prints escaped or, past V8's longest string, is an ERROR record of
 `reisewarnungen.output`, and a lone surrogate or invalid bytes become U+FFFD with a WARN record of
 `reisewarnungen.api`, and an answer sent as two million one-byte chunks is read under a 256 MB
-heap). Only their `adapter` block is repo-specific; `kitParity` in `apps/cli/test/helpers.ts` gives P24/P25 the library's error as `{ name, message }`.
+heap; the security audit of 2026-10-27 added P28 hostile error answers — spawns the built bin
+for its memory cases: the number scan and the cleaning of server text are linear and
+memory-bounded, a 16 MB error message is one record, credentials are scrubbed from decoded text,
+from the error envelope `get` quotes and from a redirect's Location, and a 302 answered forever
+ends in `HTTP 302 for GET … (stopped after 5 redirects)`; P29 base-URL credentials — a token
+userinfo scrubbed, a backslash and a mangled scheme refused, requests to the parsed host, linear
+stdout redaction; P30 output links — `--force` follows no other user's link in a shared
+directory, EACCES isn't "exists", a stream is checked on its descriptor; P31 release.yml's three
+jobs and the locked `tools/sbom/`). Only their `adapter` block is repo-specific; `kitParity` in `apps/cli/test/helpers.ts` gives P24/P25 the library's error as `{ name, message }`.
 
 ## Continuous integration
 

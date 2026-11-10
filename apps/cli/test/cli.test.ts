@@ -561,24 +561,6 @@ test("a URL with a password anywhere inside an argument is redacted in every mes
   }
 });
 
-test("the redaction of stdout is linear in the answer, and hides the userinfo of glued URLs (B, B2)", async () => {
-  // The URL regex behind the exact-string redaction was tried at every word start: an answer
-  // value of `a.a.…` held the run for seconds whenever --base-url carried credentials.
-  const base = "https://alice:s3cret-Pw@mirror.example";
-  const long = makeCli(() => jsonResponse({ response: { lastModified: 1, "100": { ...F, countryName: "a.".repeat(100_000) } } }));
-  const start = performance.now();
-  assert.equal(await run(["--base-url", base, "--compact", "countries"], long.deps), 0, long.err.join("\n"));
-  const ms = performance.now() - start;
-  assert.ok(ms < 1500, `${Math.round(ms)} ms`);
-  // A URL glued onto the one before it starts inside the authority read for the first `://`.
-  const value = "https://host://u:p1@h and https://u:p2@x://v:q3@w";
-  const glued = makeCli(() => jsonResponse({ response: { lastModified: 1, "100": { ...F, countryName: value } } }));
-  assert.equal(await run(["--base-url", base, "--compact", "countries"], glued.deps), 0, glued.err.join("\n"));
-  const out = glued.out.join("\n");
-  assert.ok(out.includes("https://host://***@h and https://***@x://***@w"), out);
-  for (const secret of ["u:p1", "u:p2", "v:q3"]) assert.ok(!out.includes(secret), out);
-});
-
 test("a --base-url with a backslash, or a scheme not followed by exactly // and the host, is refused without echoing the password (F, F3, F4)", async () => {
   const pw = "s3cret-Pw";
   for (const [base, reason] of [
