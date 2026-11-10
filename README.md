@@ -155,7 +155,10 @@ record of `reisewarnungen.api` says how many. By default it is written log4j sty
 `--log-format jsonl` writes one JSON object per line instead. A record is always one
 line: a line break, a control character or a bidi control in a message (a server's
 text, a value you typed) is written as an escape (`\n`, `\u001b`, `\u202e`), so it can
-neither split a record nor forge another one, nor steer the terminal; a message longer
+neither split a record nor forge another one, nor steer the terminal. In a server's text (an
+error message, a Content-Type) whole terminal escape sequences, the other control characters
+and the invisible format characters are removed before that, and its line breaks and tabs
+become single spaces. A message longer
 than 4000 characters is cut and ends in `… (N more characters)`:
 
 ```text

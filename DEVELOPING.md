@@ -384,15 +384,22 @@ never a bad configuration value), `ReiseParseError` (bad JSON, or a 2xx body tha
 `ReiseValidationError` (an input the library rejects before any request: a bad
 option, option key or type, content id, or `isWarned` argument — never a raw
 `TypeError`), all extending `ReiseError`. Server text in a message (an error
-`detail`, a redirect target, a transport's error text) and the URL it names are cut
+`detail`, a redirect target, a transport's error text, a Content-Type, Content-Encoding or
+charset) goes through `sanitizeServerText` (engine.ts): whole terminal escape sequences, the
+remaining C0 controls but whitespace, DEL, C1 and every Unicode format character (bidi,
+zero-width) are dropped, each run of whitespace becomes one space, and only the first 16 384
+characters are read, all in linear regex replaces, so a hostile 16 MB detail costs neither
+seconds nor the heap. Pieces of an answer put back together (lone-surrogate repairs, quoted
+big-integer members, the stdout redaction) are joined in batches (`TextBuilder`, errors.ts),
+never one `+=` per piece. That text and the URL it names are cut
 at 500 characters, never inside a surrogate pair (`cutText`), so the message stays
 well-formed; a redirect target, a Content-Type or a charset the message names at
 `MAX_QUOTED_LENGTH` (200, `cutForMessage`, both exported); `ReiseApiError.body` keeps the full body (scrubbed, see above). The client's own messages
 that quote the server (the text of an error envelope sent with a 2xx status, a country
 name and a malformed flag value, the ids a `contentList` names without an entry) go
 through `RequestEngine.quoteServerValue` — the base URL's credentials scrubbed, then the
-exported `serverTextForMessage`: one line, no control (C0, DEL, C1) or bidi
-characters, at most 200 characters (cut the same way). A content id (or the request URL that
+exported `serverTextForMessage` (`sanitizeServerText`, then the cut): one line, no escape
+sequence, control or format character, at most 200 characters (cut the same way). A content id (or the request URL that
 ends in one) is quoted at most 500 characters long in every message — not found, shape
 and parse errors, `assertContentId`'s — while `ReiseNotFoundError.contentId` keeps it
 whole. The CLI maps a `404` (real or synthetic) on `get` to exit
