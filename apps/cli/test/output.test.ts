@@ -92,11 +92,19 @@ test("a refused -o target is a usage error before any request", async () => {
       [["-o", sub, "countries"], `"${sub}" is a directory; give a file path to --output.`],
       [["-o", sub, "--force", "get", "100"], `"${sub}" is a directory; give a file path to --output.`],
     ];
-    for (const [argv, message] of cases) {
-      const cli = makeCli();
-      assert.equal(await run(argv, cli.deps), 1, argv.join(" "));
-      assert.equal(cli.mt.calls.length, 0, `${argv.join(" ")} sent a request`);
-      assert.ok(cli.err.some((line) => line.startsWith("ERROR [reisewarnungen.cli]") && line.includes(message)), `${argv.join(" ")}: ${cli.err.join(" | ")}`);
+    // Run in the temp directory: a relative name such as "--compact" taken as the file would be
+    // created there (and checked below), never in the repo the tests run from.
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      for (const [argv, message] of cases) {
+        const cli = makeCli();
+        assert.equal(await run(argv, cli.deps), 1, argv.join(" "));
+        assert.equal(cli.mt.calls.length, 0, `${argv.join(" ")} sent a request`);
+        assert.ok(cli.err.some((line) => line.startsWith("ERROR [reisewarnungen.cli]") && line.includes(message)), `${argv.join(" ")}: ${cli.err.join(" | ")}`);
+      }
+    } finally {
+      process.chdir(cwd);
     }
     assert.equal(readFileSync(existing, "utf8"), "keep");
     assert.deepEqual(readdirSync(dir).sort(), ["dangling.json", "existing.json", "sub"]);
