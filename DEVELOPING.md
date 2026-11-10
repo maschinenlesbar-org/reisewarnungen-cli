@@ -184,6 +184,11 @@ password with DEL, C1 or bidi characters is matched in its raw form. The library
 pieces: `redactUrl(url)`, `credentialsIn(value)` (the userinfo of a value with a scheme, as written, also for
 one that doesn't parse; `[]` for a bare `alice:pw@host`) and `redactCredentials(text, list)`.
 
+A base URL (`--base-url`, and the environment variable where the CLI reads one) is read as
+a URL however its scheme is typed (`typedUrlCredentials`): missing (`alice:pw@host`) or
+mistyped (`http//alice:pw@host`, the colon left out, whose userinfo is everything between the
+first slashes and the last `@`), so commander's echo of a refused one shows no password.
+
 The library keeps the password out of what a caller logs, too: the engine holds the base
 URL in a real `#private` field (so `console.log(client)`, `util.inspect` and
 `JSON.stringify` don't show it), `ReiseApiError.url` and its message carry the URL with

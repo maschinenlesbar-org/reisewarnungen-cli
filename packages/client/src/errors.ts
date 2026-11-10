@@ -65,6 +65,26 @@ export function credentialsIn(value: string): string[] {
   return end > 0 ? [rest.slice(0, end)] : [];
 }
 
+/**
+ * The userinfo of a value meant as a URL (a base URL, a request URL), however its scheme is
+ * typed: as `credentialsIn` reads it when the value has a scheme; else as if it had `http://`
+ * (`user:password@host`, `TOKEN:@host`); else, for a scheme mistyped before slashes
+ * (`http//user:pw@host` with the colon left out, `http/…`, `htp:/…`), everything between the
+ * first run of slashes or backslashes and the last `@`, as `credentialsIn` reads a URL that
+ * doesn't parse. Such a value is refused, but the refusal (commander's, the transport's) quotes
+ * it, so its userinfo has to be found to be redacted. Only for a value known to be a URL: in
+ * other text a bare `a/b@c` is no credential.
+ */
+export function typedUrlCredentials(value: string): string[] {
+  if (value === "" || credentialsIn(value).length > 0 || /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(value)) return credentialsIn(value);
+  const prefixed = credentialsIn(`http://${value}`);
+  if (prefixed.length > 0) return prefixed;
+  const slashes = /[/\\]+/.exec(value);
+  const at = value.lastIndexOf("@");
+  if (slashes === null || slashes.index + slashes[0].length >= at) return [];
+  return [value.slice(slashes.index + slashes[0].length, at)];
+}
+
 /** A scheme character (RFC 3986: letters, digits, `+`, `.`, `-`). */
 function isSchemeChar(code: number): boolean {
   return (code >= 0x61 && code <= 0x7a) || (code >= 0x41 && code <= 0x5a) || (code >= 0x30 && code <= 0x39) || code === 0x2b || code === 0x2e || code === 0x2d;
