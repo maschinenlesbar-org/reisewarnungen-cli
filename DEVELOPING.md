@@ -480,7 +480,8 @@ whole seconds, ms under 1 s). Tests: `packages/client/test/engine.test.ts`, `app
 **maxResponseBytes.** A hard cap on the response body size (default 100 MiB;
 `0` disables it) that aborts the request if exceeded, defending against memory
 exhaustion from a hostile or buggy endpoint. The default transport aborts as soon as
-the cap is passed; the engine also checks the body any transport returns. The message
+the cap is passed, and joins small chunks as they arrive (1024 of them or 64 KiB at a time), so
+an answer sent in millions of tiny chunks holds memory by its bytes, not by its chunk count; the engine also checks the body any transport returns. The message
 names both spellings: `Response exceeded the size limit of N bytes (maxResponseBytes;
 --max-response-bytes on the CLI)`.
 
@@ -591,7 +592,8 @@ everything that drives the CLI is in `apps/cli/test/`.
 spawns the built bin under a small heap: a large flat answer prints with `--compact`, an answer
 full of DEL characters prints escaped or, past V8's longest string, is an ERROR record of
 `reisewarnungen.output`, and a lone surrogate or invalid bytes become U+FFFD with a WARN record of
-`reisewarnungen.api`). Only their `adapter` block is repo-specific; `kitParity` in `apps/cli/test/helpers.ts` gives P24/P25 the library's error as `{ name, message }`.
+`reisewarnungen.api`, and an answer sent as two million one-byte chunks is read under a 256 MB
+heap). Only their `adapter` block is repo-specific; `kitParity` in `apps/cli/test/helpers.ts` gives P24/P25 the library's error as `{ name, message }`.
 
 ## Continuous integration
 
