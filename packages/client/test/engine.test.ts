@@ -1064,3 +1064,78 @@ test("a password with an inner space is scrubbed whole, never word by word", asy
     assert.ok(!/my|s3cret|Pw/.test(text.replace(/mirror/g, "")), text);
   }
 });
+
+test("a credential echoed in a redirect's Location never names the request in a message (D2)", async () => {
+  // The engine follows redirects: every message about the request after one named the followed
+  // URL through redactUrl only, which drops the URL's own userinfo but not the base URL's
+  // credentials in its path or query; a Location not followed or refused was resolved before
+  // any scrub, and ReiseApiError.location kept it.
+  const pw = "pä\"s's-W0rd";
+  const base = `https://alice:${encodeURIComponent(pw)}@mirror.example`;
+  const basic = Buffer.from(`alice:${pw}`, "utf8").toString("base64");
+  const secrets = [pw, `alice:${pw}`, basic];
+  const leaks = (text: string): boolean => {
+    const decoded = text.replace(/(?:%[0-9a-fA-F]{2})+/g, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+    return secrets.some((secret) => decoded.includes(secret));
+  };
+  const locations = [
+    `https://elsewhere.example/login?user=alice&pw=${encodeURIComponent(pw)}`,
+    `https://elsewhere.example/login?pw=${pw}`,
+    `https://elsewhere.example/${encodeURIComponent(`alice:${pw}`)}/x`,
+    `https://elsewhere.example/auth?basic=${basic}`,
+    `/relative/${pw}`,
+  ];
+  const redirect = (location: string): HttpResponse => ({ status: 302, headers: { location }, body: Buffer.from("") });
+  for (const location of locations) {
+    // A loop (past maxRedirects the 3xx is the error), an error answer, a refused connection
+    // after one redirect, a 3xx not followed at all (maxRedirects 0), a 300 naming the target.
+    const cases: Array<[number, (n: number) => HttpResponse]> = [
+      [5, () => redirect(location)],
+      [5, (n) => (n === 0 ? redirect(location) : jsonResponse({}, 401))],
+      [
+        5,
+        (n) => {
+          if (n === 0) return redirect(location);
+          throw Object.assign(new Error("socket hang up"), { code: "ECONNREFUSED" });
+        },
+      ],
+      [0, () => redirect(location)],
+      [5, () => ({ status: 300, headers: { location }, body: Buffer.from("") })],
+    ];
+    for (const [maxRedirects, answer] of cases) {
+      let n = 0;
+      const e = new RequestEngine({ baseUrl: base, maxRetries: 1, maxRedirects, sleep: async () => {}, transport: async () => answer(n++) });
+      const err = await e.getJson("/x").catch((caught: unknown) => caught);
+      assert.ok(err instanceof Error, String(err));
+      const e2 = err as Error & { url?: string; location?: string };
+      for (const text of [err.message, e2.url ?? "", e2.location ?? ""]) assert.ok(!leaks(text), `${location}: ${text}`);
+    }
+    // onRetry names the request after the redirect as messages do.
+    let n = 0;
+    const retries: string[] = [];
+    await new RequestEngine({
+      baseUrl: base,
+      maxRetries: 1,
+      sleep: async () => {},
+      onRetry: (event) => retries.push(event.url),
+      transport: async () => (n++ === 0 ? redirect(location) : jsonResponse({}, 503)),
+    })
+      .getJson("/x")
+      .catch(() => undefined);
+    assert.equal(retries.length, 1);
+    assert.ok(!leaks(retries[0] ?? ""), `${location}: ${retries[0]}`);
+  }
+  // A refused redirect (another scheme, https→http) names its target scrubbed.
+  for (const location of [`ftp://elsewhere.example/${encodeURIComponent(pw)}`, `http://elsewhere.example/?pw=${pw}`]) {
+    const e = new RequestEngine({ baseUrl: base, maxRetries: 0, transport: async () => redirect(location) });
+    const err = await e.getJson("/x").catch((caught: unknown) => caught);
+    assert.ok(err instanceof ReiseNetworkError && /^Refusing to follow/.test(err.message), String(err));
+    assert.ok(!leaks(err.message), err.message);
+  }
+});

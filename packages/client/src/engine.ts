@@ -583,15 +583,19 @@ export class RequestEngine {
     }
   }
 
-  /** Tell `onRetry` about a retry, then wait. A throwing callback never breaks the request. */
-  private async backOff(attempt: number, delayMs: number, url: string, status?: number): Promise<void> {
+  /**
+   * Tell `onRetry` about a retry (`shown`: the URL as messages name it, userinfo redacted and,
+   * after a redirect, the credentials echoed in it scrubbed), then wait. A throwing callback
+   * never breaks the request.
+   */
+  private async backOff(attempt: number, delayMs: number, shown: string, status?: number): Promise<void> {
     try {
       this.onRetry?.({
         retry: attempt,
         maxRetries: this.maxRetries,
         delayMs,
         ...(status !== undefined ? { status } : {}),
-        url: redactUrl(url),
+        url: shown,
       });
     } catch {
       // a logging hook is no reason to fail the request
@@ -735,6 +739,12 @@ export class RequestEngine {
     let redirects = 0;
     // Why a 401/403 after a redirect may not be the credentials' fault, if it isn't.
     let credentialsDropped: string | undefined;
+    // The URL as messages name it: after a redirect, the Location as the server sent it with the
+    // base URL's credentials scrubbed, then resolved (`redirectTarget`). Resolving first would
+    // percent-encode an echoed password in a new spelling (`'` as `%27` in a query) no scrub
+    // matches. The request itself goes to the Location as sent.
+    let shown = this.describe(url);
+    const scrub = (text: string): string => this.scrub(text);
     // attempts = initial try + maxRetries (redirects are counted separately)
     for (;;) {
       // The base URL's credentials go only to its own origin, on every hop: a same-origin
@@ -758,7 +768,7 @@ export class RequestEngine {
         // transport reported it. Timeouts are not retried — --timeout bounds each attempt.
         if (idempotent && hasTransientCode(cause) && attempt < this.maxRetries) {
           attempt += 1;
-          await this.backOff(attempt, this.retryDelayMs * attempt, url);
+          await this.backOff(attempt, this.retryDelayMs * attempt, shown);
           continue;
         }
         // The default transport rejects with ReiseNetworkError only; an injected one may
@@ -766,9 +776,10 @@ export class RequestEngine {
         // network failure is re-raised naming the request, with the original as `cause`;
         // any other ReiseError passes through.
         if (cause instanceof ReiseError && !(cause instanceof ReiseNetworkError)) throw cause;
-        const reason = cause instanceof Error ? cause.message : String(cause);
+        // A transport's text names the URL it was given; the message names the one shown.
+        const reason = (cause instanceof Error ? cause.message : String(cause)).split(url).join(shown);
         throw new ReiseNetworkError(
-          `${method} ${this.describe(url)} failed: ${cutServerText(sanitizeServerText(this.scrub(reason)))}`,
+          `${method} ${shown} failed: ${cutServerText(sanitizeServerText(this.scrub(reason)))}`,
           { cause: this.scrubCause(cause) },
         );
       }
@@ -778,7 +789,7 @@ export class RequestEngine {
       const invalid = responseProblem(raw);
       if (invalid !== undefined) {
         throw new ReiseNetworkError(
-          `${method} ${this.describe(url)} failed: the transport returned an invalid response (${invalid}).`,
+          `${method} ${shown} failed: the transport returned an invalid response (${invalid}).`,
         );
       }
       // A transport must not follow redirects itself (fetch does by default): one that did
@@ -787,8 +798,8 @@ export class RequestEngine {
       const finalOrigin = originOf((raw as { url?: unknown }).url);
       if (finalOrigin !== undefined && finalOrigin !== new URL(url).origin) {
         throw new ReiseNetworkError(
-          `${method} ${this.describe(url)} failed: the transport followed a redirect to another origin ` +
-            `(${redactUrl(finalOrigin)}); transports must not follow redirects (HttpRequest.redirect is "manual").`,
+          `${method} ${shown} failed: the transport followed a redirect to another origin ` +
+            `(${cutServerText(sanitizeServerText(redactUrl(this.scrub(finalOrigin))))}); transports must not follow redirects (HttpRequest.redirect is "manual").`,
         );
       }
       const status = Number(raw.status);
@@ -799,7 +810,7 @@ export class RequestEngine {
       // The size cap holds whatever the transport did: the default one aborts early, a
       // custom one may have read everything.
       if (this.maxResponseBytes > 0 && body.byteLength > this.maxResponseBytes) {
-        throw new ReiseNetworkError(`${method} ${this.describe(url)} failed: ${sizeLimitMessage(this.maxResponseBytes)}`);
+        throw new ReiseNetworkError(`${method} ${shown} failed: ${sizeLimitMessage(this.maxResponseBytes)}`);
       }
 
       const retryable = status === 429 || status === 503;
@@ -814,7 +825,7 @@ export class RequestEngine {
         const retryAfter = parseRetryAfter(headerValue(responseHeaders["retry-after"]));
         if (retryAfter === undefined || retryAfter <= MAX_RETRY_AFTER_MS) {
           attempt += 1;
-          await this.backOff(attempt, Math.max(retryAfter ?? 0, backoff), url, status);
+          await this.backOff(attempt, Math.max(retryAfter ?? 0, backoff), shown, status);
           continue;
         }
         retryHint =
@@ -828,7 +839,7 @@ export class RequestEngine {
       if (next !== undefined && redirects >= this.maxRedirects) {
         // A loop (or a long chain): say how far it got rather than a bare 3xx.
         // (With maxRedirects 0 nothing was followed; the plain text says enough.)
-        throw this.toApiError(method, url, status, body, location, redirects || undefined);
+        throw this.toApiError(method, shown, status, body, location, redirects || undefined);
       }
       if (next !== undefined) {
         const from = new URL(url);
@@ -839,7 +850,8 @@ export class RequestEngine {
         // taken from an attacker-controllable Location header.
         if (to.protocol !== "https:" && to.protocol !== "http:") {
           throw new ReiseNetworkError(
-            `Refusing to follow a redirect to an unsupported protocol "${to.protocol}": ${redirectTarget(url, to.href) ?? ""}`,
+            `Refusing to follow a redirect to an unsupported protocol "${cutForMessage(sanitizeServerText(this.scrub(to.protocol)))}": ` +
+              (redirectTarget(shown, location ?? "", scrub) ?? ""),
           );
         }
         // Refuse to follow a redirect that downgrades the connection security
@@ -847,7 +859,7 @@ export class RequestEngine {
         // letting an on-path attacker tamper the (safety-relevant) travel-warning data.
         if (from.protocol === "https:" && to.protocol === "http:") {
           throw new ReiseNetworkError(
-            `Refusing to follow an insecure https->http redirect to ${redirectTarget(url, to.href) ?? ""}`,
+            `Refusing to follow an insecure https->http redirect to ${redirectTarget(shown, location ?? "", scrub) ?? ""}`,
           );
         }
         // Credential-strip guard: on a cross-origin redirect, drop any
@@ -865,8 +877,9 @@ export class RequestEngine {
           credentialsDropped =
             from.protocol === "http:" && to.protocol === "https:" && from.host === to.host
               ? "the server redirected http→https, and the base URL's credentials are only sent to its own origin; use an https base URL"
-              : `the redirect to ${to.origin} did not carry the base URL's credentials (they are only sent to ${redactUrl(this.#origin)})`;
+              : `the redirect to ${cutServerText(sanitizeServerText(this.scrub(to.origin)))} did not carry the base URL's credentials (they are only sent to ${redactUrl(this.#origin)})`;
         }
+        shown = redirectTarget(shown, location ?? "", scrub) ?? shown;
         url = to.toString();
         redirects += 1;
         continue;
@@ -878,7 +891,7 @@ export class RequestEngine {
       if (status < 200 || status >= 300) {
         const hint =
           (status === 401 || status === 403) && credentialsDropped !== undefined ? credentialsDropped : retryHint;
-        throw this.toApiError(method, url, status, body, location, undefined, hint);
+        throw this.toApiError(method, shown, status, body, location, undefined, hint);
       }
 
       const contentEncoding = String(headerValue(responseHeaders["content-encoding"]) ?? "");
@@ -943,9 +956,10 @@ export class RequestEngine {
     return parsed;
   }
 
+  /** The error for a non-2xx answer to `method` on `shown` (the URL as messages name it). */
   private toApiError(
     method: string,
-    url: string,
+    shown: string,
     status: number,
     body: Buffer,
     locationHeader?: string,
@@ -975,10 +989,10 @@ export class RequestEngine {
     if (detail !== undefined) detail = cutServerText(sanitizeServerText(this.scrub(detail)));
     // Name the target of a redirect that was not followed.
     const location =
-      status >= 300 && status < 400 && locationHeader ? redirectTarget(url, locationHeader) : undefined;
+      status >= 300 && status < 400 && locationHeader ? redirectTarget(shown, locationHeader, (t) => this.scrub(t)) : undefined;
     return new ReiseApiError({
       status,
-      url,
+      url: shown,
       method,
       body: this.scrubBody(text),
       detail,
@@ -1145,14 +1159,22 @@ function resolveLocation(location: string | undefined, base: string): URL | unde
 }
 
 /**
- * The absolute, printable form of a `Location` header: resolved against the request
- * URL, control characters stripped (it is server text bound for stderr). An
- * unparseable value is shown sanitised as it came.
+ * The absolute, printable form of a `Location` header: the base URL's credentials scrubbed
+ * (`scrub`) as sent, before resolving percent-encodes what is left of them in a new spelling
+ * (`'` as `%27` in a query); resolved against the URL shown so far, userinfo redacted (a
+ * Location may carry credentials of its own, `https://bob:pw@other/`), control and format
+ * characters stripped and cut (it is server text bound for stderr). An unparseable value is
+ * shown cleaned as it came.
  */
-function redirectTarget(requestUrl: string, location: string): string | undefined {
-  const resolved = resolveLocation(location, requestUrl);
-  // A Location may carry credentials of its own (`https://bob:pw@other/`): never print them.
-  const clean = cutServerText(sanitizeServerText(redactUrl(resolved ? resolved.href : location)).trim());
+function redirectTarget(shownUrl: string, location: string, scrub: (text: string) => string): string | undefined {
+  const sent = scrub(location);
+  let target: string;
+  try {
+    target = redactUrl(new URL(sent, shownUrl).href);
+  } catch {
+    target = redactUrl(sent);
+  }
+  const clean = cutServerText(sanitizeServerText(target));
   return clean === "" ? undefined : clean;
 }
 

@@ -179,7 +179,11 @@ one that doesn't parse; `[]` for a bare `alice:pw@host`) and `redactCredentials(
 The library keeps the password out of what a caller logs, too: the engine holds the base
 URL in a real `#private` field (so `console.log(client)`, `util.inspect` and
 `JSON.stringify` don't show it), `ReiseApiError.url` and its message carry the URL with
-the userinfo replaced by `***`, a redirect target is shown the same way, and error
+the userinfo replaced by `***`, a redirect target is shown the same way (a `Location` is
+scrubbed of the base URL's credentials as sent, before it is resolved, since resolving
+percent-encodes an echo in a new spelling; after a redirect every message, `ReiseApiError.url`
+and `.location` and `onRetry`'s `url` name the request by that scrubbed form, while the request
+itself goes to the `Location` as sent), and error
 bodies, details, transport error text and the `cause` chain are scrubbed of the
 userinfo (raw, percent-decoded and as WHATWG writes it in the URL) before they reach an
 error — and with it of the forms a server echoes it back in (`echoedCredentialForms`,
