@@ -390,6 +390,14 @@ it names, created if the link dangles), and on any failure leaves neither the te
 the claimed name behind. From the first file write on, SIGINT, SIGTERM and SIGHUP remove the
 claim and the temporary file, then exit 130, 143 or 129 (before, an interrupted write left an
 empty file under the name, which the next run refused, and the whole temporary file).
+`--force` follows a link only when the caller or the owner of its directory made it, or the
+directory is neither sticky nor writable by others (`linkTarget`, Linux's
+fs.protected_symlinks rule, at every hop, a dangling last one too): the CLI resolves links
+itself, so the kernel's own check never applies, and a link another user planted in `/tmp`
+sent the answer over any file the caller could replace. Such a link is a usage error before
+the request, an `OutputError` at write time. A path that can't be inspected (EACCES on the
+way) is reported as that, never as an existing file. `nodeFilesFor(owners)` is the seam
+(`LinkOwners`: the caller's uid, a path's owner and mode); `nodeFiles` is it for the process.
 
 **Error types.** [`errors.ts`](packages/client/src/errors.ts): `ReiseApiError` (non-2xx,
 carries `status`/`detail`), `ReiseNotFoundError` (a 2xx response with no matching
