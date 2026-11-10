@@ -166,7 +166,10 @@ characters the password holds (`#`, `?`, `/`, spaces, quotes). A URL counts wher
 starts inside an argument — padded (`get " https://u:pw@h"`), after a dash (`-o -https://…`)
 or mid-text — but only with a scheme (a bare `a:b@c` is an `-o` file name or a User-Agent as
 often as a credential), except as the `--base-url` value, where a `user:password@host` typed
-without its scheme is still a credential. The log replaces it in
+without its scheme is still a credential. Behind the exact strings, stdout and stderr also go
+through `redactUrlUserinfo` (`errors.ts`), which replaces the userinfo of any URL in the text
+(`https://***@host`) in one linear pass however long the answer, a URL glued onto the one
+before it (`https://host://u:p@h`) included. The log replaces it in
 each record's *message* (`redactionFor`), before the record is cut and escaped, and writes
 the record to the raw stderr: the frame (time, level, topic) is never touched, and a
 password with DEL, C1 or bidi characters is matched in its raw form. The library exports the
