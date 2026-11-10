@@ -876,3 +876,23 @@ test("a password the server echoes percent-encoded is scrubbed", async () => {
   assert.ok(err instanceof ReiseApiError, String(err));
   for (const text of [err.message, err.detail ?? "", err.body]) assert.ok(!text.includes("%C3%A4-long"), text);
 });
+
+test("a number literal with a long run of zeros is checked in linear time, with the same verdicts", () => {
+  // `/0+$/` tried a match at every zero of a run that doesn't end the digits: quadratic, and a
+  // 100 KB answer held the CLI for seconds past --timeout (the scan runs once the answer is in).
+  const zeros = "0".repeat(100_000);
+  for (const literal of [`1.${zeros}1e300`, `1${zeros}1`, `0.${zeros}1e-400`, `-1${zeros}1`]) {
+    const start = performance.now();
+    const inexact = firstInexactNumber(`{"n":${literal}}`);
+    const ms = performance.now() - start;
+    assert.ok(ms < 1000, `${literal.slice(0, 12)}…: ${Math.round(ms)} ms`);
+    assert.equal(inexact, literal, literal.slice(0, 12));
+  }
+  // Leading and trailing zeros still don't count: these are the doubles they print as.
+  for (const exact of ["9007199254740992000e-3", "1e23", "100000000000000000000000", "0.0", "-0e5", "5e-324", "0.000e-400"]) {
+    assert.equal(firstInexactNumber(`[${exact}]`), undefined, exact);
+  }
+  for (const inexact of ["12345678901234567890", "3e-324", "1e-400", "1.0000000000000000000000001e300"]) {
+    assert.equal(firstInexactNumber(`[${inexact}]`), inexact, inexact);
+  }
+});
