@@ -191,7 +191,8 @@ error — and with it of the forms a server echoes it back in (`echoedCredential
 exported), each also percent-encoded and as a JSON string spells it (the client quotes an
 error envelope's object and a malformed flag value as `JSON.stringify` writes them): the
 `Authorization: Basic` value, the decoded
-`user:password`, and the password alone from 4 characters on (`redactSecrets`, exported).
+`user:password`, and the password alone from 4 characters on — without a password
+(`https://TOKEN@host`) the user name is the secret, sent as Basic `TOKEN:` — (`redactSecrets`, exported).
 A JSON error body is scrubbed as sent and its `detail` again after decoding, since a JSON
 escape (`\u002d`) hides an echo from the first scrub. `ReiseApiError.body` stays as sent
 (scrubbed) unless it is JSON whose decoded text still holds such an echo: then it is the
