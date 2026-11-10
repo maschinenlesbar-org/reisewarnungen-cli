@@ -1035,20 +1035,32 @@ test("scanNumbers quotes millions of declared members within a small heap", STAR
   assert.equal(out, String(n * 10 + 1));
 });
 
-test("a 16 MB error detail and millions of lone surrogate escapes are handled within a small heap", STARTS_A_PROCESS, () => {
-  // sanitizeServerText cleaned the whole detail one `+=` per character before the cut, and
-  // wellFormedEscapes made one rope node per repair: either aborted a 128 MB heap.
+// Each case runs in a process of its own: in one, the first engine (and the 16 MB answer its
+// transport holds) was still alive during the second, and on Node 22 the two together passed
+// the 128 MB heap that each alone stays well under (CI, Linux x64).
+test("a 16 MB error detail is handled within a small heap", STARTS_A_PROCESS, () => {
+  // sanitizeServerText cleaned the whole detail one `+=` per character before the cut: it
+  // aborted a 128 MB heap.
   const out = underSmallHeap(
     `const answer = (status, body) => () => ({ status, headers: { "content-type": "application/json" }, body: Buffer.from(body) });` +
       `const big = new engine.RequestEngine({ maxRetries: 0, maxResponseBytes: 0, transport: answer(500, JSON.stringify({ detail: "x".repeat(16 * 1024 * 1024) })) });` +
       `const err = await big.getJson("/x").catch((e) => e);` +
-      `const lone = new engine.RequestEngine({ maxResponseBytes: 0, transport: answer(200, '"' + "\\\\ud800".repeat(6_000_000) + '"') });` +
-      `const text = await lone.getJson("/x");` +
-      `process.stdout.write(err.status + " " + err.message.length + " " + text.length + " " + (text.charCodeAt(0) === 0xfffd));`,
+      `process.stdout.write(err.status + " " + err.message.length);`,
   );
-  const [status, length, repaired, fffd] = out.split(" ");
+  const [status, length] = out.split(" ");
   assert.equal(status, "500");
   assert.ok(Number(length) < 1000, length);
+});
+
+test("millions of lone surrogate escapes are repaired within a small heap", STARTS_A_PROCESS, () => {
+  // wellFormedEscapes made one rope node per repair: it aborted a 128 MB heap.
+  const out = underSmallHeap(
+    `const answer = (status, body) => () => ({ status, headers: { "content-type": "application/json" }, body: Buffer.from(body) });` +
+      `const lone = new engine.RequestEngine({ maxResponseBytes: 0, transport: answer(200, '"' + "\\\\ud800".repeat(6_000_000) + '"') });` +
+      `const text = await lone.getJson("/x");` +
+      `process.stdout.write(text.length + " " + (text.charCodeAt(0) === 0xfffd));`,
+  );
+  const [repaired, fffd] = out.split(" ");
   assert.equal(repaired, "6000000");
   assert.equal(fffd, "true");
 });
