@@ -1049,3 +1049,18 @@ test("a 16 MB error detail and millions of lone surrogate escapes are handled wi
   assert.equal(repaired, "6000000");
   assert.equal(fffd, "true");
 });
+
+test("a password with an inner space is scrubbed whole, never word by word", async () => {
+  // jobsuche-cli scrubbed such a key only from its second word on; here the password is one
+  // exact string in every form (the Basic value, `user:password`, the password alone).
+  const e = new RequestEngine({
+    baseUrl: "https://alice:my%20s3cret%20Pw@mirror.example",
+    maxRetries: 0,
+    transport: async () => rawResponse(JSON.stringify({ message: "denied: my s3cret Pw / alice:my s3cret Pw" }), "application/json", 403),
+  });
+  const err = await e.getJson("/x").catch((caught: unknown) => caught);
+  assert.ok(err instanceof ReiseApiError, String(err));
+  for (const text of [err.message, err.detail ?? "", err.body, e.quoteServerValue("got my s3cret Pw")]) {
+    assert.ok(!/my|s3cret|Pw/.test(text.replace(/mirror/g, "")), text);
+  }
+});

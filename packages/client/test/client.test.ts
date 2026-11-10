@@ -457,3 +457,23 @@ test("a credential a 2xx answer echoes is scrubbed from the client's own message
     assert.ok(err.message.includes("***"), `${label}: ${err.message}`);
   }
 });
+
+test("a credential in server JSON the client writes again into a message is scrubbed in its JSON spelling too", async () => {
+  // The error envelope's object and a malformed flag value are quoted as JSON.stringify writes
+  // them: a password with a quote is spelled `s3c\"ret-Pw` there, past a scrub of `s3c"ret-Pw`.
+  const pw = 's3c"ret-Pw';
+  const spelled = JSON.stringify(pw).slice(1, -1);
+  const answers = [
+    { response: { error: { reason: `denied for alice:${pw}`, token: pw } } },
+    { response: { "100": { ...F, countryName: "Atlantis", warning: { note: pw } } } },
+    { response: { "100": { ...F, countryName: "Atlantis", partialWarning: [`alice:${pw}`] } } },
+  ];
+  for (const answer of answers) {
+    const mt = makeMockTransport(() => jsonResponse(answer));
+    const client = new ReisewarnungenClient({ baseUrl: `https://alice:${pw}@mirror.example`, transport: mt.transport });
+    const err = await client.get("100").catch((caught: unknown) => caught);
+    assert.ok(err instanceof ReiseParseError, String(err));
+    for (const secret of [pw, spelled, "s3c"]) assert.ok(!err.message.includes(secret), err.message);
+    assert.ok(err.message.includes("***"), err.message);
+  }
+});

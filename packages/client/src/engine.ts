@@ -378,6 +378,15 @@ function urlSpellings(form: string): string[] {
   }
 }
 
+/**
+ * `form` and its spelling inside a JSON string (`JSON.stringify` without the quotes): the client
+ * quotes an error envelope's object and a malformed flag value as JSON.stringify writes them,
+ * where a password with a quote or a backslash is spelled `\"` or `\\`.
+ */
+function jsonSpellings(form: string): string[] {
+  return [form, JSON.stringify(form).slice(1, -1)];
+}
+
 /** Longest server text (in characters) an error message keeps; `ReiseApiError.body` keeps all. */
 const MAX_DETAIL_LENGTH = 500;
 
@@ -490,8 +499,8 @@ export class RequestEngine {
   readonly #credentials: string[];
   /**
    * The forms a server echoes that userinfo back in (the Basic value, the decoded
-   * `user:password`, the password alone), longest first, so a password never leaves half
-   * of the `user:password` around it.
+   * `user:password`, the password alone), each also percent-encoded and as a JSON string spells
+   * it, longest first, so a password never leaves half of the `user:password` around it.
    */
   readonly #echoed: string[];
   /**
@@ -537,7 +546,9 @@ export class RequestEngine {
         return [raw];
       }
     });
-    this.#echoed = [...new Set(userinfos.flatMap(echoedCredentialForms).flatMap(urlSpellings))].sort(
+    // Each form also as a URL (a redirect's Location) and as a JSON string (server JSON the client
+    // writes again with JSON.stringify into a message) spell it; longest first.
+    this.#echoed = [...new Set(userinfos.flatMap(echoedCredentialForms).flatMap(urlSpellings).flatMap(jsonSpellings))].sort(
       (a, b) => b.length - a.length,
     );
     this.transport = functionOption("transport", options.transport, nodeHttpTransport);
