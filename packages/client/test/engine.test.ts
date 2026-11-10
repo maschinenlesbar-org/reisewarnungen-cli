@@ -22,6 +22,7 @@ import {
   ReiseParseError,
   ReiseValidationError,
   TextBuilder,
+  credentialsIn,
   cutText,
   echoedCredentialForms,
   redactUrlUserinfo,
@@ -1182,5 +1183,70 @@ test("a token as the base URL's user name is scrubbed from errors in every form 
         assert.ok(!text.includes(token) && !text.includes(basic), `${base} ${echo}: ${text}`);
       }
     }
+  }
+});
+
+test("a base URL with a backslash, or whose scheme is not followed by // and the host, is refused, never echoing the password (F, F4)", () => {
+  // WHATWG ends an http(s) authority at "\" and repairs `http:host`, `http:/host`, `http:///host`
+  // silently into `http://host`: the host requested is not the one typed.
+  const f4 = 'Expected an absolute http(s) URL ("https://" and the host).';
+  const backslash = 'A base URL cannot contain a backslash (\\); write "/" instead.';
+  for (const [baseUrl, reason] of [
+    ["https://alice:s3cret@api.example\\@evil.example", backslash],
+    ["https://api.example\\evil", backslash],
+    ["http:alice:s3cret@h.example", f4],
+    ["https:/alice:s3cret@h.example", f4],
+    ["http:///alice:s3cret@h.example", f4],
+    ["HTTPS:h.example/v1", f4],
+    ["https:\\\\alice:s3cret@h.example", backslash],
+  ] as const) {
+    const mt = makeMockTransport(() => jsonResponse({}));
+    assert.throws(
+      () => new RequestEngine({ transport: mt.transport, baseUrl }),
+      (err: unknown) => err instanceof ReiseValidationError && err.message === `Invalid baseUrl: ${reason}` && !err.message.includes("s3cret"),
+      baseUrl,
+    );
+    assert.equal(mt.calls.length, 0, baseUrl);
+  }
+  // A spelling the parser keeps as typed stays accepted: an upper-case scheme, an explicit port.
+  for (const baseUrl of ["HTTPS://h.example/v1", "http://alice:pw@h.example:8080"]) {
+    assert.doesNotThrow(() => new RequestEngine({ transport: makeMockTransport(() => jsonResponse({})).transport, baseUrl }), baseUrl);
+  }
+});
+
+test("credentialsIn ends the authority of a special scheme at a backslash, and skips the slashes WHATWG skips (F, F3)", () => {
+  for (const scheme of ["http", "https", "HTTPS", "ws", "wss", "ftp"]) {
+    assert.deepEqual(credentialsIn(`${scheme}://u:p@a.example\\@b.example/x`), ["u:p"], scheme);
+    assert.equal(new URL(`${scheme}://u:p@a.example\\@b.example/x`).password, "p", scheme);
+  }
+  // Another scheme's authority runs on to "/", "?" or "#".
+  assert.deepEqual(credentialsIn("foo://u:p@a.example\\@b.example/x"), ["u:p@a.example\\"]);
+  assert.deepEqual(credentialsIn("https://u:p@a.example/x\\@y"), ["u:p"]);
+  // `http:///u:pw@h`, `https:\\u:pw@h` and `http:u:pw@h` all carry `u:pw` for WHATWG.
+  for (const value of [
+    "http:alice:pw@h.example",
+    "http:/alice:pw@h.example",
+    "http:///alice:pw@h.example/x",
+    "https:////alice:pw@h.example",
+    "HTTPS:\\\\alice:pw@h.example",
+    "wss:\\/alice:pw@h.example",
+    "ftp:alice:pw@h.example",
+  ]) {
+    assert.deepEqual(credentialsIn(value), ["alice:pw"], value);
+    assert.equal(new URL(value).password, "pw", value);
+  }
+  // Another scheme needs "//" before an authority: `foo:u:p@h` and `foo:///u:p@h` carry none.
+  assert.deepEqual(credentialsIn("foo:u:p@h.example"), []);
+  assert.deepEqual(credentialsIn("foo:///u:p@h.example"), []);
+});
+
+test("requests go to the host of the parsed base URL, spelled as it parses, an @ in its path included (F)", async () => {
+  for (const base of ["https://alice:pw@api.example/v1/@evil.example", "https://API.Example:443/v1"]) {
+    const parsed = new URL(base);
+    const mt = makeMockTransport(() => jsonResponse({}));
+    await new RequestEngine({ baseUrl: base, transport: mt.transport }).getJson("/x");
+    const sent = mt.last().url;
+    assert.equal(new URL(sent).origin, parsed.origin, `${base}: ${sent}`);
+    assert.equal(sent.slice(sent.indexOf("//") + 2).split("/")[0], parsed.host, `${base}: ${sent}`);
   }
 });

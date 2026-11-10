@@ -98,8 +98,16 @@ path prefix is fine; trailing slashes are dropped). The constructor checks the r
 value with the exported `validateBaseUrl` / `baseUrlProblem` and throws
 `ReiseValidationError` (`Invalid baseUrl: Only "http:" and "https:" base URLs are
 supported.`), a configuration error rather than a `ReiseNetworkError`, so retry
-logic for outages never retries it. The CLI's `--base-url` uses the same rule and
-messages.
+logic for outages never retries it. It must be spelled `http(s)://` and the host:
+`http:host`, `http:/host`, `http:///host` (WHATWG repairs them silently into `http://host`)
+are refused (`Expected an absolute http(s) URL ("https://" and the host).`), and so is a
+backslash anywhere (`A base URL cannot contain a backslash (\); write "/" instead.`), which
+WHATWG reads as `/` and which ends an http(s) host. No reason quotes the value. Requests go
+to the base URL as WHATWG parses it (host lower-cased, a default port dropped, the userinfo
+sent only as the Authorization header), the reading every check of it makes, so a custom
+transport that reads the URL as text reaches the same host. `credentialsIn` reads a
+userinfo where WHATWG does: after any slashes and backslashes a special scheme skips, up to a
+backslash too. The CLI's `--base-url` uses the same rule and messages.
 
 `userAgent` goes into an HTTP header, so the constructor checks it too
 (`assertHeaderValue` / `headerValueProblem`): a blank value, a C0 control character

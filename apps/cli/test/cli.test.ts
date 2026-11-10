@@ -578,3 +578,45 @@ test("the redaction of stdout is linear in the answer, and hides the userinfo of
   assert.ok(out.includes("https://host://***@h and https://***@x://***@w"), out);
   for (const secret of ["u:p1", "u:p2", "v:q3"]) assert.ok(!out.includes(secret), out);
 });
+
+test("a --base-url with a backslash, or a scheme not followed by exactly // and the host, is refused without echoing the password (F, F3, F4)", async () => {
+  const pw = "s3cret-Pw";
+  for (const [base, reason] of [
+    [`https://alice:${pw}@api.example\\@evil.example`, /backslash/],
+    [`http://alice:${pw}@127.0.0.1\\@evil.example`, /backslash/],
+    [`http:alice:${pw}@127.0.0.1:9`, /"https:\/\/" and the host/],
+    [`http:/alice:${pw}@127.0.0.1:9`, /"https:\/\/" and the host/],
+    [`http:///alice:${pw}@127.0.0.1:9`, /"https:\/\/" and the host/],
+    [`HTTPS:alice:${pw}@mirror.example`, /"https:\/\/" and the host/],
+    [`https:\\\\alice:${pw}@mirror.example`, /backslash/],
+    [`http:///alice:${pw}@mirror.example/?q=1`, /query/],
+  ] as const) {
+    const cli = makeCli(() => jsonResponse(listBody));
+    assert.equal(await run(["--base-url", base, "countries"], cli.deps), 1, base);
+    assert.equal(cli.mt.calls.length, 0, base);
+    const text = [...cli.out, ...cli.err].join("\n");
+    assert.ok(!text.includes(pw), `${base}: ${text}`);
+    assert.match(text, reason, base);
+  }
+});
+
+test("a --base-url typed without its scheme never names its user name, token or password (F5)", async () => {
+  for (const [base, secret] of [
+    ["T0kenS3cret:@h.example", "t0kens3cret"],
+    ["T0k:@h.example", "t0k:"],
+    ["alice:s3cret-pw@h.example", "s3cret-pw"],
+    ["Alice:s3cret-pw@h.example/x", "s3cret-pw"],
+    ["my_user:s3cret-pw@h.example", "s3cret-pw"],
+  ] as const) {
+    const cli = makeCli(() => jsonResponse(listBody));
+    assert.equal(await run(["--base-url", base, "countries"], cli.deps), 1, base);
+    assert.equal(cli.mt.calls.length, 0, base);
+    const text = [...cli.out, ...cli.err].join("\n");
+    assert.ok(!text.toLowerCase().includes(secret), text);
+    assert.throws(
+      () => new ReisewarnungenClient({ baseUrl: base }),
+      (err: unknown) => err instanceof ReiseError && !err.message.toLowerCase().includes(secret),
+      base,
+    );
+  }
+});

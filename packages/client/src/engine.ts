@@ -535,7 +535,14 @@ export class RequestEngine {
       parsed.username === "" && parsed.password === ""
         ? undefined
         : `Basic ${Buffer.from(`${decodeUserinfo(parsed.username)}:${decodeUserinfo(parsed.password)}`).toString("base64")}`;
-    this.#baseUrl = withoutUserinfo(baseUrl);
+    // Requests go to the base URL as WHATWG parses it, the reading every check of it makes (the
+    // origin the credentials go to, the cleartext warning), not to a text-based reading of the
+    // string: a transport that reads the URL as text reaches the same host. The userinfo is
+    // sent as the Authorization header, never in the URL.
+    const request = new URL(parsed.href);
+    request.username = "";
+    request.password = "";
+    this.#baseUrl = request.href.replace(/\/+$/, "");
     // The userinfo as typed and as WHATWG writes it (it percent-encodes some of its characters),
     // the spelling a server or proxy that echoes the URL repeats.
     const userinfos = [...new Set([...credentialsIn(baseUrl), ...credentialsIn(parsed.href)])];
@@ -1134,14 +1141,6 @@ function decodeUserinfo(part: string): string {
   } catch {
     return part;
   }
-}
-
-/** `url` with its userinfo (`user:pw@`) cut out, the rest exactly as written. */
-function withoutUserinfo(url: string): string {
-  const [userinfo] = credentialsIn(url);
-  const start = url.indexOf("://") + 3;
-  if (userinfo === undefined || !url.startsWith(`${userinfo}@`, start)) return url;
-  return url.slice(0, start) + url.slice(start + userinfo.length + 1);
 }
 
 /** The origin of a URL a transport reported, or undefined when there is none or it doesn't parse. */

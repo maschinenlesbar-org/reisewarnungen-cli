@@ -63,7 +63,9 @@ export const headerValueProblem: Problem = (value) => {
 };
 
 /**
- * A base URL: an absolute `http:`/`https:` URL with no query or fragment. Request
+ * A base URL: an absolute `http:`/`https:` URL with no query or fragment, spelled
+ * `http(s)://` and the host (WHATWG repairs `http:host`, `http:/host` and `http:///host`
+ * silently into another reading), with no backslash (WHATWG ends an http(s) host at one). Request
  * paths are appended to the base URL as a string, so a `?` or `#` in it would
  * swallow every path (`http://h/?x=1` requests `/?x=1/opendata/...`, `http://h/#f`
  * requests `/`). A malformed value (`notaurl`, `""`, `http://`) fails the parse.
@@ -71,7 +73,7 @@ export const headerValueProblem: Problem = (value) => {
  * one): the userinfo is decoded for the Authorization header, and Node failed at
  * request time ("URI malformed") as a network error. Surrounding whitespace (U+00A0
  * included) and control characters are rejected: `new URL()` trims or drops them
- * silently, but the raw string is what the request URL is built from.
+ * silently, so the value would not read as it was typed. None of the reasons quotes the value.
  */
 export const baseUrlProblem: Problem = (value) => {
   const malformed = "Expected a valid absolute URL (e.g. https://host).";
@@ -86,6 +88,9 @@ export const baseUrlProblem: Problem = (value) => {
     return 'Only "http:" and "https:" base URLs are supported.';
   }
   if (/[?#]/.test(value)) return "A base URL cannot have a query (?) or fragment (#).";
+  // WHATWG reads a "\" in an http(s) URL as "/", so it ends the host: in
+  // `https://u:pw@a.example\@b.example` every reader of the base URL has to agree where.
+  if (value.includes("\\")) return 'A base URL cannot contain a backslash (\\); write "/" instead.';
   for (const part of [url.username, url.password]) {
     try {
       decodeURIComponent(part);
@@ -98,6 +103,9 @@ export const baseUrlProblem: Problem = (value) => {
     const c = value.charCodeAt(i);
     if (c < 0x20 || c === 0x7f) return "A base URL cannot contain control characters.";
   }
+  // WHATWG skips any slashes after "http:" and repairs `http:host`, `http:/host` and
+  // `http:///host` into `http://host` silently: the host requested would not be the one typed.
+  if (!/^https?:\/\/[^/]/i.test(value)) return 'Expected an absolute http(s) URL ("https://" and the host).';
   return undefined;
 };
 
