@@ -919,10 +919,10 @@ export class RequestEngine {
     const codings = res.contentEncoding.split(",").map((c) => c.trim()).filter((c) => c !== "");
     if (codings.some((c) => !/^identity$/i.test(c))) {
       throw new ReiseParseError(
-        `${request}: unsupported Content-Encoding "${cutForMessage(sanitizeServerText(res.contentEncoding))}" (the client does not decompress responses).`,
+        `${request}: unsupported Content-Encoding "${cutForMessage(sanitizeServerText(this.scrub(res.contentEncoding)))}" (the client does not decompress responses).`,
       );
     }
-    const decoded = decodeBody(res.data, res.contentType, request);
+    const decoded = decodeBody(res.data, res.contentType, request, (text) => this.scrub(text));
     if (decoded.text.trim() === "") {
       // A broken answer, not "no results": printed as nothing with exit 0, it would let a
       // script carry on as if the API had found nothing.
@@ -938,7 +938,7 @@ export class RequestEngine {
       // An HTML maintenance or proxy page is the usual non-JSON answer: name its type, so it
       // reads as an upstream problem rather than a client bug.
       const type = res.contentType.split(";")[0]?.trim() ?? "";
-      const hint = type !== "" && !/json/i.test(type) ? ` (expected JSON, got Content-Type "${cutForMessage(sanitizeServerText(type))}")` : "";
+      const hint = type !== "" && !/json/i.test(type) ? ` (expected JSON, got Content-Type "${cutForMessage(sanitizeServerText(this.scrub(type)))}")` : "";
       throw new ReiseParseError(`${request}: the answer is not valid JSON${hint}.`, { cause });
     }
     // JSON.parse rounds and overflows numbers silently: refuse the answer rather than print a
@@ -1008,17 +1008,23 @@ export class RequestEngine {
  * TextDecoder drops a leading byte order mark, which Buffer#toString keeps and JSON.parse
  * then rejects, so a BOM added by a proxy cannot turn a valid answer into a parse error. A
  * declared `charset=iso-8859-1` body used to come out as `T\uFFFDrkei`. An unknown charset
- * label is a ReiseParseError naming `request`. Bytes that are not valid in the charset become
+ * label is a ReiseParseError naming `request`, quoted with the base URL's credentials scrubbed
+ * (`scrub`), like every response header a message quotes. Bytes that are not valid in the charset become
  * U+FFFD, and `replaced` counts them: exactly for UTF-8 and the single-byte charsets; for UTF-16
  * a U+FFFD the server sent counts too.
  */
-function decodeBody(body: Buffer, contentType: string, request: string): { text: string; replaced: number } {
+function decodeBody(
+  body: Buffer,
+  contentType: string,
+  request: string,
+  scrub: (text: string) => string,
+): { text: string; replaced: number } {
   const charset = /;\s*charset\s*=\s*"?([^";\s]+)"?/i.exec(contentType)?.[1] ?? "utf-8";
   let decoder: TextDecoder;
   try {
     decoder = new TextDecoder(charset, { fatal: true });
   } catch {
-    throw new ReiseParseError(`${request}: unsupported response charset "${cutForMessage(sanitizeServerText(charset))}".`);
+    throw new ReiseParseError(`${request}: unsupported response charset "${cutForMessage(sanitizeServerText(scrub(charset)))}".`);
   }
   try {
     return { text: decoder.decode(body), replaced: 0 };

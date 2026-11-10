@@ -184,7 +184,8 @@ scrubbed of the base URL's credentials as sent, before it is resolved, since res
 percent-encodes an echo in a new spelling; after a redirect every message, `ReiseApiError.url`
 and `.location` and `onRetry`'s `url` name the request by that scrubbed form, while the request
 itself goes to the `Location` as sent), and error
-bodies, details, transport error text and the `cause` chain are scrubbed of the
+bodies, details, transport error text, the Content-Type, Content-Encoding and charset a
+parse error quotes, and the `cause` chain are scrubbed of the
 userinfo (raw, percent-decoded and as WHATWG writes it in the URL) before they reach an
 error — and with it of the forms a server echoes it back in (`echoedCredentialForms`,
 exported), each also percent-encoded and as a JSON string spells it (the client quotes an

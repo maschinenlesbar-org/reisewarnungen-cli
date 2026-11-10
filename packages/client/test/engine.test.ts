@@ -1139,3 +1139,20 @@ test("a credential echoed in a redirect's Location never names the request in a 
     assert.ok(!leaks(err.message), err.message);
   }
 });
+
+test("a credential echoed in the Content-Type, Content-Encoding or charset a message quotes is scrubbed", async () => {
+  // The engine quoted these response headers sanitised but not scrubbed.
+  const pw = "s3cret-Pw";
+  const base = `https://alice:${pw}@mirror.example`;
+  const answers: HttpResponse[] = [
+    { status: 200, headers: { "content-type": `text/x-${pw}; charset=utf-8` }, body: Buffer.from("<html>") },
+    { status: 200, headers: { "content-type": "application/json", "content-encoding": `gzip, x-${pw}` }, body: Buffer.from("{}") },
+    { status: 200, headers: { "content-type": `application/json; charset=${pw}` }, body: Buffer.from("{}") },
+  ];
+  for (const answer of answers) {
+    const e = new RequestEngine({ baseUrl: base, maxRetries: 0, transport: async () => answer });
+    const err = await e.getJson("/x").catch((caught: unknown) => caught);
+    assert.ok(err instanceof ReiseParseError, String(err));
+    assert.ok(!err.message.includes(pw) && err.message.includes("***"), err.message);
+  }
+});
