@@ -38,6 +38,54 @@ Check it works:
 reisewarnungen --help
 ```
 
+### Docker
+
+From 0.9.0 every release is also a container image for linux/amd64 and linux/arm64 on the
+GitHub Container Registry, made from the same tarball as the npm package. It needs no Node.js and no
+install:
+
+```bash
+docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
+  ghcr.io/maschinenlesbar-org/reisewarnungen-cli:latest countries --warned-only
+```
+
+The image's entrypoint is the program, so the command follows the image name directly;
+`… reisewarnungen-cli:latest reisewarnungen countries` works too.
+
+In a container with a memory limit (`--memory`) the default `--max-response-bytes` is an eighth
+of that limit (at most the usual 100 MiB), so an oversized answer is refused with a clear
+error instead of the container being killed for memory.
+The CLI needs at least 12 processes and threads (`--pids-limit 12`): below that it refuses with
+an error, and with 4 or fewer Node.js itself hangs before the CLI can check.
+
+`latest` is the newest release. For scripts, name a release and pin its digest, which the
+[release notes](https://github.com/maschinenlesbar-org/reisewarnungen-cli/releases) give:
+`…/reisewarnungen-cli:0.9.0@sha256:<digest>`. Each image carries signed build provenance; check it
+with
+
+```bash
+gh attestation verify oci://ghcr.io/maschinenlesbar-org/reisewarnungen-cli:latest \
+  --repo maschinenlesbar-org/reisewarnungen-cli
+```
+
+### MCP server
+
+From 0.9.0 the same advice is also an [MCP](https://modelcontextprotocol.io/) server for AI agents,
+`@maschinenlesbar.org/reisewarnungen-mcp` (command `reisewarnungen-mcp`, image
+`ghcr.io/maschinenlesbar-org/reisewarnungen-mcp`): five read-only tools, the advice for a trip of
+up to five countries (the warning level and every sentence that may advise against travel, so no
+flag is never read as "safe"), the countries under a formal warning, ranked, what changed since a
+snapshot or a date, the country list and one advisory's full text, on stdio or Streamable HTTP.
+Setup for Claude Code, Claude Desktop and VS Code:
+[MCP.md](https://github.com/maschinenlesbar-org/reisewarnungen-cli/blob/main/MCP.md).
+The advice is under the Auswärtiges Amt's own terms, with no open licence: running the server as a
+service for others may need the Auswärtiges Amt's permission (see [Data license](#data-license)).
+
+```bash
+npm i -g @maschinenlesbar.org/reisewarnungen-mcp
+claude mcp add reisewarnungen -- reisewarnungen-mcp
+```
+
 ## Quickstart
 
 No setup needed — the API is open data, no key required. Your first query:

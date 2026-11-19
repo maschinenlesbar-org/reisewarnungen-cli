@@ -612,9 +612,11 @@ jobs and the locked `tools/sbom/`). Only their `adapter` block is repo-specific;
 
 GitHub Actions workflows under `.github/workflows/`:
 
-- **ci.yml** — type-check, build and test on Node 22/24/26 for every push and PR; then pack the
-  real tarball, check the pack left nothing behind, install it globally with the registry out
-  of reach and run the bin.
+- **ci.yml** — type-check, build and test on Node 22/24/26 for every push and PR; then pack each
+  published app (the CLI and the MCP server), check the pack left nothing behind, install it
+  globally with the registry out of reach and run its bins; `interop` runs the MCP server against
+  the official client. **images.yml** builds, smoke-tests and scans both container images on every
+  push and weekly (see [Container image](#container-image)).
 - **release.yml** — on a `v*` tag (made by `npm run bump`), three jobs. **pack** (read-only):
   verify the tag matches `apps/cli/package.json`, test, `npm pack --workspace apps/cli`, record
   the tarball's and the notes' sha256 as job outputs. **sbom** (read-only): `npm ci
@@ -626,12 +628,101 @@ GitHub Actions workflows under `.github/workflows/`:
   the tarball is built or where the write token is. Update the tool by changing its version in
   `tools/sbom/package.json` and running `npm install --package-lock-only --ignore-scripts`
   there; don't chain its install into an npm script.
-- **publish.yml** — manual dispatch from the release tag (`gh workflow run publish.yml --ref vX.Y.Z`; the version is the tag's): `npm publish --workspace apps/cli` via OIDC **Trusted Publishing** (no stored `NPM_TOKEN`) with provenance.
+- **publish.yml** — manual dispatch from the release tag (`gh workflow run publish.yml --ref vX.Y.Z`; the version is the tag's): both release tarballs to npm via OIDC **Trusted Publishing** (no stored `NPM_TOKEN`) with provenance, and both image archives to ghcr.io (see [Container image](#container-image)).
 - **docs.yml** — build the project website (`site/`, English and German) with the TypeDoc API docs
   under `/api/`, and deploy both to GitHub Pages on each `v*` tag.
   TypeDoc runs from the isolated, lockfile-pinned `tools/docs/` toolchain because it
   needs the TypeScript 6 compiler API, which TypeScript 7 no longer ships; locally,
   run `npm ci --prefix tools/docs` once before `npm run docs`.
+
+## MCP server (apps/mcp)
+
+`apps/mcp` is the second published app, `@maschinenlesbar.org/reisewarnungen-mcp` (bin
+`reisewarnungen-mcp`), released in lockstep with the CLI: `npm run bump` bumps every
+published app under `apps/` together, one version, one tag. Its npm README is the root
+`MCP.md` (prepack packs `<APP>.md` for an app that has one).
+
+| Module | Role |
+|---|---|
+| `packages/client/src/operations.ts` | The skills' use cases as library functions (getTravelAdvice, getWarnedCountries, getWarningChanges, plus listCountries, getAdvisory, findCountry and the snapshot helpers), with their traps built in: a country resolves fresh from the list by its official German short name, ISO code, an everyday or former name (Russland, Weißrussland, Holland) or a part of the name; a name several countries share (Kongo, Korea) is ambiguous, never picked, and an exact name wins over those containing it (Sudan, not Südsudan); the advisory's own flags decide; with all four flags false the verdict is `advice-in-text` whenever a sentence may advise against travel to the country or a region (Türkei), `advice-only` only without one; levels are compared, so an escalation never reads as a text revision; Unix seconds become ISO times. A watch keeps a short snapshot string (the newest lastModified, the count, the warned countries' flags), since the server holds no state. Public API of both packages. |
+| `packages/log` | The log records (text/jsonl), shared by both apps; `createLogger({ program })`. |
+| `src/mcp/tools.ts` | This repo's: the five tools (flat input schemas with limits, no root combinators; one object output schema each; descriptions under 2000 characters), the instructions, the licence (the Auswärtiges Amt's attribution and terms), the hints the server's messages give. A result's `source` is the request it came from: where a name is resolved to a content id first, `run` records the advisories read for `source` to read back. |
+| `src/mcp/api.ts` | This repo's: how the kit reaches the client (`ReisewarnungenClient` as `Client`, `ReiseError` as `ClientError`, `ReiseNetworkError` as `NetworkError`, …); `apiBase` is the base URL plus `/opendata/travelwarning`, which every request goes to. |
+| `src/mcp/server.ts` | The McpServer factory, the tool types, `callTool`: deadline (`--call-timeout`) plus the client's cancellation, cleaned and fitted answers, failures as `isError` results. |
+| `src/mcp/result.ts` | `cleanStrings` (control, bidi, zero-width characters dropped in the value), `fitResult` (whole list entries dropped under `--max-result-chars`, `nextOffset`). |
+| `src/mcp/limiter.ts` | One per process around the upstream transport: 2 in flight, 120 a minute, pause on 429, a bounded queue. |
+| `src/mcp/http.ts` | node:http adapter for the SDK's `createMcpHandler`: POST /mcp, /healthz, Host and Origin checks (the SDK does neither), 1 MiB body, 8 requests at once, timeouts. |
+| `src/mcp/config.ts`, `run.ts`, `index.ts` | Options (`node:util` parseArgs), argv -> exit code, the bin (console into log records, SIGINT/SIGTERM, stdin's end). |
+
+The protocol is the SDK's: `@modelcontextprotocol/server` 2.4.0, bundled with its core and zod
+(prepack). It serves the 2026-07-28 revision and the 2025 handshake (2025-11-25, 2025-06-18)
+statelessly, on stdio (`serveStdio`) and HTTP. The SDK bundles AJV 8.18 into its own code to
+validate tool arguments against the input schemas; an SBOM doesn't list that copy.
+
+Accepted SDK behaviour on stdio: a client that sends `notifications/initialized` and a request
+before the answer to its `initialize` (the MCP lifecycle says it must wait) gets its answers
+late, at the next event on the connection, because `serveStdio` decides the protocol era from
+the opening exchange. Real clients wait (the official one: three concurrent calls in ~10 ms), so
+nothing is worked around here.
+
+**The kit.** Everything in `apps/mcp` but `tools.ts`, `api.ts`, `test/helpers.ts`,
+`test/tools.test.ts` and the conformance tests' adapter blocks, plus `packages/log`,
+`apps/cli/src/cli/limits.ts`, `tools/image/` (but `smoke.json`), `tools/interop/` (but
+`interop.json`), `tools/bump.mjs`, `tools/pack/` and the workflows `ci.yml`, `images.yml`,
+`release.yml` and `publish.yml`, is the kit of `create-cli-template` (in the api-cli workspace),
+the same in every repository with an MCP server: a fix lands there first and comes here with
+`npm run sync-kit -- ../reisewarnungen-cli` (run in create-cli-template; `--check` lists the
+drift).
+
+Tests (`apps/mcp/test`) run in-process over the SDK's InMemoryTransport with raw JSON-RPC (the
+kit's `harness.ts`). The rules every server follows are the shared conformance tests
+`conformance-m1-…` to `conformance-m10-…` (protocol and tool rules, HTTP, Host and Origin,
+stdio with the built bin, config, limiter, result shaping, drain, call errors, MCP.md), each with
+an adapter block naming this repo's calls and mock answers; `tools.test.ts` holds this server's
+own (the five tools, the traps; the mock API and the recorded answers are the client's `test/fixtures.ts`). The stdio tests start the built bin (30 s each). `tools/interop/` checks the built server against the official
+client 2.4.0 (stdio and HTTP; legacy, auto and pinned 2026-07-28) in ci.yml's `interop` job;
+it has its own lockfile and is never installed by the workspace, release or publish runs; the
+calls it makes and the mock's answers are in `tools/interop/interop.json`.
+
+## Container image
+
+`tools/image/` builds both apps' images (Dockerfile targets `cli` and `mcp`) from their release
+tarballs (`npm pack` output), never from source: `ADD` unpacks it onto distroless Node 24 (Debian 13, `nonroot`, uid 65532), so the image
+holds exactly the files npm users get. The base, BuildKit, the test registry, skopeo (local runs
+only), syft and grype are pinned in `pins.json`; bump them in the deps round. A Node or Debian
+security fix reaches the image only through a new base digest, so it means a patch release.
+
+| Script | What it does |
+|---|---|
+| `build.mjs` | Multi-arch OCI archive (amd64, arm64), reproducible: no provenance or SBOM attestation, timestamps from `SOURCE_DATE_EPOCH` (default: the HEAD commit's time). Two builds give the same index digest; compare index digests, not files. |
+| `push.mjs` | Copies the archive to a registry with skopeo (`--all --preserve-digests`) and checks the digest the registry serves. Used for the local test registry and for ghcr.io. |
+| `smoke.mjs` | Runs the image read-only, without capabilities, as an arbitrary uid: `--version`, `--help`, a network error, one request to a mock upstream (`smoke.json`), and `docker stop`, which must end a waiting call with 143 in under 5 s. |
+| `sbom.mjs` | One CycloneDX SBOM per platform with syft, and with `--gate true` grype over them: a fixable high or critical finding fails. Accepted findings go into `.grype.yaml` with a reason. CI only. |
+
+Locally (colima; the scripts never read your docker config, so no credential helper is asked):
+
+```bash
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
+npm pack --workspace apps/cli --pack-destination dist-artifacts
+node tools/image/build.mjs --app cli --tarball dist-artifacts/<tarball>.tgz --out dist-artifacts/cli.oci.tar
+docker run -d -p 127.0.0.1:5055:5000 <registry pin from pins.json>
+node tools/image/push.mjs --archive dist-artifacts/cli.oci.tar --to 127.0.0.1:5055/reisewarnungen-cli:dev
+node tools/image/smoke.mjs --app cli --image 127.0.0.1:5055/reisewarnungen-cli@<index digest>
+```
+
+In CI: `images.yml` does all of it on every push and weekly, with the arm64 image smoke-tested on
+an arm64 runner and the vulnerability gate. In `release.yml` the job `image` builds from the
+checked tarball and records the archive's digest, `image-sbom` makes the SBOMs (no gate: the
+scanner's database changes daily), `attest` signs build provenance for the tarball, the archive
+and the image index, and the release attaches the archive, the image SBOMs and `SHA256SUMS`.
+`publish.yml` publishes the release's own files: both tarballs to npm and both archives to
+`ghcr.io/maschinenlesbar-org/reisewarnungen-cli` and `…/reisewarnungen-mcp` (with the run's `GITHUB_TOKEN`), each checked
+first against the immutable release (`gh release verify-asset`) and the provenance `release.yml`
+signed for that tag (`gh attestation verify`).
+`apps/cli/test/conformance-p32-image-pipeline.test.ts` (shared) pins these rules.
+
+As PID 1 the bin shim listens for SIGINT, SIGTERM and SIGHUP (`exitOnSignalsAsPid1`): without
+a listener the kernel drops them, and `docker stop` would wait 10 s and kill.
 
 ## Website
 
