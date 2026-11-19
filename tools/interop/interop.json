@@ -1,0 +1,159 @@
+{
+  "comment": "What tools/interop/interop.mjs needs that is particular to this repo: the mock upstream's answer per path (under --base-url http://127.0.0.1:<port>; the live answers of 2026-11-19, cut down), how many tools the server lists, and the calls to make with what each must answer.",
+  "answers": {
+    "/opendata/travelwarning": {
+      "response": {
+        "201558": {
+          "lastModified": 1793007307,
+          "effective": 1793007000,
+          "title": "Thailand: Reise- und Sicherheitshinweise",
+          "countryCode": "TH",
+          "iso3CountryCode": "THA",
+          "countryName": "Thailand",
+          "warning": false,
+          "partialWarning": true,
+          "situationWarning": false,
+          "situationPartWarning": false
+        },
+        "201962": {
+          "lastModified": 1793971529,
+          "effective": 1793970900,
+          "title": "Türkei: Reise- und Sicherheitshinweise",
+          "countryCode": "TR",
+          "iso3CountryCode": "TUR",
+          "countryName": "Türkei",
+          "warning": false,
+          "partialWarning": false,
+          "situationWarning": false,
+          "situationPartWarning": false
+        },
+        "203202": {
+          "lastModified": 1792154266,
+          "effective": 1792153800,
+          "title": "Demokratische Republik Kongo: Reise- und Sicherheitshinweise",
+          "countryCode": "CD",
+          "iso3CountryCode": "COD",
+          "countryName": "Demokratische Republik Kongo",
+          "warning": false,
+          "partialWarning": true,
+          "situationWarning": false,
+          "situationPartWarning": false
+        },
+        "208258": {
+          "lastModified": 1791885127,
+          "effective": 1789387200,
+          "title": "Mali: Reise- und Sicherheitshinweise",
+          "countryCode": "ML",
+          "iso3CountryCode": "MLI",
+          "countryName": "Mali",
+          "warning": true,
+          "partialWarning": false,
+          "situationWarning": false,
+          "situationPartWarning": false
+        },
+        "208542": {
+          "lastModified": 1792660031,
+          "effective": 1792656000,
+          "title": "Republik Kongo: Reise- und Sicherheitshinweise",
+          "countryCode": "CG",
+          "iso3CountryCode": "COG",
+          "countryName": "Republik Kongo",
+          "warning": false,
+          "partialWarning": false,
+          "situationWarning": false,
+          "situationPartWarning": false
+        },
+        "lastModified": 1787576330,
+        "contentList": [
+          "201558",
+          "201962",
+          "208258",
+          "203202",
+          "208542"
+        ]
+      }
+    },
+    "/opendata/travelwarning/201558": {
+      "response": {
+        "201558": {
+          "lastModified": 1793007307,
+          "effective": 1793007000,
+          "title": "Thailand: Reise- und Sicherheitshinweise",
+          "countryCode": "TH",
+          "iso3CountryCode": "THA",
+          "countryName": "Thailand",
+          "warning": false,
+          "partialWarning": true,
+          "situationWarning": false,
+          "situationPartWarning": false,
+          "lastChanges": "Letzte Änderungen: <br><span>Redaktionelle Änderungen</span>",
+          "content": "<h2>Aktuelles</h2><p>Vor Reisen in das Grenzgebiet (20 km zum Grenzverlauf) zu Kambodscha wird gewarnt.</p><h2>Sicherheit - Teilreisewarnung</h2><p>Von Reisen in die Provinzen Narathiwat, Yala und Pattani sowie Teile von Songkhla (Bezirke Chana, Na Thawi, Thepha und Saba Yoi) im Süden Thailands wird dringend abgeraten.</p><h2>Einreise und Zoll</h2><h3>Visum</h3><p>Deutsche Staatsangehörige können für touristische Aufenthalte visumfrei einreisen.</p>",
+          "disclaimer": "<div class=\"infobox__content-wrapper\"> <h3 class=\"infobox__headline\">Haftungsausschluss</h3> <p>Planung und Antritt von Auslandsreisen stets in eigener Verantwortung!</p></div>"
+        }
+      }
+    }
+  },
+  "tools": 5,
+  "calls": [
+    {
+      "name": "getTravelAdvice",
+      "arguments": {
+        "countries": [
+          "Thailand"
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "countries.0.verdict": "regional-warning",
+        "countries.0.countryCode": "TH"
+      }
+    },
+    {
+      "name": "getTravelAdvice",
+      "arguments": {
+        "countries": [
+          "Kongo"
+        ]
+      },
+      "expect": {
+        "status": "ambiguous",
+        "countries.0.total": 2
+      }
+    },
+    {
+      "name": "getWarnedCountries",
+      "arguments": {},
+      "expect": {
+        "status": "ok",
+        "countries.0.countryName": "Mali",
+        "warned": 3
+      }
+    },
+    {
+      "name": "listCountries",
+      "arguments": {},
+      "expect": {
+        "status": "ok",
+        "total": 5
+      }
+    },
+    {
+      "name": "getAdvisory",
+      "arguments": {
+        "country": "TH",
+        "section": "Visum"
+      },
+      "expect": {
+        "status": "ok",
+        "blocks.0.section": "Einreise und Zoll › Visum"
+      }
+    },
+    {
+      "name": "getTravelAdvice",
+      "arguments": {
+        "countries": []
+      },
+      "error": true
+    }
+  ]
+}

@@ -703,7 +703,10 @@ export async function listCountries(client: ReisewarnungenClient, input: ListCou
 export interface AdvisoryInput {
   /** A German name, an ISO code, a former name or a content id. */
   country: string;
-  /** Only the blocks whose section path contains this text (`Sicherheit`, `Einreise`, `Gesundheit`). */
+  /**
+   * Only the blocks of this section: the top-level sections that start with the text (`Sicherheit`,
+   * `Einreise`, `Gesundheit`), else the blocks whose heading path contains it (`Visum`, `Impfschutz`).
+   */
   section?: string | undefined;
 }
 
@@ -745,7 +748,15 @@ export async function getAdvisory(client: ReisewarnungenClient, input: AdvisoryI
   const all = advisoryBlocks(typeof advisory.content === "string" ? advisory.content : "");
   const sections = topSections(all);
   const wanted = section === undefined ? undefined : fold(section);
-  const blocks = wanted === undefined ? all : all.filter((b) => fold(b.section).includes(wanted));
+  // A top-level section that starts with the text wins (`Sicherheit` is that section, not also
+  // `Aktuelles › Sicherheitslage …`); else any heading of the path that contains it (`Visum`).
+  const top = (b: AdvisoryBlock): string => fold(b.section.split(" › ")[0] ?? "");
+  const blocks =
+    wanted === undefined
+      ? all
+      : all.some((b) => top(b).startsWith(wanted))
+        ? all.filter((b) => top(b).startsWith(wanted))
+        : all.filter((b) => fold(b.section).includes(wanted));
   if (blocks.length === 0 && wanted !== undefined) {
     return { status: "empty", query, reason: `The advisory of ${entry.countryName ?? entry.id} has no section matching ${quoteValue(section as string)}; its sections are listed in sections.`, sections };
   }

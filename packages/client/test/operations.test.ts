@@ -290,6 +290,12 @@ test("getAdvisory: the whole text block by block with its sections, or one secti
   assert.match(whole.disclaimer ?? "", /Haftungsausschluss/);
   const health = await getAdvisory(clientOf(), { country: "Türkei", section: "gesundheit" });
   assert.ok(health.status === "ok" && "blocks" in health && health.blocks.length > 0 && health.blocks.every((b) => b.section.startsWith("Gesundheit")));
+  // A top-level section wins over a heading that only starts like it (Aktuelles › Sicherheitslage in der Region).
+  const security = await getAdvisory(clientOf(), { country: "Türkei", section: "Sicherheit" });
+  assert.ok(security.status === "ok" && "blocks" in security && security.blocks.every((b) => b.section.startsWith("Sicherheit")));
+  // No top-level section of that name: any heading that contains it.
+  const terror = await getAdvisory(clientOf(), { country: "Türkei", section: "terror" });
+  assert.ok(terror.status === "ok" && "blocks" in terror && terror.blocks.length > 0 && terror.blocks.every((b) => b.section.includes("Terrorismus")));
 });
 
 test("getAdvisory: a section the advisory lacks is empty with its sections; an unknown country is empty with what to give", async () => {
