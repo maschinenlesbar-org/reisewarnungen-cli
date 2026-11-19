@@ -1,0 +1,58 @@
+{
+  "comment": "What tools/image/smoke.mjs needs that is particular to this repo: the bin (its log topic), a command that makes one request, the exit code of a network error, the mock's answer to that request (by path, under --base-url http://mock:8080; the list recorded on 2026-11-19, cut down), and a string the printed answer contains.",
+  "bin": "reisewarnungen",
+  "command": [
+    "countries",
+    "--warned-only"
+  ],
+  "networkErrorExit": 1,
+  "answers": {
+    "/opendata/travelwarning": {
+      "response": {
+        "201558": {
+          "lastModified": 1793007307,
+          "effective": 1793007000,
+          "title": "Thailand: Reise- und Sicherheitshinweise",
+          "countryCode": "TH",
+          "iso3CountryCode": "THA",
+          "countryName": "Thailand",
+          "warning": false,
+          "partialWarning": true,
+          "situationWarning": false,
+          "situationPartWarning": false
+        },
+        "201962": {
+          "lastModified": 1793971529,
+          "effective": 1793970900,
+          "title": "Türkei: Reise- und Sicherheitshinweise",
+          "countryCode": "TR",
+          "iso3CountryCode": "TUR",
+          "countryName": "Türkei",
+          "warning": false,
+          "partialWarning": false,
+          "situationWarning": false,
+          "situationPartWarning": false
+        },
+        "208258": {
+          "lastModified": 1791885127,
+          "effective": 1789387200,
+          "title": "Mali: Reise- und Sicherheitshinweise",
+          "countryCode": "ML",
+          "iso3CountryCode": "MLI",
+          "countryName": "Mali",
+          "warning": true,
+          "partialWarning": false,
+          "situationWarning": false,
+          "situationPartWarning": false
+        },
+        "lastModified": 1787576330,
+        "contentList": [
+          "201558",
+          "201962",
+          "208258"
+        ]
+      }
+    }
+  },
+  "expectStdout": "\"countryName\": \"Thailand\""
+}
