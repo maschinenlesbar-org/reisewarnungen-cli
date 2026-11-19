@@ -12,6 +12,7 @@ import { MAX_TIMEOUT_MS } from "@maschinenlesbar.org/reisewarnungen-client/inter
 import { MAX_RETRIES, MAX_RETRY_AFTER_MS } from "@maschinenlesbar.org/reisewarnungen-client/internal/engine";
 import { forbidRepeatedOptions, parseBoundedInt, parseIntArg, parseOutputPath, parseBaseUrl, parseHeaderValue } from "./shared.js";
 import { registerWarningCommands } from "./commands/warnings.js";
+import { readContainerLimits } from "./limits.js";
 import { DEFAULT_LOG_FORMAT, logFormatProblem } from "./log.js";
 
 /**
@@ -36,6 +37,8 @@ export const VERSION = readVersion();
 export const defaultDeps: CliDeps = {
   io: defaultIO,
   createClient: (options) => new ReisewarnungenClient(options),
+  // In a container: the memory and pids limits (cgroup), for action()'s checks.
+  limits: () => readContainerLimits(),
 };
 
 /** commander value-parser for `--log-format`. */

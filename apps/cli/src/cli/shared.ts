@@ -4,6 +4,7 @@
 import { constants } from "node:buffer";
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
+import { pidsProblem, responseCapFor } from "./limits.js";
 import { OutputError, isDirectoryMessage, logOf, nodeFiles, refuseOverwrite, type CliDeps } from "./io.js";
 import { ReiseError, ReiseValidationError, quoteValue } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
 import { baseUrlProblem, headerValueProblem, intInRangeProblem } from "@maschinenlesbar.org/reisewarnungen-client/internal/validate";
@@ -343,6 +344,9 @@ export interface ActionContext {
   opts: Record<string, unknown>;
 }
 
+/** The container can't run the CLI as it is limited (limits.ts): an ERROR record of the cli area and exit 1. */
+export class EnvironmentError extends ReiseError {}
+
 /**
  * Wrap an async command action with consistent global-option resolution and
  * client construction. The callback receives a context (client + resolved global
@@ -370,6 +374,15 @@ export function action(
     const cleartext = cleartextProblem(global.baseUrl ?? DEFAULT_BASE_URL);
     if (cleartext !== undefined) logOf(deps).warn("http", cleartext);
     const options = toEngineOptions(global);
+    // In a container: under a pids limit Node can't work with, refuse before any request; under a
+    // memory limit the 100 MiB default can't be held, so cap by the memory instead (an oversized
+    // answer is then the cap's error, not an OOM kill). An explicit --max-response-bytes wins.
+    const limits = deps.limits?.() ?? {};
+    const problem = pidsProblem(limits);
+    if (problem !== undefined) throw new EnvironmentError(problem);
+    const given = command.getOptionValueSourceWithGlobals("maxResponseBytes");
+    const memory = given === undefined || given === "default" ? limits.memoryBytes : undefined;
+    if (memory !== undefined) options.maxResponseBytes = responseCapFor(memory);
     options.onRetry = (event) => logOf(deps).warn("http", retryMessage(event));
     // An answer delivered changed (invalid text replaced with U+FFFD) is never silent.
     options.onWarning = (message) => logOf(deps).warn("api", message);
