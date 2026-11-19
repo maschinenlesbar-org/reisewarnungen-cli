@@ -371,3 +371,21 @@ export function adviceSentences(html: string): AdviceSentence[] {
   }
   return result;
 }
+
+/** One block of an advisory as plain text: a paragraph, a list item or a table cell. */
+export interface AdvisoryBlock {
+  /** The headings it stands under, outermost first, joined with " › " (as {@link AdviceSentence.section}). */
+  section: string;
+  /** The block's text: tags removed, entities decoded, whitespace collapsed; the words as published. */
+  text: string;
+}
+
+/**
+ * An advisory's HTML `content` as plain-text blocks in document order, each with its heading path:
+ * the whole text, nothing selected or reworded (tags are dropped, entities decoded, whitespace
+ * collapsed). Never throws on odd HTML; a non-string gives `[]`.
+ */
+export function advisoryBlocks(html: string): AdvisoryBlock[] {
+  if (typeof html !== "string" || html === "") return [];
+  return blocksOf(html).map(({ section, text }) => ({ section, text }));
+}

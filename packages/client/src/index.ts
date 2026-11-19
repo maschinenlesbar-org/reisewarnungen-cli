@@ -2,8 +2,8 @@
 
 export { ReisewarnungenClient, assertContentId, canonicalContentId, isWarned } from "./client.js";
 export type { SummariesOptions, TravelAdvice } from "./client.js";
-export { ADVICE_PATTERNS, TRAVEL_PATTERN, adviceSentences, isAdviceSentence, splitSentences } from "./advice.js";
-export type { AdviceSentence } from "./advice.js";
+export { ADVICE_PATTERNS, TRAVEL_PATTERN, adviceSentences, advisoryBlocks, isAdviceSentence, splitSentences } from "./advice.js";
+export type { AdviceSentence, AdvisoryBlock } from "./advice.js";
 export {
   RequestEngine,
   DEFAULT_BASE_URL,
@@ -53,3 +53,40 @@ export {
 } from "./errors.js";
 
 export * from "./types.js";
+
+export {
+  COUNTRY_ALIASES,
+  MAX_RECENT,
+  MAX_TRIP_COUNTRIES,
+  findCountry,
+  getAdvisory,
+  getTravelAdvice,
+  getWarnedCountries,
+  getWarningChanges,
+  listCountries,
+  parseSnapshot,
+  snapshotOf,
+  statusOf,
+  warningLevel,
+} from "./operations.js";
+export type {
+  AdvisoryAnswer,
+  AdvisoryInput,
+  CountryLookup,
+  CountryRef,
+  CountryStatus,
+  LevelChange,
+  ListCountriesInput,
+  MatchedBy,
+  TripAdvice,
+  TravelAdviceInput,
+  TripCountry,
+  TripLookupFailure,
+  TripVerdict,
+  WarnedCountries,
+  WarnedCountriesInput,
+  WarningChanges,
+  WarningChangesAnswer,
+  WarningChangesInput,
+  WarningLevel,
+} from "./operations.js";
