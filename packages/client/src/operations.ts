@@ -272,7 +272,8 @@ export interface TripCountry extends CountryStatus {
   /**
    * Every sentence that warns or advises against something and mentions travel, a stay or a part
    * of the country, with its section: the regions of a regional warning, and for an all-false
-   * country the advice against travel no flag records.
+   * country the advice against travel no flag records. A text the advisory repeats (under
+   * Aktuelles and again under Sicherheit) is listed once, where it first stands.
    */
   travelAdvice: AdviceSentence[];
   /** How many other warning sentences the advisory has (crowds, drugs, driving at night): getAdvisory has them. */
@@ -319,6 +320,12 @@ function textWithHeadings(blocks: readonly AdvisoryBlock[]): string {
       return head + block.text;
     })
     .join(" ");
+}
+
+/** `sentences` with each text once, where it first stands. */
+function onceEach(sentences: readonly AdviceSentence[]): AdviceSentence[] {
+  const seen = new Set<string>();
+  return sentences.filter((s) => (seen.has(s.text) ? false : (seen.add(s.text), true)));
 }
 
 /** The items of a `lastChanges` note, as text, without its label. */
@@ -376,7 +383,8 @@ export async function getTravelAdvice(client: ReisewarnungenClient, input: Trave
     seen.add(lookup.entry.id);
     const advisory = await client.get(lookup.entry.id);
     const entry: CountryEntry = { ...lookup.entry, ...advisory, id: lookup.entry.id };
-    const sentences = adviceSentences(typeof advisory.content === "string" ? advisory.content : "");
+    // An advisory repeats its key sentences under Aktuelles and Sicherheit: each text once, at its first place.
+    const sentences = onceEach(adviceSentences(typeof advisory.content === "string" ? advisory.content : ""));
     const travelAdvice = sentences.filter((s) => s.travel);
     const status = statusOf(entry);
     const verdict: TripVerdict = status.level !== "none" ? VERDICT_OF_LEVEL[status.level] : travelAdvice.length > 0 ? "advice-in-text" : "advice-only";
@@ -420,7 +428,7 @@ function tripSummary(countries: readonly (TripCountry | TripLookupFailure)[]): s
     lines.push(
       warned.length === 0
         ? `None of the ${found.length} countries has a formal travel warning.`
-        : `Of ${found.length} countries, ${warned.length} carry a formal warning: ${warned.map((c) => `${c.countryName ?? c.id} (${VERDICT_WORDS[c.verdict]})`).join(", ")}.`,
+        : `Of ${found.length} countries, ${warned.length} ${warned.length === 1 ? "carries" : "carry"} a formal warning: ${warned.map((c) => `${c.countryName ?? c.id} (${VERDICT_WORDS[c.verdict]})`).join(", ")}.`,
     );
   }
   return lines.join(" ");

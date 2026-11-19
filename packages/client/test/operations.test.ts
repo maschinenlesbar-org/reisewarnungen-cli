@@ -130,6 +130,20 @@ test("getTravelAdvice: a full warning, a regional one with its regions, advice a
   assert.equal(answer.summary.split(". ").at(-1), "Of 4 countries, 2 carry a formal warning: Mali (full travel warning (Reisewarnung)), Thailand (regional travel warning (Teilreisewarnung)).");
 });
 
+test("getTravelAdvice: a sentence the advisory repeats under Aktuelles and Sicherheit is listed once, where it first stands", async () => {
+  const answer = await getTravelAdvice(clientOf(), { countries: ["Thailand"] });
+  const thailand = answer.countries[0] as TripCountry;
+  const texts = thailand.travelAdvice.map((s) => s.text);
+  assert.equal(new Set(texts).size, texts.length);
+  const kambodscha = thailand.travelAdvice.filter((s) => s.text.startsWith("Vor Reisen in das Grenzgebiet (20 km zum Grenzverlauf) zu Kambodscha"));
+  assert.deepEqual(kambodscha.map((s) => s.section), ["Aktuelles"]);
+});
+
+test("getTravelAdvice: one warned country of several 'carries' a warning", async () => {
+  const answer = await getTravelAdvice(clientOf(), { countries: ["Thailand", "Österreich"] });
+  assert.match(answer.summary, /Of 2 countries, 1 carries a formal warning: Thailand/);
+});
+
 test("getTravelAdvice: dates are the API's seconds as ISO times; the last-changes note is its items; the sections are listed", async () => {
   const answer = await getTravelAdvice(clientOf(), { countries: ["TH"] });
   const thailand = answer.countries[0] as TripCountry;
