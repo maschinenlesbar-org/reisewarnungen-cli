@@ -468,3 +468,17 @@ test("getAdvisory: a content id the API doesn't know is empty, saying ids can ch
   // Any other failure is still the error.
   await assert.rejects(getAdvisory(clientOf(makeMockTransport(() => jsonResponse({}, 500))), { country: "123456" }), /HTTP 500/);
 });
+
+test("getAdvisory: the disclaimer joins a heading that ends in punctuation with a space, not \": \"", async () => {
+  const transport = reiseApi();
+  const client = clientOf({ ...transport, transport: async (request) => {
+    const response = await transport.transport(request);
+    if (!request.url.endsWith(`/${TUERKEI}`)) return response;
+    const body = JSON.parse(response.body.toString()) as { response: Record<string, Record<string, unknown>> };
+    (body.response[TUERKEI] as Record<string, unknown>)["disclaimer"] =
+      "<h3>Haftungsausschluss</h3><h4>Planung und Antritt von Auslandsreisen stets in eigener Verantwortung!</h4><p>Reise- und Sicherheitshinweise beruhen auf den Informationen der Auslandsvertretungen.</p>";
+    return { ...response, body: Buffer.from(JSON.stringify(body)) };
+  } });
+  const answer = await getAdvisory(client, { country: TUERKEI });
+  assert.equal("disclaimer" in answer ? answer.disclaimer : "", "Haftungsausschluss › Planung und Antritt von Auslandsreisen stets in eigener Verantwortung! Reise- und Sicherheitshinweise beruhen auf den Informationen der Auslandsvertretungen.");
+});

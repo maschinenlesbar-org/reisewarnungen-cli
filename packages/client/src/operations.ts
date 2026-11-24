@@ -337,12 +337,15 @@ function topSections(blocks: readonly AdvisoryBlock[]): string[] {
   return [...seen];
 }
 
-/** Blocks as one text, each section's heading path before its first block (`Haftungsausschluss: …`). */
+/**
+ * Blocks as one text, each section's heading path before its first block (`Haftungsausschluss: …`;
+ * a path that ends in its own punctuation, „… Verantwortung!", with a space, not "!:").
+ */
 function textWithHeadings(blocks: readonly AdvisoryBlock[]): string {
   let section = "";
   return blocks
     .map((block) => {
-      const head = block.section !== section && block.section !== "" ? `${block.section}: ` : "";
+      const head = block.section !== section && block.section !== "" ? `${block.section}${/[.!?:]$/.test(block.section) ? " " : ": "}` : "";
       section = block.section;
       return head + block.text;
     })
