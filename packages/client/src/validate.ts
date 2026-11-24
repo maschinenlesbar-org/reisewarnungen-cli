@@ -71,7 +71,8 @@ export const headerValueProblem: Problem = (value) => {
  * requests `/`). A malformed value (`notaurl`, `""`, `http://`) fails the parse.
  * A `%` in the user name or password must start a valid escape (`%25` for a literal
  * one): the userinfo is decoded for the Authorization header, and Node failed at
- * request time ("URI malformed") as a network error. Surrounding whitespace (U+00A0
+ * request time ("URI malformed") as a network error. A base that ends in the API's own path
+ * (/opendata/travelwarning, which the client adds) is refused: it doubled the path. Surrounding whitespace (U+00A0
  * included) and control characters are rejected: `new URL()` trims or drops them
  * silently, so the value would not read as it was typed. None of the reasons quotes the value.
  */
@@ -106,6 +107,9 @@ export const baseUrlProblem: Problem = (value) => {
   // WHATWG skips any slashes after "http:" and repairs `http:host`, `http:/host` and
   // `http:///host` into `http://host` silently: the host requested would not be the one typed.
   if (!/^https?:\/\/[^/]/i.test(value)) return 'Expected an absolute http(s) URL ("https://" and the host).';
+  // The client puts the API's path (/opendata/travelwarning) after the base: a base that ends in it
+  // (as the CLI's help names the API) doubled it, and every request was a 404.
+  if (/\/opendata\/travelwarning\/*$/i.test(url.pathname)) return 'A base URL ends before the API\'s path: drop "/opendata/travelwarning" (the client adds it).';
   return undefined;
 };
 

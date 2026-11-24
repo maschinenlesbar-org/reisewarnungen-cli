@@ -107,7 +107,11 @@ to the base URL as WHATWG parses it (host lower-cased, a default port dropped, t
 sent only as the Authorization header), the reading every check of it makes, so a custom
 transport that reads the URL as text reaches the same host. `credentialsIn` reads a
 userinfo where WHATWG does: after any slashes and backslashes a special scheme skips, up to a
-backslash too. The CLI's `--base-url` uses the same rule and messages.
+backslash too. A base whose path ends in the API's own `/opendata/travelwarning` (the URL the
+CLI's help names as the API) is refused (`A base URL ends before the API's path: drop
+"/opendata/travelwarning" (the client adds it).`): the client adds it, so every request went to
+the doubled path and was a 404. The CLI's `--base-url` uses the same rule and messages, and the
+MCP server refuses such a `--base-url` at start.
 
 `userAgent` goes into an HTTP header, so the constructor checks it too
 (`assertHeaderValue` / `headerValueProblem`): a blank value, a C0 control character

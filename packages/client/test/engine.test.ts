@@ -91,6 +91,17 @@ test("the constructor rejects a base URL with a query or fragment", () => {
   }
 });
 
+test("a base URL that ends in the API's path is refused: the client adds it, so every request doubled it", () => {
+  // The CLI's --help names https://www.auswaertiges-amt.de/opendata/travelwarning as the API.
+  for (const baseUrl of ["https://www.auswaertiges-amt.de/opendata/travelwarning", "http://127.0.0.1:8080/opendata/travelwarning/", "https://h.example/x/OpenData/TravelWarning"]) {
+    assert.equal(baseUrlProblem(baseUrl), 'A base URL ends before the API\'s path: drop "/opendata/travelwarning" (the client adds it).', baseUrl);
+    assert.throws(() => new RequestEngine({ baseUrl }), ReiseValidationError, baseUrl);
+  }
+  for (const baseUrl of ["https://www.auswaertiges-amt.de", "https://proxy.example/aa/", "https://h.example/opendata/travelwarning-mirror"]) {
+    assert.equal(baseUrlProblem(baseUrl), undefined, baseUrl);
+  }
+});
+
 test("the constructor rejects a non-http(s) base URL before any request", () => {
   // A library consumer may inject its own transport, which need not check the
   // scheme; the engine itself must never hand it a file:/ftp: base URL.
