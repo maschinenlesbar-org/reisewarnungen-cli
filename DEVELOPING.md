@@ -137,7 +137,9 @@ cut at `MAX_HEADING_LENGTH`, 200 characters, the path at `MAX_SECTION_LENGTH`, 5
 and output; made once per heading and shared) and
 `travel` (`TRAVEL_PATTERN`: Reise, Aufenthalt, Region, Gebiet, Provinz, Grenze, Landesteil,
 …). The HTML is split at block elements (paragraphs, list items, headings, accordion
-buttons), entities decoded and soft hyphens dropped; sentences split at `.`/`!`/`?` before
+buttons), entities decoded, and invisible and control characters dropped (soft hyphens,
+zero-width and bidi marks, tag characters, NUL: one inside „abgeraten" must not hide the
+sentence); sentences split at `.`/`!`/`?` before
 an upper-case start, but not after an abbreviation („z. B.", „o.g.", „bzw.", a one- or
 two-digit ordinal); a sentence that ends in `:` before a list carries the list's items. The
 flags record only the formal levels, so this is what keeps an all-false country from

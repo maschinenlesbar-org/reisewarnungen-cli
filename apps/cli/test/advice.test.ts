@@ -120,6 +120,17 @@ test("advice: entities are decoded, soft hyphens dropped, odd input gives []", (
   assert.deepEqual(adviceSentences(undefined as never), []);
 });
 
+test("advice: an invisible or control character inside a word doesn't hide the sentence", () => {
+  // A left-to-right mark (text pasted from a right-to-left source), a bidi override, a tag
+  // character, a variation selector or a NUL inside „abgeraten" hid the sentence: the verdict was
+  // made before the MCP server cleaned them out.
+  for (const char of ["\u200e", "&#x200F;", "\u202e", "\u{e0041}", "\ufe0f", "\u0000", "\u0007", "\u2066", "\u180e"]) {
+    assert.deepEqual(travel(`<p>Von Reisen in die Grenzregion wird ab${char}geraten.</p>`), ["Von Reisen in die Grenzregion wird abgeraten."], JSON.stringify(char));
+  }
+  // A line or paragraph separator, or a tab, still parts two words.
+  assert.deepEqual(travel("<p>Von Reisen\u2028in die Grenzregion\twird abgeraten.</p>"), ["Von Reisen in die Grenzregion wird abgeraten."]);
+});
+
 test("advice: a long sentence without a full stop is scanned in linear time, not quadratic (bug 4)", () => {
   // „nicht … reisen" and „rät … ab" have a gap between two words; a sentence of 192 KB with
   // 32 000 „nicht" and no „reisen" took 9 s (each „nicht" rescanned the rest of the sentence),

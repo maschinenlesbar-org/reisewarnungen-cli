@@ -23,7 +23,7 @@ export interface AdviceSentence {
    * (never inside a surrogate pair) and end in "…".
    */
   section: string;
-  /** The sentence as plain text (tags removed, entities decoded, whitespace collapsed). */
+  /** The sentence as plain text (tags removed, entities decoded, invisible and control characters dropped, whitespace collapsed). */
   text: string;
   /**
    * True when the sentence also mentions travel, a stay or a part of the country (Reise,
@@ -114,9 +114,19 @@ function decodeEntities(text: string): string {
   });
 }
 
-/** Collapse whitespace and drop invisible characters (soft hyphen, zero-width, BOM). */
+/**
+ * What is invisible or a control character, never a letter: control characters (but the
+ * whitespace ones, which part words), every Default_Ignorable_Code_Point (soft hyphen, zero-width
+ * and bidi format characters, BOM, variation selectors, the tag characters U+E0000 to U+E007F)
+ * and the interlinear annotation marks. Removed before a sentence is matched: one inside
+ * „abgeraten" (a left-to-right mark from text pasted out of a right-to-left source) hid the
+ * sentence, and the MCP server cleaned them out only after the verdict was made.
+ */
+const INVISIBLE = /(?![\t\n\v\f\r\u2028\u2029])[\p{Cc}\p{Default_Ignorable_Code_Point}\ufff9-\ufffb]/gu;
+
+/** Collapse whitespace and drop invisible and control characters (INVISIBLE). */
 function cleanText(text: string): string {
-  return text.replace(/[­​-‍⁠﻿]/g, "").replace(/\s+/g, " ").trim();
+  return text.replace(INVISIBLE, "").replace(/\s+/g, " ").trim();
 }
 
 /**
