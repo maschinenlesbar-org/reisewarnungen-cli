@@ -134,7 +134,8 @@ Bangladesch, Jordanien und Mexiko hatten am 06.10.2026 alle vier Flags `false` u
 solche Sätze im Text. „Kein Flag" heißt also „keine formale Warnung", nicht
 „unbedenklich". Der Befehl `advice` (Bibliothek: `client.advice`, `adviceSentences`)
 listet jeden Satz mit einer dieser Formulierungen samt Abschnitt; `travel: true`
-markiert die, die außerdem Reisen, einen Aufenthalt oder einen Landesteil nennen.
+markiert die, die außerdem Reisen, einen Aufenthalt, einen Besuch, die Aufforderung zur
+Ausreise („… zu verlassen") oder einen Landesteil (auch die Hauptstadt) nennen.
 
 ---
 

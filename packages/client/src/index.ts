@@ -2,7 +2,7 @@
 
 export { ReisewarnungenClient, assertContentId, canonicalContentId, isWarned } from "./client.js";
 export type { SummariesOptions, TravelAdvice } from "./client.js";
-export { ADVICE_PATTERNS, TRAVEL_PATTERN, adviceSentences, advisoryBlocks, isAdviceSentence, splitSentences } from "./advice.js";
+export { ADVICE_PATTERNS, TRAVEL_PATTERN, TRAVEL_PATTERN_CASED, adviceSentences, advisoryBlocks, isAdviceSentence, isTravelSentence, splitSentences } from "./advice.js";
 export type { AdviceSentence, AdvisoryBlock } from "./advice.js";
 export {
   RequestEngine,

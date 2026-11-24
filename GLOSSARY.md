@@ -135,7 +135,7 @@ flags `false` on 2026-10-06 and such sentences in their text. So "no flag" means
 "no formal warning", not "all clear". The `advice` command (library:
 `client.advice`, `adviceSentences`) lists every sentence with one of these
 phrasings, with its section; `travel: true` marks those that also mention travel,
-a stay or a part of the country.
+a stay, a visit, the call to leave or a part of the country (the capital among them).
 
 ---
 

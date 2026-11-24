@@ -120,6 +120,32 @@ test("advice: entities are decoded, soft hyphens dropped, odd input gives []", (
   assert.deepEqual(adviceSentences(undefined as never), []);
 });
 
+test("advice: the call to leave, a visit and the capital tie a sentence to travel; leaving a car or a visited place don't", () => {
+  // These advise against being there but named no travel word, so getTravelAdvice hid them and
+  // an unflagged country with only these was "advice-only" (Sudan's and Mali's call to leave, live).
+  assert.deepEqual(
+    travel(
+      "<p>Deutsche Staatsangehörige werden dringend aufgefordert, Testland umgehend zu verlassen.</p>" +
+        "<p>Das Auswärtige Amt rät dringend von Besuchen in Drittland ab.</p>" +
+        "<p>Meiden Sie die Hauptstadt Zweitstadt.</p>" +
+        "<p>Meiden Sie nach Möglichkeit Ausflugsziele, die regelmäßig von Ausländern aufgesucht werden.</p>",
+    ),
+    [
+      "Deutsche Staatsangehörige werden dringend aufgefordert, Testland umgehend zu verlassen.",
+      "Das Auswärtige Amt rät dringend von Besuchen in Drittland ab.",
+      "Meiden Sie die Hauptstadt Zweitstadt.",
+      "Meiden Sie nach Möglichkeit Ausflugsziele, die regelmäßig von Ausländern aufgesucht werden.",
+    ],
+  );
+  // Live sentences that are about something else stay apart.
+  const other =
+    "<p>Ausweise/Dokumente sollten auch beim kurzzeitigen Verlassen des Pkw mitgenommen werden.</p>" +
+    "<p>Die Gefahr von Anschlägen kann nicht ausgeschlossen werden, auch nicht an Orten, die von Ausländern besucht werden.</p>" +
+    "<p>Sollten Sie bereits die Ukraine verlassen haben, tragen Sie sich umgehend aus der Krisenvorsorgeliste aus.</p>";
+  assert.equal(adviceSentences(other).length, 3);
+  assert.deepEqual(travel(other), []);
+});
+
 test("advice: an invisible or control character inside a word doesn't hide the sentence", () => {
   // A left-to-right mark (text pasted from a right-to-left source), a bidi override, a tag
   // character, a variation selector or a NUL inside „abgeraten" hid the sentence: the verdict was

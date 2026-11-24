@@ -83,7 +83,7 @@ reisewarnungen advice 201962 --compact | jq -r '.sentences[] | select(.travel) |
 
 `advice` prints the flags plus every sentence that warns or advises against
 something, whole (not cut at „z. B."), with its `section` and `travel: true` when
-it mentions travel, a stay or a part of the country. Read the `travel` sentences:
+it mentions travel, a stay, a visit, the call to leave or a part of the country. Read the `travel` sentences:
 some advise against travel to a region, others are about night driving or crowds.
 
 ### 5. Find a country's content id by name, then fetch it

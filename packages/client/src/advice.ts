@@ -26,8 +26,9 @@ export interface AdviceSentence {
   /** The sentence as plain text (tags removed, entities decoded, invisible and control characters dropped, whitespace collapsed). */
   text: string;
   /**
-   * True when the sentence also mentions travel, a stay or a part of the country (Reise,
-   * Aufenthalt, Region, Gebiet, Provinz, Grenze, Landesteil, …; see TRAVEL_PATTERN). Such a
+   * True when the sentence also mentions travel, a stay, a visit, leaving or a part of the country
+   * (Reise, Aufenthalt, Region, Gebiet, Provinz, Grenze, Landesteil, Hauptstadt, Besuch, „… zu
+   * verlassen", …; see TRAVEL_PATTERN and TRAVEL_PATTERN_CASED). Such a
    * sentence may advise against travel to the country or a region and must be read; one
    * without it is about something else (crowds, drugs, driving at night).
    */
@@ -84,7 +85,22 @@ function words(first: string, ...then: string[]): RegExp {
 
 /** Words that tie a sentence to travel or a part of the country (see AdviceSentence.travel). */
 export const TRAVEL_PATTERN =
-  /reise|fahrt|aufenthalt|region|gebiet|provinz|grenz|landesteil|bundesstaat|distrikt|bezirk|departement|gegend|insel|(?<!\p{L})(?:land|landes|teil|teilen|stadt|städte|norden|süden|osten|westen|nordosten|südosten|nordwesten|südwesten)(?!\p{L})/iu;
+  /reise|fahrt|aufenthalt|region|gebiet|provinz|grenz|landesteil|bundesstaat|distrikt|bezirk|departement|gegend|insel|hauptstadt|ausflugsziel|(?<!\p{L})(?:land|landes|teil|teilen|stadt|städte|norden|süden|osten|westen|nordosten|südosten|nordwesten|südwesten)(?!\p{L})/iu;
+
+/**
+ * Words that tie a sentence to travel only as written: the noun „Besuch" („rät dringend von
+ * Besuchen in … ab"; the verb in „Orte, die von Ausländern besucht werden" is about crowds) and
+ * the call to leave („…, Sudan zu verlassen"; not the noun in „beim Verlassen des Pkw", nor
+ * „Sollten Sie die Ukraine bereits verlassen haben"). Without them, the call to leave a country
+ * and advice against visits were hidden, and an unflagged country with only such advice was
+ * "advice-only", the reassuring verdict.
+ */
+export const TRAVEL_PATTERN_CASED = /(?<!\p{L})(?:Besuch(?:e|en|es|s)?|zu verlassen)(?!\p{L})/u;
+
+/** Whether an advice sentence also mentions travel, a stay, a visit, leaving or a part of the country (AdviceSentence.travel). */
+export function isTravelSentence(text: string): boolean {
+  return TRAVEL_PATTERN.test(text) || TRAVEL_PATTERN_CASED.test(text);
+}
 
 /** Tags that end a block of text (a paragraph, list item, heading, line break, table cell). */
 const BLOCK_TAGS = new Set([
@@ -340,7 +356,7 @@ export function adviceSentences(html: string): AdviceSentence[] {
     if (texts === undefined) seen.set(section, (texts = new Set()));
     if (texts.has(text)) return;
     texts.add(text);
-    result.push({ section, text, travel: TRAVEL_PATTERN.test(text) });
+    result.push({ section, text, travel: isTravelSentence(text) });
   };
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i]!;

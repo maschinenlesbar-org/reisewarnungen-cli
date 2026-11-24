@@ -159,6 +159,16 @@ test("getTravelAdvice: a sentence the advisory repeats under Aktuelles and Siche
   assert.deepEqual(kambodscha.map((s) => s.section), ["Aktuelles"]);
 });
 
+test("getTravelAdvice: an unflagged country whose advisory asks Germans to leave, or advises against visits, is advice in text", async () => {
+  for (const sentence of ["Deutsche Staatsangehörige werden dringend aufgefordert, Österreich umgehend zu verlassen.", "Das Auswärtige Amt rät dringend von Besuchen in Österreich ab."]) {
+    const advisories = { [OESTERREICH]: { lastChanges: "", content: `<h2>Aktuelles</h2><p>${sentence}</p>` } };
+    const answer = await getTravelAdvice(clientOf(reiseApi({ advisories })), { countries: ["Österreich"] });
+    const oesterreich = answer.countries[0] as TripCountry;
+    assert.equal(oesterreich.verdict, "advice-in-text", sentence);
+    assert.deepEqual(oesterreich.travelAdvice.map((s) => s.text), [sentence]);
+  }
+});
+
 test("getTravelAdvice: one warned country of several 'carries' a warning", async () => {
   const answer = await getTravelAdvice(clientOf(), { countries: ["Thailand", "Österreich"] });
   assert.match(answer.summary, /Of 2 countries, 1 carries a formal warning: Thailand/);

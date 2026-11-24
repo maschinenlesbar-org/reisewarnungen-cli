@@ -136,7 +136,9 @@ cut at `MAX_HEADING_LENGTH`, 200 characters, the path at `MAX_SECTION_LENGTH`, 5
 „…", so a hostile advisory's long headings, copied into every sentence, can't blow up memory
 and output; made once per heading and shared) and
 `travel` (`TRAVEL_PATTERN`: Reise, Aufenthalt, Region, Gebiet, Provinz, Grenze, Landesteil,
-…). The HTML is split at block elements (paragraphs, list items, headings, accordion
+Hauptstadt, …; and, as written, `TRAVEL_PATTERN_CASED`: the noun „Besuch" and the call „… zu
+verlassen", so the call to leave a country and advice against visits are never hidden; together
+`isTravelSentence`). The HTML is split at block elements (paragraphs, list items, headings, accordion
 buttons), entities decoded, and invisible and control characters dropped (soft hyphens,
 zero-width and bidi marks, tag characters, NUL: one inside „abgeraten" must not hide the
 sentence); sentences split at `.`/`!`/`?` before

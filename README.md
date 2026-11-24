@@ -144,8 +144,8 @@ every sentence of the advisory that warns or advises against something
 ausreisen/verlassen", „sehen … von … ab"/„absehen"), as whole
 sentences — not cut at „z. B." or „o.g.", and a sentence that introduces a list
 („… wird abgeraten:") carries the list's items. Each has its `section` (the
-headings above it, cut at 500 characters) and `travel: true` when it also mentions travel, a stay or a
-part of the country. Read those: some advise against travel to a region, others
+headings above it, cut at 500 characters) and `travel: true` when it also mentions travel, a stay, a
+visit, the call to leave or a part of the country. Read those: some advise against travel to a region, others
 are about night driving or crowds. An all-false country with no `travel`
 sentence is advice only.
 

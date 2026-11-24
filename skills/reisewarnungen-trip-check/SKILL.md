@@ -136,8 +136,8 @@ of the advisory that warns or advises against something — „abgeraten", „r�
 advice to leave („sollten … ausreisen/verlassen") and „Sehen Sie von … ab"/„absehen" — as
 whole sentences, with the `section` (headings) they stand under. A sentence that
 introduces a list („Von Reisen in folgende Regionen wird dringend abgeraten:") carries
-the list's items. `travel: true` marks the sentences that also mention travel, a stay or
-a part of the country.
+the list's items. `travel: true` marks the sentences that also mention travel, a stay, a
+visit, the call to leave („…, Sudan zu verlassen") or a part of the country.
 
 **Classify (all-false countries):** read every `travel: true` sentence and ask: does it
 advise against, or say to avoid, travel to (or stays in) the country or a named part of
