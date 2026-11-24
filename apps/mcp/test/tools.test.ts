@@ -72,7 +72,7 @@ test("getWarningChanges: a snapshot to keep, then the changes since it, levels a
   const old: Record<string, ListFixture> = { ...COUNTRIES, [MALI]: { ...(COUNTRIES[MALI] as ListFixture), warning: false, partialWarning: true } };
   const first = await call("getWarningChanges", {}, reiseApi({ countries: old }));
   const snapshot = String(first.answer["snapshot"]);
-  assert.match(snapshot, /^rw1:\d+:28:/);
+  assert.match(snapshot, /^rw2:\d+:28:/);
   assert.ok(Array.isArray(first.answer["recent"]));
   const { answer, text } = await call("getWarningChanges", { previous: snapshot });
   assert.equal(answer["status"], "ok", text);
@@ -150,4 +150,26 @@ test("getAdvisory: an offset past the last block is empty, saying how many block
   const section = await call("getAdvisory", { country: "Türkei", section: "Sicherheit", offset: 500 });
   assert.equal(section.answer["status"], "empty");
   assert.match(String(section.answer["reason"]), /^The blocks of section "Sicherheit" are \d+; offset 500 is past their end\.$/);
+});
+
+/** A list of `n` countries with seven-digit content ids, every one under a full warning (a worldwide warning, as in spring 2020). */
+function worldwide(n: number): Record<string, ListFixture> {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return Object.fromEntries(
+    Array.from({ length: n }, (_, i) => [
+      String(9_000_000 + i),
+      { lastModified: 1_790_000_000 + i, effective: 1_790_000_000, title: `Land ${i}: Reise- und Sicherheitshinweise`, countryCode: `${letters[Math.floor(i / 26) % 26]}${letters[i % 26]}`, iso3CountryCode: `X${letters[Math.floor(i / 26) % 26]}${letters[i % 26]}`, countryName: `Land ${String(i).padStart(3, "0")}`, warning: true, partialWarning: false, situationWarning: false, situationPartWarning: false },
+    ]),
+  );
+}
+
+test("getWarningChanges: the snapshot of 200 warned countries is kept whole and reads back", async () => {
+  const countries = worldwide(200);
+  const first = await call("getWarningChanges", {}, reiseApi({ countries }));
+  const snapshot = String(first.answer["snapshot"]);
+  assert.ok(snapshot.length > 2000 && snapshot.length <= 4000, `${snapshot.length}`);
+  assert.doesNotMatch(snapshot, /…\[cut/);
+  const again = await call("getWarningChanges", { previous: snapshot }, reiseApi({ countries }));
+  assert.equal(again.result.isError, undefined, again.text);
+  assert.match(String(again.answer["verdict"]), /^Nothing changed since the previous snapshot\./);
 });

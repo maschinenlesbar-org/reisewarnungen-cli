@@ -94,7 +94,9 @@ jq -n --slurpfile old reisewarnungen-2026-06-04.json --slurpfile new reisewarnun
 >   (the CLI exits `1` on an answer with a malformed flag), but an older or hand-made file
 >   may not; if `level()` and the flags disagree, say so rather than guess.
 > - Compare by **`id`**, not by name — names are stable but ids are the real key, and a
->   country can appear/disappear from the catalogue.
+>   country can appear/disappear from the catalogue. Content ids can change, though: before
+>   reporting a `lifted` (gone) country and a `newlyWarned` one, check whether they share a
+>   `countryCode` — then it is the same country under a new id; report only its level change.
 > - `lastModified` is Unix **seconds** (not ms, despite older docs). Convert with
 >   `× 1000` for `Date`; a bare value like `1780665504` is June 2026.
 > - A pure `lastModified` bump means the advisory text changed but the warning *level* may

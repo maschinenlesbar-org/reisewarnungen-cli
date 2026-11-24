@@ -141,7 +141,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     title: "Changes in the travel warnings",
     description: [
       'What changed in the German travel warnings: since an earlier snapshot, the countries newly warned, escalated (regional -> full), downgraded, lifted, with other flags, and those whose advisory text was revised; or the advisories changed since a date. Use it for "welche Reisewarnungen haben sich seit letzter Woche geändert?", "neue Reisewarnungen?", "what travel warnings changed since last week?", "which countries had their advice updated recently?", "did the warning for Mali change?", "alert me to new travel warnings".',
-      "Every answer has a snapshot string: keep it and pass it back unchanged as previous next time to get the changes since; without one, give since (a date, 2026-11-12) for the advisories changed after it, or nothing for the most recently changed (recent, newest first). since alone can't tell a level change from a text revision: say so, and compare the level with a snapshot. Lead with newly warned and escalated, then downgraded and lifted (gone: the country left the list); keep text-only revisions (updated) apart: they are not a new warning. Level none is no formal warning, not \"safe\". For details on a changed country, getTravelAdvice.",
+      "Every answer has a snapshot string: keep it and pass it back unchanged as previous next time to get the changes since; without one, give since (a date, 2026-11-12) for the advisories changed after it, or nothing for the most recently changed (recent, newest first). since alone can't tell a level change from a text revision: say so, and compare the level with a snapshot. Lead with newly warned and escalated, then downgraded and lifted (gone: the country left the list, countryCode names it; previousId: the same country under a new content id); keep text-only revisions (updated) apart: they are not a new warning. Level none is no formal warning, not \"safe\". For details on a changed country, getTravelAdvice.",
       RULES,
     ].join("\n\n"),
     inputSchema: input({
@@ -151,6 +151,9 @@ export const TOOLS: readonly ToolDefinition[] = [
     }),
     outputSchema: output({ verdict: str_, snapshot: str_, previousAsOf: str_, changes: obj, recent: arr, recentTotal: int }),
     source: (_args, apiBase) => apiBase,
+    // The snapshot is passed back whole: 200 warned countries with seven-digit ids make about 2600
+    // characters, over the 2000 a result's strings are cut at; `previous` takes 4000.
+    maxFieldLength: 4000,
     async run(args, context) {
       const answer = await getWarningChanges(context.client, { previous: str(args, "previous"), since: str(args, "since"), limit: num(args, "limit") });
       return { ...answer, ...(answer.recent === undefined ? {} : { recent: answer.recent.map(compact) }) };

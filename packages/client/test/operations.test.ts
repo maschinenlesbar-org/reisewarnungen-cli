@@ -342,7 +342,7 @@ test("getWarningChanges: without a snapshot, the most recently changed first, an
   const answer = await getWarningChanges(clientOf(), { limit: 3 });
   assert.deepEqual(answer.recent?.map((c) => c.countryName), ["Kenia", "Polen", "Ägypten"]);
   assert.equal(answer.recentTotal, Object.keys(COUNTRIES).length);
-  assert.match(answer.snapshot, /^rw1:1795101313:28:(\d+-[0-9a-f],)*\d+-[0-9a-f]$/);
+  assert.match(answer.snapshot, /^rw2:1795101313:28:(\d+-[0-9a-f]-[A-Z]{2},)*\d+-[0-9a-f]-[A-Z]{2}$/);
   assert.match(answer.verdict, /keep this answer's snapshot/);
   assert.match(answer.verdict, /Level "none" is no formal warning, not "safe"/);
 });
@@ -377,7 +377,7 @@ test("getWarningChanges: since is a real date, and a time without a zone is UTC 
 
 test("getWarningChanges: a malformed snapshot is refused with the fix, before any request", async () => {
   const transport = reiseApi();
-  for (const bad of ["", "rw2:1:1:", "rw1:x:1:", "rw1:1:1:12-0", "rw1:1:1:12-g", "rw1:1:1"]) {
+  for (const bad of ["", "rw3:1:1:", "rw1:x:1:", "rw2:1:1:12-8-", "rw2:1:1:12-8-T", "rw1:1:1:12-8-TH", "rw1:1:1:12-0", "rw1:1:1:12-g", "rw1:1:1"]) {
     await assert.rejects(getWarningChanges(clientOf(transport), { previous: bad }), /Invalid previous snapshot: .* Pass the snapshot string of an earlier getWarningChanges answer unchanged/, bad);
   }
   assert.equal(transport.calls.length, 0);
@@ -390,7 +390,31 @@ test("snapshotOf / parseSnapshot: the newest change, the count and the warned co
   assert.equal(read.warned.get(MALI), 8);
   assert.equal(read.warned.get(THAILAND), 4);
   assert.equal(read.warned.has(TUERKEI), false);
+  assert.equal(read.codes.get(MALI), "ML");
   assert.ok(snapshot.length < 2000, "fits a result's string field");
+  // An older snapshot, without the codes, is still read.
+  const old = parseSnapshot(`rw1:1795101313:28:${MALI}-8,${THAILAND}-4`);
+  assert.equal(old.warned.get(MALI), 8);
+  assert.equal(old.codes.size, 0);
+});
+
+test("getWarningChanges: a warned country that left the list is named by its code; one under a new content id is the same country", async () => {
+  const first = await getWarningChanges(clientOf());
+  // Thailand (regional) leaves the list; Mali (full) comes back under a new content id.
+  const { [THAILAND]: _thailand, [MALI]: mali, ...rest } = COUNTRIES;
+  const answer = await getWarningChanges(clientOf(reiseApi({ countries: { ...rest, "9208258": mali as ListFixture } })), { previous: first.snapshot });
+  const changes = answer.changes!;
+  assert.deepEqual(changes.lifted.map((c) => [c.id, c.countryCode, c.gone]), [[THAILAND, "TH", true]]);
+  assert.deepEqual(changes.newlyWarned, [], "Mali is no new warning");
+  assert.match(answer.verdict, /Content id changed: Mali \(208258 -> 9208258\)\./);
+  // A level change under a new id names the old id too.
+  const { [MALI]: mali2, ...others } = COUNTRIES;
+  const lower = await getWarningChanges(clientOf(reiseApi({ countries: { ...others, "9208258": { ...(mali2 as ListFixture), warning: false, partialWarning: true } } })), { previous: first.snapshot });
+  assert.deepEqual(lower.changes?.downgraded.map((c) => [c.countryName, c.id, c.previousId, c.from, c.to]), [["Mali", "9208258", MALI, "full", "partial"]]);
+  // With an older snapshot (no codes) a country that left is still a lifted id.
+  const oldStyle = `rw1:${first.snapshot.split(":")[1]}:28:${MALI}-8`;
+  const withoutCodes = await getWarningChanges(clientOf(reiseApi({ countries: rest })), { previous: oldStyle });
+  assert.deepEqual(withoutCodes.changes?.lifted.map((c) => [c.id, c.countryCode, c.gone]), [[MALI, undefined, true]]);
 });
 
 test("listCountries: every country with its level, by German name; warnedOnly narrows", async () => {

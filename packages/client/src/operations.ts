@@ -547,17 +547,27 @@ export async function getWarnedCountries(client: ReisewarnungenClient, input: Wa
 // ---- getWarningChanges ------------------------------------------------------------------------
 
 /** The prefix of a snapshot string; another prefix is refused. */
-const SNAPSHOT_PREFIX = "rw1";
+const SNAPSHOT_PREFIX = "rw2";
+
+/** The prefix of an older snapshot, without the countries' codes: still read. */
+const OLD_SNAPSHOT_PREFIX = "rw1";
 
 /** The most countries of the recent list (freshness view). */
 export const MAX_RECENT = 200;
 
-/** A snapshot read back: when it was taken (its newest lastModified), how many countries, the warned ones' flags. */
-interface Snapshot {
+/** A snapshot read back: when it was taken (its newest lastModified), how many countries, the warned ones' flags and codes. */
+export interface Snapshot {
   asOf: number;
   listed: number;
   /** content id -> flag bits (warning 8, partialWarning 4, situationWarning 2, situationPartWarning 1). */
   warned: Map<string, number>;
+  /** content id -> ISO alpha-2 code of the warned countries (none in an older `rw1` snapshot). */
+  codes: Map<string, string>;
+}
+
+/** A country's ISO alpha-2 code as a snapshot keeps it, or undefined when it has none that fits. */
+function snapshotCode(entry: CountryEntry): string | undefined {
+  return typeof entry.countryCode === "string" && /^[A-Za-z]{2}$/.test(entry.countryCode) ? entry.countryCode.toUpperCase() : undefined;
 }
 
 function bitsOf(entry: TravelWarning): number {
@@ -577,15 +587,20 @@ const WATCH_LEVEL_NAMES = ["none", "partial", "full"] as const;
 
 /**
  * The snapshot of `entries` as a short string to keep and pass back: the newest lastModified, the
- * number of countries and the flags of the warned ones (`rw1:1794991261:200:201558-4,208258-8`).
- * Unwarned countries are not listed (their flags are all false); a text revision shows as a
- * lastModified after the snapshot's newest.
+ * number of countries and the flags and ISO code of the warned ones
+ * (`rw2:1794991261:200:201558-4-TH,208258-8-ML`). The code names a warned country that left the
+ * list, and finds it again under a new content id (content ids can change). Unwarned countries
+ * are not listed (their flags are all false; the count says when the list changed size), which
+ * keeps the string short; a text revision shows as a lastModified after the snapshot's newest.
  */
 export function snapshotOf(entries: readonly CountryEntry[]): string {
   const asOf = entries.reduce((max, e) => (typeof e.lastModified === "number" && e.lastModified > max ? e.lastModified : max), 0);
   const warned = entries
     .filter((e) => bitsOf(e) !== 0)
-    .map((e) => `${e.id}-${bitsOf(e).toString(16)}`)
+    .map((e) => {
+      const code = snapshotCode(e);
+      return `${e.id}-${bitsOf(e).toString(16)}${code === undefined ? "" : `-${code}`}`;
+    })
     .sort();
   return `${SNAPSHOT_PREFIX}:${Math.floor(asOf)}:${entries.length}:${warned.join(",")}`;
 }
@@ -597,16 +612,19 @@ export function parseSnapshot(text: string): Snapshot {
   };
   if (typeof text !== "string") return bad("Expected a string.");
   const parts = text.trim().split(":");
-  if (parts.length !== 4 || parts[0] !== SNAPSHOT_PREFIX) return bad(`Expected "${SNAPSHOT_PREFIX}:<time>:<count>:<warned countries>".`);
-  const [, asOfText, listedText, warnedText] = parts as [string, string, string, string];
+  if (parts.length !== 4 || (parts[0] !== SNAPSHOT_PREFIX && parts[0] !== OLD_SNAPSHOT_PREFIX)) return bad(`Expected "${SNAPSHOT_PREFIX}:<time>:<count>:<warned countries>".`);
+  const [prefix, asOfText, listedText, warnedText] = parts as [string, string, string, string];
   if (!/^\d{1,12}$/.test(asOfText) || !/^\d{1,4}$/.test(listedText)) return bad("The time or the count is not a number.");
   const warned = new Map<string, number>();
+  const codes = new Map<string, string>();
+  const entry = prefix === SNAPSHOT_PREFIX ? /^(\d{1,12})-([0-9a-f])(?:-([A-Z]{2}))?$/ : /^(\d{1,12})-([0-9a-f])$/;
   for (const item of warnedText === "" ? [] : warnedText.split(",")) {
-    const match = /^(\d{1,12})-([0-9a-f])$/.exec(item);
-    if (match === null || match[2] === "0") return bad(`${quoteValue(item)} is no "<content id>-<flags>" entry.`);
+    const match = entry.exec(item);
+    if (match === null || match[2] === "0") return bad(`${quoteValue(item)} is no "<content id>-<flags>${prefix === SNAPSHOT_PREFIX ? "-<code>" : ""}" entry.`);
     warned.set(match[1] as string, Number.parseInt(match[2] as string, 16));
+    if (match[3] !== undefined) codes.set(match[1] as string, match[3]);
   }
-  return { asOf: Number(asOfText), listed: Number(listedText), warned };
+  return { asOf: Number(asOfText), listed: Number(listedText), warned, codes };
 }
 
 /** A country whose level or flags changed. */
@@ -616,8 +634,10 @@ export interface LevelChange extends CountryRef {
   /** The flags set before and now. */
   flagsBefore: Flag[];
   flagsNow: Flag[];
-  /** True when the country is no longer in the list at all. */
+  /** True when the country is no longer in the list at all (named by its ISO code, when the snapshot has it). */
   gone?: true;
+  /** The content id the snapshot knew the country by, when it is in the list under a new one now (same ISO code). */
+  previousId?: string;
   lastModified?: string;
 }
 
@@ -707,8 +727,22 @@ export async function getWarningChanges(client: ReisewarnungenClient, input: War
   if (previous !== undefined) {
     const changes: WarningChanges = { newlyWarned: [], escalated: [], downgraded: [], lifted: [], flagsChanged: [], updated: [] };
     const byId = new Map(entries.map((e) => [e.id, e]));
+    // A warned country of the snapshot that is in the list under a new content id (same ISO code,
+    // and the new id unknown to the snapshot): the same country, not one lifted and one newly warned.
+    const renamed = new Map<string, string>(); // new id -> old id
+    const byCode = new Map<string, CountryEntry[]>();
     for (const entry of entries) {
-      const before = previous.warned.get(entry.id) ?? 0;
+      const code = snapshotCode(entry);
+      if (code !== undefined) byCode.set(code, [...(byCode.get(code) ?? []), entry]);
+    }
+    for (const [id, code] of previous.codes) {
+      if (byId.has(id)) continue;
+      const now = byCode.get(code) ?? [];
+      if (now.length === 1 && !previous.warned.has((now[0] as CountryEntry).id) && !renamed.has((now[0] as CountryEntry).id)) renamed.set((now[0] as CountryEntry).id, id);
+    }
+    for (const entry of entries) {
+      const previousId = renamed.get(entry.id);
+      const before = previous.warned.get(previousId ?? entry.id) ?? 0;
       const now = bitsOf(entry);
       const from = watchLevel(before);
       const to = watchLevel(now);
@@ -720,6 +754,7 @@ export async function getWarningChanges(client: ReisewarnungenClient, input: War
         flagsBefore: flagsOfBits(before),
         flagsNow: flagsOfBits(now),
         ...(lastModified === undefined ? {} : { lastModified }),
+        ...(previousId === undefined ? {} : { previousId }),
       });
       if (from === 0 && to > 0) changes.newlyWarned.push(change());
       else if (from > 0 && to === 0) changes.lifted.push(change());
@@ -728,9 +763,11 @@ export async function getWarningChanges(client: ReisewarnungenClient, input: War
       else if (before !== now) changes.flagsChanged.push(change());
       else if (typeof entry.lastModified === "number" && entry.lastModified > previous.asOf) changes.updated.push(statusOf(entry));
     }
+    const movedFrom = new Set(renamed.values());
     for (const [id, bits] of previous.warned) {
-      if (byId.has(id)) continue;
-      changes.lifted.push({ id, from: WATCH_LEVEL_NAMES[watchLevel(bits)], to: "none", flagsBefore: flagsOfBits(bits), flagsNow: [], gone: true });
+      if (byId.has(id) || movedFrom.has(id)) continue;
+      const code = previous.codes.get(id);
+      changes.lifted.push({ id, ...(code === undefined ? {} : { countryCode: code }), from: WATCH_LEVEL_NAMES[watchLevel(bits)], to: "none", flagsBefore: flagsOfBits(bits), flagsNow: [], gone: true });
     }
     changes.updated.sort((a, b) => (b.lastModified ?? "").localeCompare(a.lastModified ?? ""));
     answer.changes = changes;
@@ -743,6 +780,9 @@ export async function getWarningChanges(client: ReisewarnungenClient, input: War
         : `Since the previous snapshot: ${changes.newlyWarned.length} newly warned, ${changes.escalated.length} escalated, ${changes.downgraded.length} downgraded, ${changes.lifted.length} lifted, ${changes.flagsChanged.length} with other flags at the same level; ${changes.updated.length} advisories revised with the same flags.`,
     );
     if (previous.listed !== entries.length) parts.push(`The list held ${previous.listed} countries then and ${entries.length} now.`);
+    if (renamed.size > 0) {
+      parts.push(`Content id changed: ${[...renamed].map(([now, before]) => `${byId.get(now)?.countryName ?? now} (${before} -> ${now})`).join(", ")}.`);
+    }
   }
 
   if (since !== undefined || previous === undefined) {

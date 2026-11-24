@@ -81,7 +81,9 @@ only the formal warnings: a country without a flag can still be advised against 
 only an advisory without such a sentence is `advice-only`. A country whose advisory can't be read (an
 error answer, or the call's time ran out first) is `failed` with its reason, and the trip's other
 countries are still answered. The server keeps no state: a watch keeps
-the `snapshot` string of one answer and passes it back as `previous`.
+the `snapshot` string of one answer and passes it back as `previous`; it holds the warned countries'
+content ids, flags and ISO codes, so a warned country that left the list is named by its code, and
+one under a new content id is the same country (`previousId`), not a lifted and a new warning.
 
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
 `source` it came from (whole, never cut like the data; an answer a redirect fetched from another
