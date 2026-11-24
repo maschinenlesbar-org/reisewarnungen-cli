@@ -76,9 +76,10 @@ test("getWarningChanges: a snapshot to keep, then the changes since it, levels a
   assert.ok(Array.isArray(first.answer["recent"]));
   const { answer, text } = await call("getWarningChanges", { previous: snapshot });
   assert.equal(answer["status"], "ok", text);
-  const changes = answer["changes"] as Record<string, { countryName: string; from?: string; to?: string }[]>;
-  assert.deepEqual(changes["escalated"]?.map((c) => [c.countryName, c.from, c.to]), [["Mali", "partial", "full"]]);
-  assert.deepEqual(changes["updated"], []);
+  const changes = answer["changes"] as { change: string; countryName: string; from?: string; to?: string }[];
+  assert.deepEqual(changes.map((c) => [c.change, c.countryName, c.from, c.to]), [["escalated", "Mali", "partial", "full"]]);
+  assert.deepEqual(answer["changeCounts"], { newlyWarned: 0, escalated: 1, downgraded: 0, lifted: 0, flagsChanged: 0, updated: 0 });
+  assert.equal(answer["nextOffset"], undefined);
 });
 
 test("getWarningChanges: a snapshot that isn't one is a tool error saying what to pass, before any request", async () => {
@@ -172,4 +173,36 @@ test("getWarningChanges: the snapshot of 200 warned countries is kept whole and 
   const again = await call("getWarningChanges", { previous: snapshot }, reiseApi({ countries }));
   assert.equal(again.result.isError, undefined, again.text);
   assert.match(String(again.answer["verdict"]), /^Nothing changed since the previous snapshot\./);
+});
+
+test("getWarningChanges: 200 newly warned countries come a page at a time, by class, with the totals; a small size cap keeps the snapshot", async () => {
+  const countries = worldwide(200);
+  const none = Object.fromEntries(Object.entries(countries).map(([id, c]) => [id, { ...c, warning: false }]));
+  const snapshot = String((await call("getWarningChanges", {}, reiseApi({ countries: none }))).answer["snapshot"]);
+  const first = await call("getWarningChanges", { previous: snapshot }, reiseApi({ countries }));
+  assert.equal(first.result.isError, undefined, first.text);
+  assert.equal((first.answer["changes"] as unknown[]).length, 50);
+  assert.equal((first.answer["changeCounts"] as Record<string, number>)["newlyWarned"], 200);
+  assert.equal(first.answer["nextOffset"], 50);
+  assert.match(String(first.answer["verdict"]), /^Since the previous snapshot: 200 newly warned/);
+  const last = await call("getWarningChanges", { previous: snapshot, offset: 150 }, reiseApi({ countries }));
+  assert.deepEqual((last.answer["changes"] as { countryName: string }[]).map((c) => c.countryName).slice(-1), ["Land 199"]);
+  assert.equal(last.answer["nextOffset"], undefined);
+  const past = await call("getWarningChanges", { previous: snapshot, offset: 200 }, reiseApi({ countries }));
+  assert.deepEqual(past.answer["changes"], []);
+  assert.match(String(past.answer["verdict"]), /offset 200 is past the 200 changes/);
+  // Under a small cap the page is shortened (nextOffset moves on) and the snapshot stays whole.
+  const connection = await connect({ transport: reiseApi({ countries }), config: { maxResultChars: 8000 } });
+  const small = await connection.call("getWarningChanges", { previous: snapshot, limit: 200 });
+  await connection.close();
+  const content = (small.structuredContent ?? {}) as Record<string, unknown>;
+  assert.equal(small.isError, undefined, small.content[0]?.text);
+  const kept = (content["changes"] as unknown[]).length;
+  assert.ok(kept > 1 && kept < 200 && content["nextOffset"] === kept, `${kept} ${String(content["nextOffset"])}`);
+  assert.equal(content["snapshot"], String(first.answer["snapshot"]));
+  // Without a snapshot the recent list pages too.
+  const recent = await call("getWarningChanges", { limit: 10, offset: 190 }, reiseApi({ countries }));
+  assert.equal((recent.answer["recent"] as unknown[]).length, 10);
+  assert.equal(recent.answer["nextOffset"], undefined);
+  assert.equal((await call("getWarningChanges", { limit: 10 }, reiseApi({ countries }))).answer["nextOffset"], 10);
 });

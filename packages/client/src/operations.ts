@@ -794,7 +794,7 @@ export async function getWarningChanges(client: ReisewarnungenClient, input: War
     answer.recentTotal = changed.length;
     parts.push(
       since === undefined
-        ? `The ${answer.recent.length} most recently changed advisories, newest first (no previous snapshot: keep this answer's snapshot to compare next time).`
+        ? `The most recently changed advisories, newest first (recent; recentTotal counts the list's ${changed.length}; no previous snapshot: keep this answer's snapshot to compare next time).`
         : `${changed.length} advisories changed since ${input.since?.trim()}, newest first; a change may be a text revision only (compare the level with a snapshot).`,
     );
   }

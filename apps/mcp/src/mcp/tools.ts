@@ -17,6 +17,7 @@ import {
   MAX_TRIP_COUNTRIES,
   type CountryStatus,
   type TripAdvice,
+  type WarningChanges,
   type WarningLevel,
 } from "@maschinenlesbar.org/reisewarnungen-client";
 import type { JsonSchema, ToolDefinition } from "./server.js";
@@ -98,6 +99,9 @@ function compact(c: CountryStatus): Record<string, unknown> {
 
 const LEVEL_ENUM: Exclude<WarningLevel, "none">[] = ["full", "regional", "situation", "situation-part"];
 
+/** The classes of a change since a snapshot, in the order getWarningChanges lists them. */
+const CHANGE_CLASSES = ["newlyWarned", "escalated", "downgraded", "lifted", "flagsChanged", "updated"] as const satisfies readonly (keyof WarningChanges)[];
+
 export const TOOLS: readonly ToolDefinition[] = [
   {
     name: "getTravelAdvice",
@@ -141,22 +145,50 @@ export const TOOLS: readonly ToolDefinition[] = [
     title: "Changes in the travel warnings",
     description: [
       'What changed in the German travel warnings: since an earlier snapshot, the countries newly warned, escalated (regional -> full), downgraded, lifted, with other flags, and those whose advisory text was revised; or the advisories changed since a date. Use it for "welche Reisewarnungen haben sich seit letzter Woche geändert?", "neue Reisewarnungen?", "what travel warnings changed since last week?", "which countries had their advice updated recently?", "did the warning for Mali change?", "alert me to new travel warnings".',
-      "Every answer has a snapshot string: keep it and pass it back unchanged as previous next time to get the changes since; without one, give since (a date, 2026-11-12) for the advisories changed after it, or nothing for the most recently changed (recent, newest first). since alone can't tell a level change from a text revision: say so, and compare the level with a snapshot. Lead with newly warned and escalated, then downgraded and lifted (gone: the country left the list, countryCode names it; previousId: the same country under a new content id); keep text-only revisions (updated) apart: they are not a new warning. Level none is no formal warning, not \"safe\". For details on a changed country, getTravelAdvice.",
+      "Every answer has a snapshot string: keep it and pass it back unchanged as previous next time to get the changes since (changes, each with its class in change, changeCounts the totals); without one, give since (a date, 2026-11-12) for the advisories changed after it, or nothing for the most recently changed (recent, newest first). Both come a page at a time (offset, limit; nextOffset says where the next page starts). since alone can't tell a level change from a text revision: say so, and compare the level with a snapshot. Lead with newly warned and escalated, then downgraded and lifted (gone: the country left the list, countryCode names it; previousId: the same country under a new content id); keep text-only revisions (updated) apart: they are not a new warning. Level none is no formal warning, not \"safe\". For details on a changed country, getTravelAdvice.",
       RULES,
     ].join("\n\n"),
     inputSchema: input({
       previous: { type: "string", minLength: 1, maxLength: 4000, description: "The snapshot string of an earlier answer, unchanged." },
       since: { type: "string", minLength: 10, maxLength: 40, pattern: "^\\d{4}-\\d{2}-\\d{2}", description: "A date or time in ISO 8601 (2026-11-12 or 2026-11-12T08:00:00Z; a time without a zone is UTC)." },
-      limit: { type: "integer", minimum: 1, maximum: MAX_RECENT, description: `How many recently changed countries (1-${MAX_RECENT}, default 15).` },
+      offset: { ...offset, description: "Where the page of changes (with previous) or of recent starts (default 0)." },
+      limit: { type: "integer", minimum: 1, maximum: MAX_RECENT, description: `How many entries a page holds (1-${MAX_RECENT}): changes since previous (default 50), else recently changed countries (default 15).` },
     }),
-    outputSchema: output({ verdict: str_, snapshot: str_, previousAsOf: str_, changes: obj, recent: arr, recentTotal: int }),
+    outputSchema: output({ verdict: str_, snapshot: str_, previousAsOf: str_, changes: arr, changeCounts: obj, recent: arr, recentTotal: int, nextOffset: int }),
     source: (_args, apiBase) => apiBase,
     // The snapshot is passed back whole: 200 warned countries with seven-digit ids make about 2600
     // characters, over the 2000 a result's strings are cut at; `previous` takes 4000.
     maxFieldLength: 4000,
+    // A page of the changes (with previous) or of recent: the size cap shortens it first, so the
+    // snapshot, the state a watch keeps, is never cut to make room.
+    paged: (args) => ({ list: args["previous"] === undefined ? "recent" : "changes", offset: num(args, "offset") ?? 0 }),
     async run(args, context) {
-      const answer = await getWarningChanges(context.client, { previous: str(args, "previous"), since: str(args, "since"), limit: num(args, "limit") });
-      return { ...answer, ...(answer.recent === undefined ? {} : { recent: answer.recent.map(compact) }) };
+      const previous = str(args, "previous");
+      const answer = await getWarningChanges(context.client, { previous, since: str(args, "since"), limit: MAX_RECENT });
+      const from = num(args, "offset") ?? 0;
+      const result: Record<string, unknown> = { ...answer };
+      const past: string[] = [];
+      let nextOffset: number | undefined;
+      if (answer.recent !== undefined) {
+        // With previous, offset pages the changes; recent shows its first page.
+        const start = previous === undefined ? from : 0;
+        const page = answer.recent.slice(start, start + (num(args, "limit") ?? 15));
+        result["recent"] = page.map(compact);
+        if (previous === undefined && start + page.length < answer.recent.length) nextOffset = start + page.length;
+        if (previous === undefined && page.length === 0 && answer.recent.length > 0) past.push(`offset ${from} is past the ${answer.recent.length} changed advisories.`);
+      }
+      if (answer.changes !== undefined) {
+        const changes = answer.changes;
+        // One list, by class in the order a reader leads with, so a page (and the size cap) cuts it from its end.
+        const all = CHANGE_CLASSES.flatMap((change) => changes[change].map((entry) => ({ change, ...(change === "updated" ? compact(entry as CountryStatus) : entry) })));
+        const page = all.slice(from, from + (num(args, "limit") ?? 50));
+        result["changes"] = page;
+        result["changeCounts"] = Object.fromEntries(CHANGE_CLASSES.map((change) => [change, changes[change].length]));
+        if (from + page.length < all.length) nextOffset = from + page.length;
+        if (page.length === 0 && all.length > 0) past.push(`offset ${from} is past the ${all.length} changes.`);
+      }
+      if (past.length > 0) result["verdict"] = `${answer.verdict} This page is empty: ${past.join(" ")}`;
+      return { ...result, ...(nextOffset === undefined ? {} : { nextOffset }) };
     },
   },
   {
