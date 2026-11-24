@@ -138,7 +138,7 @@ test("getTravelAdvice: a full warning, a regional one with its regions, advice a
   assert.equal(transport.calls.length, 5, "the list once, then one advisory per country");
   const [mali, thailand, tuerkei, oesterreich] = answer.countries as TripCountry[];
   assert.equal(mali?.verdict, "full-warning");
-  assert.match(mali?.verdictText ?? "", /^Full travel warning \(Reisewarnung\): the Auswärtiges Amt warns against all travel to Mali\.$/);
+  assert.match(mali?.verdictText ?? "", /^Full travel warning \(Reisewarnung\): the Auswärtiges Amt warns against all travel there\.$/);
   assert.ok(mali?.travelAdvice.some((s) => s.text === "Vor Reisen nach Mali wird gewarnt."));
   assert.equal(thailand?.verdict, "regional-warning");
   assert.ok(thailand?.travelAdvice.some((s) => /Narathiwat, Yala und Pattani/.test(s.text)), "the regions are named");
@@ -146,10 +146,10 @@ test("getTravelAdvice: a full warning, a regional one with its regions, advice a
   assert.deepEqual(tuerkei?.flags, []);
   assert.equal(tuerkei?.verdict, "advice-in-text");
   assert.ok(tuerkei?.travelAdvice.some((s) => s.text.startsWith("Vermeiden Sie alle nicht zwingend erforderlichen Reisen")));
-  assert.match(tuerkei?.verdictText ?? "", /No formal travel warning for Türkei .* read them before calling it safe/);
+  assert.match(tuerkei?.verdictText ?? "", /^No formal warning, but \d+ sentence\(s\) may advise against travel: read travelAdvice first\.$/);
   assert.equal(oesterreich?.verdict, "advice-only");
   assert.deepEqual(oesterreich?.travelAdvice, []);
-  assert.equal(answer.summary.split(". ").at(-1), "Of 4 countries, 2 carry a formal warning: Mali (full travel warning (Reisewarnung)), Thailand (regional travel warning (Teilreisewarnung)).");
+  assert.equal(answer.summary.split(". ").at(-1), "Of 4 countries, 2 carry a formal warning: Mali, Thailand.");
 });
 
 test("getTravelAdvice: a sentence the advisory repeats under Aktuelles and Sicherheit is listed once, where it first stands", async () => {

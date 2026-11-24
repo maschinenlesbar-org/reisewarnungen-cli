@@ -30,9 +30,14 @@ test("getTravelAdvice: the verdict per country, the regions, the advisories as s
   const transport = reiseApi();
   const { answer, text } = await call("getTravelAdvice", { countries: ["Thailand", "Türkei", "Österreich"] }, transport);
   assert.equal(answer["status"], "ok", text);
-  const countries = answer["countries"] as { countryName: string; verdict: string; travelAdvice: { text: string }[] }[];
+  const countries = answer["countries"] as { countryName: string; verdict: string; travelAdviceCount: number }[];
   assert.deepEqual(countries.map((c) => [c.countryName, c.verdict]), [["Thailand", "regional-warning"], ["Türkei", "advice-in-text"], ["Österreich", "advice-only"]]);
-  assert.ok(countries[1]?.travelAdvice.some((s) => s.text.startsWith("Vermeiden Sie alle nicht zwingend erforderlichen Reisen")), "the advice against travel no flag records");
+  const advice = answer["travelAdvice"] as { country: string; section: string; text: string }[];
+  assert.ok(advice.some((s) => s.country === "Türkei" && s.text.startsWith("Vermeiden Sie alle nicht zwingend erforderlichen Reisen")), "the advice against travel no flag records");
+  assert.deepEqual(countries.map((c) => c.travelAdviceCount), ["Thailand", "Türkei", "Österreich"].map((name) => advice.filter((s) => s.country === name).length));
+  // Each country's first sentences come first, so a cut from the end leaves every country its first ones.
+  assert.deepEqual(advice.slice(0, 2).map((s) => s.country), ["Thailand", "Türkei"]);
+  assert.deepEqual(answer["summary"], ["Thailand: regional travel warning (Teilreisewarnung).", "Türkei: no formal warning; read the advice against travel in the text.", "Österreich: advice only.", "Of 3 countries, 1 carries a formal warning: Thailand."]);
   assert.equal(answer["source"], `${BASE}/{${THAILAND},${TUERKEI},210962}`);
   assert.match(String(answer["licence"]), /^Quelle: Auswärtiges Amt .*Keine Gewähr.*no open licence.*taken over completely and kept current.*open-data-schnittstelle-736118$/);
   assert.equal(transport.calls.length, 4);
@@ -51,7 +56,7 @@ test("getTravelAdvice: a former name finds a country under a full warning; an un
   assert.equal((russland.answer["countries"] as { verdict: string }[])[0]?.verdict, "full-warning");
   const narnia = await call("getTravelAdvice", { countries: ["Narnia"] });
   assert.equal(narnia.answer["status"], "empty");
-  assert.match(String(narnia.answer["summary"]), /"Narnia": not found in the Auswärtiges Amt's list\./);
+  assert.deepEqual(narnia.answer["summary"], ['"Narnia": not found in the Auswärtiges Amt\'s list.']);
 });
 
 test("getWarnedCountries: full warnings first, compact entries, the totals as verdict; a level narrows", async () => {
@@ -223,4 +228,31 @@ test("getWarnedCountries: a worldwide warning comes a page at a time; the size c
   const past = await call("getWarnedCountries", { offset: 200 }, reiseApi({ countries }));
   assert.equal(past.answer["status"], "empty");
   assert.equal(past.answer["reason"], "The list holds 200 warned countries; offset 200 is past its end.");
+});
+
+test("getTravelAdvice under a small size cap keeps every country and its verdict, and cuts only the advice sentences", async () => {
+  const countries = ["Thailand", "Türkei", "Mali", "Mexiko", "Kenia"];
+  const whole = await call("getTravelAdvice", { countries });
+  const all = (whole.answer["travelAdvice"] as unknown[]).length;
+  for (const cap of [7000, 5500, 5000]) {
+    const connection = await connect({ transport: reiseApi(), config: { maxResultChars: cap } });
+    const result = await connection.call("getTravelAdvice", { countries });
+    await connection.close();
+    const text = result.content[0]?.text ?? "";
+    assert.equal(result.isError, undefined, `${cap}: ${text}`);
+    assert.ok(text.length <= cap);
+    const answer = (result.structuredContent ?? {}) as Record<string, unknown>;
+    assert.equal(answer["truncated"], true);
+    const kept = answer["countries"] as { countryName: string; verdictText: string; travelAdviceCount: number }[];
+    assert.deepEqual(kept.map((c) => c.countryName), countries, `${cap}: every country`);
+    assert.deepEqual(answer["summary"], whole.answer["summary"], `${cap}: the summary whole`);
+    assert.deepEqual(kept.map((c) => c.verdictText), (whole.answer["countries"] as { verdictText: string }[]).map((c) => c.verdictText), `${cap}: the verdicts whole`);
+    const advice = answer["travelAdvice"] as { country: string; text: string }[];
+    // Either the long sentences were cut (marked), or sentences left out from the end (reason says so).
+    const cut = advice.some((s) => /…\[cut, \d+ characters in all\]$/.test(s.text));
+    const fewer = advice.length < all;
+    assert.ok(cut || fewer, `${cap}`);
+    if (fewer) assert.match(String(answer["reason"]), /travelAdvice lost entries from the end/);
+    assert.doesNotMatch(String(answer["reason"] ?? ""), /countries lost/);
+  }
 });

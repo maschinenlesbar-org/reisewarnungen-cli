@@ -65,6 +65,7 @@ export {
   getWarningChanges,
   listCountries,
   parseSnapshot,
+  tripSummaryLines,
   snapshotOf,
   statusOf,
   warningLevel,

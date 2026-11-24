@@ -15,8 +15,10 @@ import {
   listCountries,
   MAX_RECENT,
   MAX_TRIP_COUNTRIES,
+  tripSummaryLines,
   type CountryStatus,
   type TripAdvice,
+  type TripCountry,
   type WarningChanges,
   type WarningLevel,
 } from "@maschinenlesbar.org/reisewarnungen-client";
@@ -97,6 +99,32 @@ function compact(c: CountryStatus): Record<string, unknown> {
   return rest;
 }
 
+/**
+ * A trip's answer shaped for the size cap, which shortens only a result's own lists and cuts its
+ * texts to one length: every country's advice sentences in one list, each naming its country,
+ * the first of each country first (so a cut from the end leaves every country its first ones, and
+ * never drops a country), `travelAdviceCount` on each country; the summary one short line per
+ * country. Nested in the countries, the sentences made the cap drop whole countries (two of five
+ * kept in 6050 characters under a cap of 10 000) and cut the summary first, saying neither.
+ */
+function tripResult(answer: TripAdvice): Record<string, unknown> {
+  const found = answer.countries.filter((c): c is TripCountry => c.status === "ok");
+  const travelAdvice: { country: string; section: string; text: string }[] = [];
+  const longest = Math.max(0, ...found.map((c) => c.travelAdvice.length));
+  for (let i = 0; i < longest; i++) {
+    for (const c of found) {
+      const sentence = c.travelAdvice[i];
+      if (sentence !== undefined) travelAdvice.push({ country: c.countryName ?? c.id, section: sentence.section, text: sentence.text });
+    }
+  }
+  const countries = answer.countries.map((c) => {
+    if (c.status !== "ok") return c;
+    const { travelAdvice: sentences, title: _title, ...rest } = c;
+    return { ...rest, travelAdviceCount: sentences.length };
+  });
+  return { ...answer, summary: tripSummaryLines(answer.countries), countries, travelAdvice };
+}
+
 const LEVEL_ENUM: Exclude<WarningLevel, "none">[] = ["full", "regional", "situation", "situation-part"];
 
 /** The classes of a change since a snapshot, in the order getWarningChanges lists them. */
@@ -108,20 +136,20 @@ export const TOOLS: readonly ToolDefinition[] = [
     title: "Travel advice for a trip",
     description: [
       'The Auswärtiges Amt\'s current advice for one to five countries: the warning level of each and every sentence of its advisory that may advise against travel there or to a region. Use it for "ist es sicher, nach Ägypten zu reisen?", "Reisewarnung Thailand?", "was sagt das Auswärtige Amt zu Kenia?", "is it safe to travel to Egypt?", "travel warning for Thailand?", "I\'m going to Kenya and Tanzania, any warnings?".',
-      "verdict: full-warning (Reisewarnung: warns against all travel), regional-warning (Teilreisewarnung: parts of the country, travelAdvice names them; don't imply the whole country), situation-warning, partial-situation-warning, advice-in-text, advice-only. advice-in-text means no flag is set but sentences in travelAdvice may advise against travel to the country or a region (Türkei, Jordanien): read them; one that advises against or says to avoid travel there („abgeraten\", „rät ab\", „meiden\") makes it advice against travel, not a formal warning; sentences about crowds or night driving don't. Only advice-only is the reassuring answer. Lead with the level and the German term, then 3-6 points from travelAdvice (regions, causes), the date the advice took effect (effective) and lastChanges; the texts are German. A name several countries share (Kongo, Korea, Guinea-Bissau vs Guinea) is ambiguous: ask which. Not found is never \"no warning\"; status failed (the advisory could not be read, reason says why) has no verdict: ask again, never guess. otherAdvice counts the other warning sentences; getAdvisory has the full text (Einreise, Gesundheit).",
+      "verdict: full-warning (Reisewarnung: warns against all travel), regional-warning (Teilreisewarnung: parts of the country, travelAdvice names them; don't imply the whole country), situation-warning, partial-situation-warning, advice-in-text, advice-only. advice-in-text means no flag is set but sentences in travelAdvice may advise against travel to the country or a region (Türkei, Jordanien): read them; one that advises against or says to avoid travel there („abgeraten\", „rät ab\", „meiden\") makes it advice against travel, not a formal warning; sentences about crowds or night driving don't. Only advice-only is the reassuring answer. travelAdvice holds every country's sentences, each naming its country, the first ones of each country first (travelAdviceCount says how many each has; a size cap cuts from the end). Lead with the level and the German term, then 3-6 points from travelAdvice (regions, causes), the date the advice took effect (effective) and lastChanges; the texts are German. A name several countries share (Kongo, Korea, Guinea-Bissau vs Guinea) is ambiguous: ask which. Not found is never \"no warning\"; status failed (the advisory could not be read, reason says why) has no verdict: ask again, never guess. otherAdvice counts the other warning sentences; getAdvisory has the full text (Einreise, Gesundheit).",
       RULES,
     ].join("\n\n"),
     inputSchema: input(
       { countries: { type: "array", items: country, minItems: 1, maxItems: MAX_TRIP_COUNTRIES, description: `One to ${MAX_TRIP_COUNTRIES} countries of the trip.` } },
       ["countries"],
     ),
-    outputSchema: output({ summary: str_, countries: arr }),
+    outputSchema: output({ summary: arr, countries: arr, travelAdvice: arr }),
     source: (args, apiBase) => requested.get(args) ?? apiBase,
     async run(args, context) {
       const answer: TripAdvice = await getTravelAdvice(context.client, { countries: list(args, "countries") ?? [], signal: context.signal });
       const ids = answer.countries.flatMap((c) => (c.status === "ok" ? [c.id] : []));
       requested.set(args, advisoriesPath(context.apiBase, ids));
-      return { ...answer };
+      return tripResult(answer);
     },
   },
   {

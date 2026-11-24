@@ -80,7 +80,10 @@ only the formal warnings: a country without a flag can still be advised against 
 (Türkei's border areas), so `getTravelAdvice` says `advice-in-text` and lists the sentences, and
 only an advisory without such a sentence is `advice-only`. A country whose advisory can't be read (an
 error answer, or the call's time ran out first) is `failed` with its reason, and the trip's other
-countries are still answered. The server keeps no state: a watch keeps
+countries are still answered. A trip's advice sentences are one list (`travelAdvice`, each naming
+its country, the first ones of each country first), so under a small `--max-result-chars` the
+answer keeps every country, its verdict and the summary, and cuts or leaves out sentences from
+the end of that list instead (`reason` says so; `travelAdviceCount` says how many each country has). The server keeps no state: a watch keeps
 the `snapshot` string of one answer and passes it back as `previous`; it holds the warned countries'
 content ids, flags and ISO codes, so a warned country that left the list is named by its code, and
 one under a new content id is the same country (`previousId`), not a lifted and a new warning.

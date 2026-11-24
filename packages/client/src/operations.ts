@@ -365,20 +365,25 @@ function changeItems(html: unknown): string[] {
     .filter((text) => text !== "");
 }
 
-function verdictText(verdict: TripVerdict, name: string, travel: number): string {
+/**
+ * The verdict in words, at most about 100 characters (the country is named beside it): short
+ * enough that a result fitted under a size cap cuts the advisory's sentences, never the verdict.
+ * What a reader does with advice-in-text is in the MCP tool's description.
+ */
+function verdictText(verdict: TripVerdict, travel: number): string {
   switch (verdict) {
     case "full-warning":
-      return `Full travel warning (Reisewarnung): the Auswärtiges Amt warns against all travel to ${name}.`;
+      return "Full travel warning (Reisewarnung): the Auswärtiges Amt warns against all travel there.";
     case "regional-warning":
-      return `Regional travel warning (Teilreisewarnung) for parts of ${name}, not the whole country: travelAdvice names the regions.`;
+      return "Regional travel warning (Teilreisewarnung) for parts of the country: travelAdvice names them.";
     case "situation-warning":
-      return `Situation warning for ${name} (situationWarning).`;
+      return "Situation warning (situationWarning).";
     case "partial-situation-warning":
-      return `Situation warning for part of ${name} (situationPartWarning).`;
+      return "Situation warning for part of the country (situationPartWarning).";
     case "advice-in-text":
-      return `No formal travel warning for ${name} (all four flags false), but ${travel} sentence(s) of the advisory may advise against travel to the country or a region (travelAdvice): read them before calling it safe. One that advises against or says to avoid travel there („rät ab", „wird abgeraten", „meiden") is advice against travel, not a formal warning; sentences about crowds, demonstrations or night driving are not.`;
+      return `No formal warning, but ${travel} sentence(s) may advise against travel: read travelAdvice first.`;
     case "advice-only":
-      return `No formal travel warning for ${name} and no sentence in the advisory that advises against travel: advice only.`;
+      return "No formal travel warning, and no sentence that advises against travel: advice only.";
   }
 }
 
@@ -440,7 +445,7 @@ export async function getTravelAdvice(client: ReisewarnungenClient, input: Trave
       ...(lookup.alsoMatching === undefined ? {} : { alsoMatching: lookup.alsoMatching }),
       ...status,
       verdict,
-      verdictText: verdictText(verdict, entry.countryName ?? entry.id, travelAdvice.length),
+      verdictText: verdictText(verdict, travelAdvice.length),
       lastChanges: changeItems(advisory.lastChanges),
       travelAdvice,
       otherAdvice: sentences.length - travelAdvice.length,
@@ -451,7 +456,7 @@ export async function getTravelAdvice(client: ReisewarnungenClient, input: Trave
   if (unread.length > 0 && unread.length === countries.length) throw firstError;
   const notFound = countries.filter((c) => c.status === "ambiguous" || c.status === "empty");
   const status = notFound.some((c) => c.status === "ambiguous") ? "ambiguous" : notFound.length > 0 ? "empty" : "ok";
-  const answer: TripAdvice = { status, summary: tripSummary(countries), countries };
+  const answer: TripAdvice = { status, summary: tripSummaryLines(countries).join(" "), countries };
   if (unread.length > 0) {
     const names = unread.map((c) => c.countryName ?? c.id).join(", ");
     answer.reason = `${unread.length === 1 ? `The advisory of ${names}` : `The advisories of ${names}`} could not be read: ask for ${unread.length === 1 ? "it" : "them"} again on ${unread.length === 1 ? "its" : "their"} own; the other countries are answered.`;
@@ -468,7 +473,11 @@ const VERDICT_WORDS: Readonly<Record<TripVerdict, string>> = {
   "advice-only": "advice only",
 };
 
-function tripSummary(countries: readonly (TripCountry | TripLookupFailure | TripReadFailure)[]): string {
+/**
+ * A trip's summary, line by line: one per country, then, for several, which carry a formal warning
+ * (each line short, so a size cap never needs to cut one; TripAdvice.summary joins them).
+ */
+export function tripSummaryLines(countries: readonly (TripCountry | TripLookupFailure | TripReadFailure)[]): string[] {
   const lines = countries.map((c) => {
     if (c.status === "ok") return `${c.countryName ?? c.id}: ${VERDICT_WORDS[c.verdict]}.`;
     if (c.status === "failed") return `${c.countryName ?? c.id}: its advisory could not be read; ask for it again.`;
@@ -481,10 +490,10 @@ function tripSummary(countries: readonly (TripCountry | TripLookupFailure | Trip
     lines.push(
       warned.length === 0
         ? `None of the ${found.length} countries has a formal travel warning.`
-        : `Of ${found.length} countries, ${warned.length} ${warned.length === 1 ? "carries" : "carry"} a formal warning: ${warned.map((c) => `${c.countryName ?? c.id} (${VERDICT_WORDS[c.verdict]})`).join(", ")}.`,
+        : `Of ${found.length} countries, ${warned.length} ${warned.length === 1 ? "carries" : "carry"} a formal warning: ${warned.map((c) => c.countryName ?? c.id).join(", ")}.`,
     );
   }
-  return lines.join(" ");
+  return lines;
 }
 
 // ---- getWarnedCountries ---------------------------------------------------------------------
