@@ -104,7 +104,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     title: "Travel advice for a trip",
     description: [
       'The Auswärtiges Amt\'s current advice for one to five countries: the warning level of each and every sentence of its advisory that may advise against travel there or to a region. Use it for "ist es sicher, nach Ägypten zu reisen?", "Reisewarnung Thailand?", "was sagt das Auswärtige Amt zu Kenia?", "is it safe to travel to Egypt?", "travel warning for Thailand?", "I\'m going to Kenya and Tanzania, any warnings?".',
-      "verdict: full-warning (Reisewarnung: warns against all travel), regional-warning (Teilreisewarnung: parts of the country, travelAdvice names them; don't imply the whole country), situation-warning, partial-situation-warning, advice-in-text, advice-only. advice-in-text means no flag is set but sentences in travelAdvice may advise against travel to the country or a region (Türkei, Jordanien): read them; one that advises against or says to avoid travel there („abgeraten\", „rät ab\", „meiden\") makes it advice against travel, not a formal warning; sentences about crowds or night driving don't. Only advice-only is the reassuring answer. Lead with the level and the German term, then 3-6 points from travelAdvice (regions, causes), the date the advice took effect (effective) and lastChanges; the texts are German. A name several countries share (Kongo, Korea, Guinea-Bissau vs Guinea) is ambiguous: ask which. Not found is never \"no warning\". otherAdvice counts the other warning sentences; getAdvisory has the full text (Einreise, Gesundheit).",
+      "verdict: full-warning (Reisewarnung: warns against all travel), regional-warning (Teilreisewarnung: parts of the country, travelAdvice names them; don't imply the whole country), situation-warning, partial-situation-warning, advice-in-text, advice-only. advice-in-text means no flag is set but sentences in travelAdvice may advise against travel to the country or a region (Türkei, Jordanien): read them; one that advises against or says to avoid travel there („abgeraten\", „rät ab\", „meiden\") makes it advice against travel, not a formal warning; sentences about crowds or night driving don't. Only advice-only is the reassuring answer. Lead with the level and the German term, then 3-6 points from travelAdvice (regions, causes), the date the advice took effect (effective) and lastChanges; the texts are German. A name several countries share (Kongo, Korea, Guinea-Bissau vs Guinea) is ambiguous: ask which. Not found is never \"no warning\"; status failed (the advisory could not be read, reason says why) has no verdict: ask again, never guess. otherAdvice counts the other warning sentences; getAdvisory has the full text (Einreise, Gesundheit).",
       RULES,
     ].join("\n\n"),
     inputSchema: input(
@@ -114,7 +114,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     outputSchema: output({ summary: str_, countries: arr }),
     source: (args, apiBase) => requested.get(args) ?? apiBase,
     async run(args, context) {
-      const answer: TripAdvice = await getTravelAdvice(context.client, { countries: list(args, "countries") ?? [] });
+      const answer: TripAdvice = await getTravelAdvice(context.client, { countries: list(args, "countries") ?? [], signal: context.signal });
       const ids = answer.countries.flatMap((c) => (c.status === "ok" ? [c.id] : []));
       requested.set(args, advisoriesPath(context.apiBase, ids));
       return { ...answer };

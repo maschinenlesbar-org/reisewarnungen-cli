@@ -78,7 +78,9 @@ the Ukraine) or a former or everyday German name (`Russland`, `Holland`); a name
 countries share (`Kongo`, `Korea`) is answered as ambiguous, never picked. The four flags record
 only the formal warnings: a country without a flag can still be advised against in its text
 (Türkei's border areas), so `getTravelAdvice` says `advice-in-text` and lists the sentences, and
-only an advisory without such a sentence is `advice-only`. The server keeps no state: a watch keeps
+only an advisory without such a sentence is `advice-only`. A country whose advisory can't be read (an
+error answer, or the call's time ran out first) is `failed` with its reason, and the trip's other
+countries are still answered. The server keeps no state: a watch keeps
 the `snapshot` string of one answer and passes it back as `previous`.
 
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the

@@ -7,9 +7,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { NetworkError } from "../src/mcp/api.js";
+import { limitTransport } from "../src/mcp/limiter.js";
 import { listTools } from "../src/mcp/server.js";
 import { connect } from "./harness.js";
-import { COUNTRIES, MALI, THAILAND, TUERKEI, reiseApi, type ListFixture } from "./helpers.js";
+import { COUNTRIES, MALI, THAILAND, TUERKEI, reiseApi, reiseResponder, type ListFixture } from "./helpers.js";
 
 const BASE = "https://www.auswaertiges-amt.de/opendata/travelwarning";
 
@@ -112,4 +114,28 @@ test("getAdvisory: a section the advisory lacks is empty with its sections", asy
   const { answer } = await call("getAdvisory", { country: MALI, section: "Wintersport" });
   assert.equal(answer["status"], "empty");
   assert.match(String(answer["reason"]), /no section matching "Wintersport"/);
+});
+
+test("getTravelAdvice at the call deadline answers with the countries it has read and names the others", async () => {
+  // Mali's advisory never answers; the limiter passes the call's signal to each request, as the
+  // server runs it.
+  const answer = reiseResponder();
+  const transport = limitTransport((request) => {
+    if (!request.url.endsWith(`/${MALI}`)) return Promise.resolve(answer(request));
+    return new Promise((_resolve, reject) => {
+      const stop = (): void => reject(request.signal?.reason instanceof Error ? request.signal.reason : new NetworkError("Request aborted by its caller before it finished"));
+      if (request.signal?.aborted === true) stop();
+      else request.signal?.addEventListener("abort", stop, { once: true });
+    });
+  });
+  const connection = await connect({ transport: { transport }, config: { callTimeoutMs: 300 } });
+  const result = await connection.call("getTravelAdvice", { countries: ["Thailand", "Mali", "Türkei"] });
+  await connection.close();
+  const content = (result.structuredContent ?? {}) as Record<string, unknown>;
+  assert.notEqual(result.isError, true, result.content[0]?.text);
+  const countries = content["countries"] as { status: string; countryName: string; reason?: string }[];
+  assert.deepEqual(countries.map((c) => [c.countryName, c.status]), [["Thailand", "ok"], ["Mali", "failed"], ["Türkei", "failed"]]);
+  assert.match(countries[1]?.reason ?? "", /call's time ran out/);
+  assert.match(String(content["reason"]), /The advisories of Mali, Türkei could not be read/);
+  assert.equal(content["source"], `${BASE}/${THAILAND}`);
 });

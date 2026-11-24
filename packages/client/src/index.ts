@@ -82,6 +82,7 @@ export type {
   TravelAdviceInput,
   TripCountry,
   TripLookupFailure,
+  TripReadFailure,
   TripVerdict,
   WarnedCountries,
   WarnedCountriesInput,

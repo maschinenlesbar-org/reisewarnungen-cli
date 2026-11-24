@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ReisewarnungenClient } from "../src/client.js";
-import { ReiseParseError, ReiseValidationError } from "../src/errors.js";
+import { ReiseNetworkError, ReiseParseError, ReiseValidationError } from "../src/errors.js";
 import {
   findCountry,
   getAdvisory,
@@ -18,6 +18,7 @@ import {
   snapshotOf,
   warningLevel,
   type TripCountry,
+  type TripReadFailure,
 } from "../src/operations.js";
 import type { CountryEntry } from "../src/types.js";
 import { COUNTRIES, MALI, OESTERREICH, THAILAND, TUERKEI, reiseApi, type ListFixture } from "./fixtures.js";
@@ -187,6 +188,43 @@ test("getTravelAdvice and getAdvisory: an advisory without its text is a parse e
     await assert.rejects(getTravelAdvice(client, { countries: ["Türkei"] }), (err: Error) => err instanceof ReiseParseError && new RegExp(`content id "${TUERKEI}" has no content, so its advice can't be read`).test(err.message), label);
     await assert.rejects(getAdvisory(client, { country: TUERKEI }), ReiseParseError, label);
   }
+});
+
+test("getTravelAdvice: one advisory that fails is that country's failure; the others are read and answered", async () => {
+  const failing = (status: number) => {
+    const transport = reiseApi();
+    return { transport, client: clientOf({ ...transport, transport: async (request) => (request.url.endsWith(`/${MALI}`) ? { status, headers: { "content-type": "application/json" }, body: Buffer.from("{}") } : transport.transport(request)) }) };
+  };
+  const { transport, client } = failing(404);
+  const answer = await getTravelAdvice(client, { countries: ["Thailand", "Mali", "Türkei"] });
+  assert.deepEqual(answer.countries.map((c) => c.status), ["ok", "failed", "ok"]);
+  assert.deepEqual(transport.calls.map((c) => c.url.split("/").pop()), ["travelwarning", THAILAND, TUERKEI], "Türkei is read after Mali failed");
+  const mali = answer.countries[1] as TripReadFailure;
+  assert.equal(mali.id, MALI);
+  assert.equal(mali.countryName, "Mali");
+  assert.match(mali.reason, /^Its advisory could not be read: HTTP 404 for GET .*\/208258/);
+  assert.match(answer.summary, /Mali: its advisory could not be read; ask for it again\./);
+  assert.match(answer.reason ?? "", /^The advisory of Mali could not be read: ask for it again on its own; the other countries are answered\./);
+  assert.equal(answer.status, "ok");
+  // A trip whose every advisory fails is the error itself.
+  await assert.rejects(getTravelAdvice(failing(404).client, { countries: ["Mali"] }), /HTTP 404/);
+});
+
+test("getTravelAdvice: once the caller's signal aborts, the countries not yet read are named, not read", async () => {
+  const transport = reiseApi();
+  const caller = new AbortController();
+  const client = clientOf({ ...transport, transport: async (request) => {
+    if (request.url.endsWith(`/${MALI}`)) {
+      caller.abort();
+      throw new ReiseNetworkError("Request aborted by its caller before it finished");
+    }
+    return transport.transport(request);
+  } });
+  const answer = await getTravelAdvice(client, { countries: ["Thailand", "Mali", "Türkei"], signal: caller.signal });
+  assert.deepEqual(answer.countries.map((c) => c.status), ["ok", "failed", "failed"]);
+  for (const country of answer.countries.slice(1) as TripReadFailure[]) assert.match(country.reason, /^Not read: the call's time ran out \(or it was cancelled\) first; ask for it again\.$/);
+  assert.equal(transport.calls.length, 2, "Türkei is not asked for");
+  assert.match(answer.reason ?? "", /^The advisories of Mali, Türkei could not be read/);
 });
 
 test("getTravelAdvice: one warned country of several 'carries' a warning", async () => {

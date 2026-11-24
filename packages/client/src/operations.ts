@@ -19,7 +19,7 @@
 
 import { adviceSentences, advisoryBlocks, type AdviceSentence, type AdvisoryBlock } from "./advice.js";
 import { canonicalContentId, type ReisewarnungenClient } from "./client.js";
-import { ReiseValidationError, quoteValue } from "./errors.js";
+import { ReiseError, ReiseValidationError, quoteValue } from "./errors.js";
 import type { CountryEntry, TravelWarning } from "./types.js";
 import { assertValid, normalizeToken, tokenProblem } from "./validate.js";
 
@@ -292,20 +292,40 @@ export interface TripCountry extends CountryStatus {
 /** A name of a trip that did not resolve to one country. */
 export type TripLookupFailure = Exclude<CountryLookup, { status: "ok" }>;
 
+/**
+ * A country of a trip whose advisory could not be read (an error answer, a broken one, a failed
+ * request, or the caller's signal aborted first): no verdict, and `reason` says why.
+ */
+export interface TripReadFailure extends CountryRef {
+  status: "failed";
+  query: string;
+  reason: string;
+}
+
 /** The answer of {@link getTravelAdvice}. */
 export interface TripAdvice {
   /** ok: every country was found; ambiguous: a name names several (ask which); empty: a name names none. */
   status: "ok" | "ambiguous" | "empty";
   /** One line per country, then the combined verdict. */
   summary: string;
-  countries: (TripCountry | TripLookupFailure)[];
+  countries: (TripCountry | TripLookupFailure | TripReadFailure)[];
+  /** Which countries' advisories could not be read (status failed), and what to do. */
+  reason?: string;
 }
 
 /** The input of {@link getTravelAdvice}. */
 export interface TravelAdviceInput {
   /** One to five countries: German names, ISO codes, former names or content ids. */
   countries: readonly string[];
+  /**
+   * The caller's deadline or cancellation: once it aborts, the countries not read yet are answered
+   * as not read (status failed), so what was read can still be given.
+   */
+  signal?: AbortSignal | undefined;
 }
+
+/** The reason of a country the caller's signal stopped. */
+const NOT_READ = "Not read: the call's time ran out (or it was cancelled) first; ask for it again.";
 
 /** The top-level sections of advisory blocks, in order, each once. */
 function topSections(blocks: readonly AdvisoryBlock[]): string[] {
@@ -369,7 +389,10 @@ function verdictText(verdict: TripVerdict, name: string, travel: number): string
  * strongest flag; with all flags false, `advice-in-text` when a sentence may advise against travel
  * to the country or a region, `advice-only` only when none does. A name that names several
  * countries is `ambiguous` with the candidates, one that names none `empty` with the reason; the
- * others are read all the same.
+ * others are read all the same. An advisory that can't be read (an error answer, a broken one, a
+ * failed request) is that country's failure (status `failed`, with the reason), and the others are
+ * read; so are none after the caller's signal aborted. Only a trip whose every advisory failed is
+ * the error itself.
  */
 export async function getTravelAdvice(client: ReisewarnungenClient, input: TravelAdviceInput): Promise<TripAdvice> {
   const queries = input.countries;
@@ -379,8 +402,10 @@ export async function getTravelAdvice(client: ReisewarnungenClient, input: Trave
   queries.forEach((q, i) => checkQuery(`countries[${i}]`, q));
   const entries = await client.summaries();
   const lookups = queries.map((q) => findCountry(entries, q));
-  const countries: (TripCountry | TripLookupFailure)[] = [];
+  const countries: (TripCountry | TripLookupFailure | TripReadFailure)[] = [];
   const seen = new Set<string>();
+  let firstError: unknown;
+  const stopped = (): boolean => input.signal?.aborted === true;
   for (const lookup of lookups) {
     if (lookup.status !== "ok") {
       countries.push(lookup);
@@ -388,7 +413,20 @@ export async function getTravelAdvice(client: ReisewarnungenClient, input: Trave
     }
     if (seen.has(lookup.entry.id)) continue; // the same country named twice is read once
     seen.add(lookup.entry.id);
-    const advisory = await client.getWithContent(lookup.entry.id);
+    const failed = (reason: string): TripReadFailure => ({ status: "failed", query: lookup.query, ...refOf(lookup.entry), reason });
+    if (stopped()) {
+      countries.push(failed(NOT_READ));
+      continue;
+    }
+    let advisory: Awaited<ReturnType<ReisewarnungenClient["getWithContent"]>>;
+    try {
+      advisory = await client.getWithContent(lookup.entry.id);
+    } catch (err) {
+      if (!(err instanceof ReiseError)) throw err;
+      firstError ??= err;
+      countries.push(failed(stopped() ? NOT_READ : `Its advisory could not be read: ${err.message}`));
+      continue;
+    }
     const entry: CountryEntry = { ...lookup.entry, ...advisory, id: lookup.entry.id };
     // An advisory repeats its key sentences under Aktuelles and Sicherheit: each text once, at its first place.
     const sentences = onceEach(adviceSentences(advisory.content));
@@ -409,9 +447,16 @@ export async function getTravelAdvice(client: ReisewarnungenClient, input: Trave
       sections: topSections(advisoryBlocks(advisory.content)),
     });
   }
-  const failed = countries.filter((c) => c.status !== "ok");
-  const status = failed.some((c) => c.status === "ambiguous") ? "ambiguous" : failed.length > 0 ? "empty" : "ok";
-  return { status, summary: tripSummary(countries), countries };
+  const unread = countries.filter((c): c is TripReadFailure => c.status === "failed");
+  if (unread.length > 0 && unread.length === countries.length) throw firstError;
+  const notFound = countries.filter((c) => c.status === "ambiguous" || c.status === "empty");
+  const status = notFound.some((c) => c.status === "ambiguous") ? "ambiguous" : notFound.length > 0 ? "empty" : "ok";
+  const answer: TripAdvice = { status, summary: tripSummary(countries), countries };
+  if (unread.length > 0) {
+    const names = unread.map((c) => c.countryName ?? c.id).join(", ");
+    answer.reason = `${unread.length === 1 ? `The advisory of ${names}` : `The advisories of ${names}`} could not be read: ask for ${unread.length === 1 ? "it" : "them"} again on ${unread.length === 1 ? "its" : "their"} own; the other countries are answered.`;
+  }
+  return answer;
 }
 
 const VERDICT_WORDS: Readonly<Record<TripVerdict, string>> = {
@@ -423,9 +468,10 @@ const VERDICT_WORDS: Readonly<Record<TripVerdict, string>> = {
   "advice-only": "advice only",
 };
 
-function tripSummary(countries: readonly (TripCountry | TripLookupFailure)[]): string {
+function tripSummary(countries: readonly (TripCountry | TripLookupFailure | TripReadFailure)[]): string {
   const lines = countries.map((c) => {
     if (c.status === "ok") return `${c.countryName ?? c.id}: ${VERDICT_WORDS[c.verdict]}.`;
+    if (c.status === "failed") return `${c.countryName ?? c.id}: its advisory could not be read; ask for it again.`;
     if (c.status === "ambiguous") return `${quoteValue(c.query)} names ${c.total} countries (${c.candidates.map((x) => x.countryName).join(", ")}): ask which one.`;
     return `${quoteValue(c.query)}: not found in the Auswärtiges Amt's list.`;
   });
