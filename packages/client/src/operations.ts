@@ -154,6 +154,7 @@ export const COUNTRY_ALIASES: Readonly<Record<string, string>> = {
   england: "GB",
   schottland: "GB",
   wales: "GB",
+  uk: "GB",
   nordirland: "GB",
   osttimor: "TL",
   swasiland: "SZ",
@@ -195,7 +196,8 @@ const NOT_FOUND_HINT =
 /**
  * Find the country `query` names in `entries` (the list): a content id; the official German name
  * (case, umlauts written ae/oe/ue and accents aside); an ISO alpha-2 or alpha-3 code; an everyday
- * or former name ({@link COUNTRY_ALIASES}); else a part of the German name. One exact name wins
+ * or former name ({@link COUNTRY_ALIASES}, UK among them); else a part of the German name, of four
+ * letters or more (two or three letters are only ever a code: `UK` is never the Ukraine). One exact name wins
  * over the others containing it (`Guinea`, `Sudan`: they are named in `alsoMatching`); several
  * partial matches are `ambiguous`, never picked (`Kongo`, `Korea`). None is `empty`, saying what
  * to give instead: never "no warning".
@@ -229,6 +231,11 @@ export function findCountry(entries: readonly CountryEntry[], query: string): Co
   if (alias !== undefined) {
     const byAlias = entries.filter((e) => e.countryCode?.toUpperCase() === alias);
     if (byAlias.length === 1) return { status: "ok", query: q, entry: byAlias[0] as CountryEntry, matchedBy: "alias" };
+  }
+  // Two or three letters are a code (or an alias, UK): never a part of a name, which would make
+  // "UK" the Ukraine and "EU" a choice between Neuseeland and Papua-Neuguinea.
+  if (/^[A-Za-z]{2,3}$/.test(q)) {
+    return { status: "empty", query: q, reason: `${quoteValue(q)} is no ISO 3166 code of a country in the Auswärtiges Amt's list; two or three letters are read only as a code (a part of a name needs four letters or more). ${NOT_FOUND_HINT}` };
   }
   if (containing.length === 1) return { status: "ok", query: q, entry: containing[0] as CountryEntry, matchedBy: "part" };
   if (containing.length > 1) {

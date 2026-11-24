@@ -73,7 +73,8 @@ For scripts and shared configs, pin a release and its digest from the
 | `getAdvisory` | One country's whole advisory as text, block by block with its section, or one section (Einreise, Visum, Gesundheit). |
 
 Countries go by their official German short name (`Ägypten`, `Russische Föderation`, `USA`), an
-ISO code (`EG`, `RUS`) or a former or everyday German name (`Russland`, `Holland`); a name several
+ISO code (`EG`, `RUS`; two or three letters are only ever a code, so `UK` is the United Kingdom, never
+the Ukraine) or a former or everyday German name (`Russland`, `Holland`); a name several
 countries share (`Kongo`, `Korea`) is answered as ambiguous, never picked. The four flags record
 only the formal warnings: a country without a flag can still be advised against in its text
 (Türkei's border areas), so `getTravelAdvice` says `advice-in-text` and lists the sentences, and

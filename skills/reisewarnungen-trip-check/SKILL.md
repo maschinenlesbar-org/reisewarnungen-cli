@@ -57,7 +57,7 @@ Notes and traps:
   | Palästina, Gaza, Westjordanland | `PS` | Palästinensische Gebiete* |
   | Burma, Birma | `MM` | Myanmar |
   | Elfenbeinküste | `CI` | Côte d'Ivoire |
-  | Großbritannien, England, Schottland, Wales, Nordirland | `GB` | Vereinigtes Königreich |
+  | Großbritannien, England, Schottland, Wales, Nordirland, UK | `GB` | Vereinigtes Königreich |
   | Osttimor | `TL` | Timor-Leste |
   | Swasiland | `SZ` | Eswatini |
   | Kap Verde, Kapverden | `CV` | Cabo Verde |
@@ -72,6 +72,8 @@ Notes and traps:
 - **No exact match:** try the table, then a case-insensitive substring match with `test`
   (it folds `Ä`/`Ö`/`Ü` too; jq's `ascii_downcase` does not, so `ägypten` would miss):
   `jq -r --arg q "ägypten" '.[] | select(.countryName | test($q; "i")) | [.id,.countryName,.countryCode] | @tsv'`.
+  Never for two or three letters: those are codes only (`UK` is inside `Ukraine`, which is
+  under a full warning).
 - **Several matches** (`Kongo` → Demokratische Republik Kongo *and* Republik Kongo;
   `Korea` → Nord- and Südkorea; `Guinea` → four countries; `Sudan` → Sudan and
   Südsudan): prefer an exact `countryName` match; otherwise **ask the user** which one

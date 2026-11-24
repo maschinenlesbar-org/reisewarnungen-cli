@@ -43,6 +43,26 @@ test("findCountry: an English request goes by ISO alpha-2 or alpha-3 code", () =
   }
 });
 
+test("findCountry: two or three letters that are no ISO code are never a part of a name (UK is the United Kingdom, not Ukraine)", () => {
+  const ukraine: CountryEntry = { id: "201946", countryName: "Ukraine", countryCode: "UA", iso3CountryCode: "UKR", warning: true, partialWarning: false };
+  const neuseeland: CountryEntry = { id: "205670", countryName: "Neuseeland", countryCode: "NZ", iso3CountryCode: "NZL", warning: false, partialWarning: false };
+  const entries = [...ENTRIES, ukraine, neuseeland];
+  for (const query of ["UK", "uk"]) {
+    const found = findCountry(entries, query);
+    assert.equal(found.status === "ok" && found.entry.countryName, "Vereinigtes Königreich", query);
+    assert.equal(found.status === "ok" && found.matchedBy, "alias", query);
+  }
+  for (const query of ["EU", "kra", "ine"]) {
+    const found = findCountry(entries, query);
+    assert.equal(found.status, "empty", query);
+    assert.match(found.status === "empty" ? found.reason : "", /no ISO 3166 code/, query);
+  }
+  const ukr = findCountry(entries, "UKR");
+  assert.equal(ukr.status === "ok" && ukr.matchedBy, "code");
+  const part = findCountry(entries, "Ukra");
+  assert.equal(part.status === "ok" && part.matchedBy, "part");
+});
+
 test("findCountry: everyday and former names map to the country (several are under a full warning)", () => {
   for (const [query, expected] of [
     ["Russland", "Russische Föderation"],

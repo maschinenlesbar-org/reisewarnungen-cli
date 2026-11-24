@@ -77,7 +77,7 @@ const country: JsonSchema = {
   type: "string",
   minLength: 1,
   maxLength: 100,
-  description: "The official German short name (Thailand, Ägypten, Vereinigtes Königreich), an ISO 3166 code (TH, THA), a former or everyday German name (Russland, Holland) or a content id from an answer.",
+  description: "The official German short name (Thailand, Ägypten, Vereinigtes Königreich), an ISO 3166 code (TH, THA; UK too; two or three letters are only ever a code), a former or everyday German name (Russland, Holland) or a content id from an answer.",
 };
 const offset: JsonSchema = { type: "integer", minimum: 0, maximum: 10_000, description: "Where the page starts (default 0)." };
 
