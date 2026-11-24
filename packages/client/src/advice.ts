@@ -250,13 +250,29 @@ function blocksOf(html: string): Block[] {
   let listCounter = 0;
   let inItem = false;
   let skip = 0; // inside <script>/<style>
-  // The open link: its target and where its text starts in the buffer.
-  let link: { target: string; start: number } | undefined;
+  // The open link: its target and its text so far, kept apart from the buffer until it closes
+  // (putting the target into the buffer copied the block so far per link: quadratic).
+  let link: { target: string; text: string } | undefined;
+  const closeLink = (withTarget: boolean): void => {
+    if (link === undefined) return;
+    const inner = link.text;
+    if (withTarget && cleanText(inner) !== "" && !inner.includes(link.target)) {
+      // The closing punctuation and space, found backwards (a pattern anchored at the end would
+      // rescan a long run of dots from every one of them).
+      let cut = inner.length;
+      while (cut > 0 && /\s/.test(inner[cut - 1] as string)) cut--;
+      while (cut > 0 && ".,;:!?".includes(inner[cut - 1] as string)) cut--;
+      buffer += `${inner.slice(0, cut)} (${link.target})${inner.slice(cut)}`;
+    } else {
+      buffer += inner;
+    }
+    link = undefined;
+  };
 
   const flush = (): void => {
+    closeLink(false);
     const text = cleanText(buffer);
     buffer = "";
-    link = undefined;
     if (text === "") return;
     blocks.push({ text, section, list: inItem ? currentList : undefined });
   };
@@ -266,6 +282,7 @@ function blocksOf(html: string): Block[] {
       if (token.startsWith("<!--") || skip > 0) continue;
       const text = decodeEntities(token === "<" ? "<" : token);
       if (heading !== undefined) heading.text += text;
+      else if (link !== undefined) link.text += text;
       else buffer += text;
       continue;
     }
@@ -294,20 +311,11 @@ function blocksOf(html: string): Block[] {
       // (https://thaievisa.go.th/)."), unless the text already shows it: an entry rule that says
       // "apply on the website" must keep the address.
       if (!closing) {
+        closeLink(false); // an unclosed link before it keeps its text, without a target
         const target = linkTarget(token);
-        link = target === undefined ? undefined : { target, start: buffer.length };
-      } else if (link !== undefined) {
-        const inner = buffer.slice(link.start);
-        if (cleanText(inner) !== "" && !inner.includes(link.target)) {
-          // The closing punctuation and space, found backwards (a pattern anchored at the end
-          // would rescan a long run of dots from every one of them).
-          let cut = inner.length;
-          while (cut > 0 && /\s/.test(inner[cut - 1] as string)) cut--;
-          while (cut > 0 && ".,;:!?".includes(inner[cut - 1] as string)) cut--;
-          const at = link.start + cut;
-          buffer = `${buffer.slice(0, at)} (${link.target})${buffer.slice(at)}`;
-        }
-        link = undefined;
+        if (target !== undefined) link = { target, text: "" };
+      } else {
+        closeLink(true);
       }
       continue;
     }

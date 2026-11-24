@@ -170,7 +170,13 @@ test("advice: a link's target follows its text, so an address the advisory names
     ).map((b) => b.text),
     ["A (https://a.example/?x=1&y=2) B (https://www.auswaertiges-amt.de/de/service/b) https://c.example/ D E F G Konsulat (konsulat@example.org) x@example.org"],
   );
-  // A hostile tag stays linear.
+  // A hostile tag stays linear, and so do many links in one block (each target was put in by
+  // copying the block so far: 64 000 links took 5.6 s).
+  for (const n of [64_000]) {
+    const at = performance.now();
+    advisoryBlocks(`<p>${'<a href="https://x.example/">t</a> '.repeat(n)}</p>`);
+    assert.ok(performance.now() - at < 1500, `${n} links: ${Math.round(performance.now() - at)} ms`);
+  }
   const started = performance.now();
   advisoryBlocks(`<p>${'<a href="'.repeat(20_000)}</p>${"<a href=x>".repeat(20_000)}<p><a href="https://x.example/">${".".repeat(100_000)}x${" ".repeat(80_000)}</a></p>`);
   assert.ok(performance.now() - started < 1500);
