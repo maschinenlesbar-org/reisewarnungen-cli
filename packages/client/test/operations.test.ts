@@ -22,6 +22,7 @@ import {
 } from "../src/operations.js";
 import type { CountryEntry } from "../src/types.js";
 import { COUNTRIES, MALI, OESTERREICH, THAILAND, TUERKEI, reiseApi, type ListFixture } from "./fixtures.js";
+import { jsonResponse, makeMockTransport } from "./helpers.js";
 
 const clientOf = (transport = reiseApi()) => new ReisewarnungenClient({ transport: transport.transport, maxRetries: 0 });
 const ENTRIES: CountryEntry[] = Object.entries(COUNTRIES).map(([id, entry]) => ({ id, ...entry }));
@@ -407,4 +408,18 @@ test("getAdvisory: a section the advisory lacks is empty with its sections; an u
   const unknown = await getAdvisory(clientOf(), { country: "Atlantis" });
   assert.equal(unknown.status, "empty");
   assert.match("reason" in unknown ? unknown.reason : "", /ISO 3166 code/);
+});
+
+test("getAdvisory: a content id the API doesn't know is empty, saying ids can change, like getTravelAdvice", async () => {
+  for (const id of ["999999", "0"]) {
+    const answer = await getAdvisory(clientOf(), { country: id });
+    assert.equal(answer.status, "empty", id);
+    assert.match("reason" in answer ? answer.reason : "", new RegExp(`^The Auswärtiges Amt has no advisory with the content id ${id}\\. Content ids can change: look the country up by its name or ISO code\\.$`), id);
+  }
+  // An envelope without the country (the client's not-found) is the same answer.
+  const empty = makeMockTransport(() => jsonResponse({ response: {} }));
+  const answer = await getAdvisory(clientOf(empty), { country: "123456" });
+  assert.equal(answer.status, "empty");
+  // Any other failure is still the error.
+  await assert.rejects(getAdvisory(clientOf(makeMockTransport(() => jsonResponse({}, 500))), { country: "123456" }), /HTTP 500/);
 });

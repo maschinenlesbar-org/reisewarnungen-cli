@@ -19,7 +19,7 @@
 
 import { adviceSentences, advisoryBlocks, type AdviceSentence, type AdvisoryBlock } from "./advice.js";
 import { canonicalContentId, type ReisewarnungenClient } from "./client.js";
-import { ReiseError, ReiseValidationError, quoteValue } from "./errors.js";
+import { ReiseApiError, ReiseError, ReiseNotFoundError, ReiseValidationError, quoteValue } from "./errors.js";
 import type { CountryEntry, TravelWarning } from "./types.js";
 import { assertValid, normalizeToken, tokenProblem } from "./validate.js";
 
@@ -792,7 +792,8 @@ export type AdvisoryAnswer =
  * One country's whole advisory as text: the flags and dates, the "Letzte Änderungen" note, and
  * every block with its section (or the blocks of one section). The text is the advisory's own,
  * tags dropped and nothing reworded. A content id is read directly; any other name is looked up
- * in the list first ({@link findCountry}).
+ * in the list first ({@link findCountry}). A content id the API doesn't know is `empty`, saying ids
+ * can change.
  */
 export async function getAdvisory(client: ReisewarnungenClient, input: AdvisoryInput): Promise<AdvisoryAnswer> {
   const query = checkQuery("country", input.country);
@@ -804,7 +805,15 @@ export async function getAdvisory(client: ReisewarnungenClient, input: AdvisoryI
     lookup = findCountry(await client.summaries(), query);
   }
   if (lookup.status !== "ok") return lookup;
-  const advisory = await client.getWithContent(lookup.entry.id);
+  let advisory: Awaited<ReturnType<ReisewarnungenClient["getWithContent"]>>;
+  try {
+    advisory = await client.getWithContent(lookup.entry.id);
+  } catch (err) {
+    // A content id read directly (without the list) that the API doesn't know: an old one, most
+    // likely; the answer says so as getTravelAdvice's does, not a bare HTTP 404.
+    if (lookup.matchedBy !== "id" || !(err instanceof ReiseNotFoundError || (err instanceof ReiseApiError && err.status === 404))) throw err;
+    return { status: "empty", query, reason: `The Auswärtiges Amt has no advisory with the content id ${lookup.entry.id}. Content ids can change: look the country up by its name or ISO code.` };
+  }
   const entry: CountryEntry = { ...lookup.entry, ...advisory, id: lookup.entry.id };
   const all = advisoryBlocks(advisory.content);
   const sections = topSections(all);
