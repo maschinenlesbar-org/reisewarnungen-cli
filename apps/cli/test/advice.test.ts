@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_SECTION_LENGTH, adviceSentences, splitSentences } from "@maschinenlesbar.org/reisewarnungen-client/internal/advice";
+import { MAX_SECTION_LENGTH, adviceSentences, advisoryBlocks, splitSentences } from "@maschinenlesbar.org/reisewarnungen-client/internal/advice";
 import { ReisewarnungenClient } from "@maschinenlesbar.org/reisewarnungen-client/internal/client";
 import { ReiseNotFoundError, ReiseParseError, toWellFormed } from "@maschinenlesbar.org/reisewarnungen-client/internal/errors";
 import { run } from "../src/cli/run.js";
@@ -44,7 +44,7 @@ test("advice: 'Vermeiden Sie … Reisen' (Türkei) is found as a whole sentence 
 
 test("advice: 'Meiden Sie möglichst Reisen …' (Angola) and '… sollte … gemieden werden' (Bangladesch) are found", () => {
   assert.deepEqual(travel(ANGOLA), [
-    "Meiden Sie möglichst Reisen in die Provinzen Cabinda, Lunda Norte und Lunda Sul und beachten Sie die Reise- und Sicherheitshinweise für die Demokratische Republik Kongo.",
+    "Meiden Sie möglichst Reisen in die Provinzen Cabinda, Lunda Norte und Lunda Sul und beachten Sie die Reise- und Sicherheitshinweise für die Demokratische Republik Kongo (https://diplo.de/-/203202).",
   ]);
   assert.deepEqual(travel(BANGLADESCH), ["Das Grenzgebiet zu Myanmar sollte, wenn möglich, weiträumig gemieden werden."]);
 });
@@ -144,6 +144,36 @@ test("advice: the call to leave, a visit and the capital tie a sentence to trave
     "<p>Sollten Sie bereits die Ukraine verlassen haben, tragen Sie sich umgehend aus der Krisenvorsorgeliste aus.</p>";
   assert.equal(adviceSentences(other).length, 3);
   assert.deepEqual(travel(other), []);
+});
+
+test("advice: a link's target follows its text, so an address the advisory names isn't lost", () => {
+  // Thailand's visa rule says to apply on the foreign ministry's website, and its advisory warns of
+  // fake visa sellers: without the link a reader has to guess the official site.
+  const visa =
+    '<h3>Visum</h3><p>Visa können über die <a href="https://thaievisa.go.th/" target="_blank">Webseite des thailändischen Außenministeriums</a> als e-Visum beantragt werden. ' +
+    "Nähere Informationen erteilen die <a href='http://www.immigration.go.th/'>thailändischen Einwanderungsbehörden</a>.</p>";
+  assert.deepEqual(advisoryBlocks(visa), [
+    {
+      section: "Visum",
+      text:
+        "Visa können über die Webseite des thailändischen Außenministeriums (https://thaievisa.go.th/) als e-Visum beantragt werden. " +
+        "Nähere Informationen erteilen die thailändischen Einwanderungsbehörden (http://www.immigration.go.th/).",
+    },
+  ]);
+  // Entities decoded; a root-relative link is the Auswärtiges Amt's site; a link whose text is the
+  // address, an anchor, javascript: and an empty one add nothing; mailto: adds the address.
+  assert.deepEqual(
+    advisoryBlocks(
+      '<p><a href="https://a.example/?x=1&amp;y=2">A</a> <a href="/de/service/b">B</a> <a href="https://c.example/">https://c.example/</a> ' +
+        '<a href="#top">D</a> <a href="javascript:alert(1)">E</a> <a href="">F</a> <a>G</a> <a href="mailto:konsulat@example.org">Konsulat</a> ' +
+        '<a href="mailto:x@example.org">x@example.org</a></p>',
+    ).map((b) => b.text),
+    ["A (https://a.example/?x=1&y=2) B (https://www.auswaertiges-amt.de/de/service/b) https://c.example/ D E F G Konsulat (konsulat@example.org) x@example.org"],
+  );
+  // A hostile tag stays linear.
+  const started = performance.now();
+  advisoryBlocks(`<p>${'<a href="'.repeat(20_000)}</p>${"<a href=x>".repeat(20_000)}<p><a href="https://x.example/">${".".repeat(100_000)}x${" ".repeat(80_000)}</a></p>`);
+  assert.ok(performance.now() - started < 1500);
 });
 
 test("advice: an invisible or control character inside a word doesn't hide the sentence", () => {

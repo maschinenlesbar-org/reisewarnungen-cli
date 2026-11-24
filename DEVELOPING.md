@@ -140,7 +140,9 @@ and output; made once per heading and shared) and
 Hauptstadt, …; and, as written, `TRAVEL_PATTERN_CASED`: the noun „Besuch" and the call „… zu
 verlassen", so the call to leave a country and advice against visits are never hidden; together
 `isTravelSentence`). The HTML is split at block elements (paragraphs, list items, headings, accordion
-buttons), entities decoded, and invisible and control characters dropped (soft hyphens,
+buttons), a link's target put in parentheses after its text (http(s) as it is, a root-relative
+one on www.auswaertiges-amt.de, mailto: as the address; none when the text shows it already),
+entities decoded, and invisible and control characters dropped (soft hyphens,
 zero-width and bidi marks, tag characters, NUL: one inside „abgeraten" must not hide the
 sentence); sentences split at `.`/`!`/`?` before
 an upper-case start, but not after an abbreviation („z. B.", „o.g.", „bzw.", a one- or

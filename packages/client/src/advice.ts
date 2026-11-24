@@ -23,7 +23,7 @@ export interface AdviceSentence {
    * (never inside a surrogate pair) and end in "…".
    */
   section: string;
-  /** The sentence as plain text (tags removed, entities decoded, invisible and control characters dropped, whitespace collapsed). */
+  /** The sentence as plain text (tags removed, a link's target in parentheses after its text, entities decoded, invisible and control characters dropped, whitespace collapsed). */
   text: string;
   /**
    * True when the sentence also mentions travel, a stay, a visit, leaving or a part of the country
@@ -158,6 +158,28 @@ export const MAX_HEADING_LENGTH = 200;
  */
 export const MAX_SECTION_LENGTH = 500;
 
+/** The site the advisories' root-relative links (`/de/…`) point into. */
+const AA_SITE = "https://www.auswaertiges-amt.de";
+
+/** The longest link target that is kept; a longer one is left out (it would be noise, not an address). */
+const MAX_LINK_LENGTH = 500;
+
+/**
+ * The target of a link tag (`<a href="…">`) as the text shows it: an http(s) URL as it is, a
+ * root-relative one on the Auswärtiges Amt's site, a mailto: as its address; anything else (an
+ * anchor, javascript:, nothing) is undefined.
+ */
+function linkTarget(tag: string): string | undefined {
+  const match = /\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(tag);
+  if (match === null) return undefined;
+  const href = cleanText(decodeEntities(match[1] ?? match[2] ?? match[3] ?? ""));
+  if (href === "" || href.length > MAX_LINK_LENGTH) return undefined;
+  if (/^https?:\/\/[^/\s]/i.test(href)) return href;
+  if (/^\/(?!\/)/.test(href)) return `${AA_SITE}${href}`;
+  if (/^mailto:[^\s?]+/i.test(href)) return href.slice("mailto:".length).split("?")[0];
+  return undefined;
+}
+
 interface Block {
   text: string;
   section: string;
@@ -228,10 +250,13 @@ function blocksOf(html: string): Block[] {
   let listCounter = 0;
   let inItem = false;
   let skip = 0; // inside <script>/<style>
+  // The open link: its target and where its text starts in the buffer.
+  let link: { target: string; start: number } | undefined;
 
   const flush = (): void => {
     const text = cleanText(buffer);
     buffer = "";
+    link = undefined;
     if (text === "") return;
     blocks.push({ text, section, list: inItem ? currentList : undefined });
   };
@@ -264,8 +289,30 @@ function blocksOf(html: string): Block[] {
       }
       continue;
     }
+    if (name === "a" && heading === undefined && skip === 0) {
+      // A link's target follows its text, before the text's closing punctuation („… Webseite
+      // (https://thaievisa.go.th/)."), unless the text already shows it: an entry rule that says
+      // "apply on the website" must keep the address.
+      if (!closing) {
+        const target = linkTarget(token);
+        link = target === undefined ? undefined : { target, start: buffer.length };
+      } else if (link !== undefined) {
+        const inner = buffer.slice(link.start);
+        if (cleanText(inner) !== "" && !inner.includes(link.target)) {
+          // The closing punctuation and space, found backwards (a pattern anchored at the end
+          // would rescan a long run of dots from every one of them).
+          let cut = inner.length;
+          while (cut > 0 && /\s/.test(inner[cut - 1] as string)) cut--;
+          while (cut > 0 && ".,;:!?".includes(inner[cut - 1] as string)) cut--;
+          const at = link.start + cut;
+          buffer = `${buffer.slice(0, at)} (${link.target})${buffer.slice(at)}`;
+        }
+        link = undefined;
+      }
+      continue;
+    }
     if (!BLOCK_TAGS.has(name)) {
-      // An inline element (span, strong, a, abbr, …) is part of the running text; keep the
+      // An inline element (span, strong, abbr, …) is part of the running text; keep the
       // words apart where it would glue them (`<br/>`-less line ends are blocks already).
       continue;
     }
@@ -402,7 +449,7 @@ export function adviceSentences(html: string): AdviceSentence[] {
 export interface AdvisoryBlock {
   /** The headings it stands under, outermost first, joined with " › " (as {@link AdviceSentence.section}). */
   section: string;
-  /** The block's text: tags removed, entities decoded, whitespace collapsed; the words as published. */
+  /** The block's text: tags removed (a link's target in parentheses after its text), entities decoded, whitespace collapsed; the words as published. */
   text: string;
 }
 

@@ -791,7 +791,7 @@ export type AdvisoryAnswer =
 /**
  * One country's whole advisory as text: the flags and dates, the "Letzte Änderungen" note, and
  * every block with its section (or the blocks of one section). The text is the advisory's own,
- * tags dropped and nothing reworded. A content id is read directly; any other name is looked up
+ * tags dropped (a link's target follows its text in parentheses) and nothing reworded. A content id is read directly; any other name is looked up
  * in the list first ({@link findCountry}). A content id the API doesn't know is `empty`, saying ids
  * can change.
  */

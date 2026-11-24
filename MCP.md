@@ -70,7 +70,7 @@ For scripts and shared configs, pin a release and its digest from the
 | `getWarnedCountries` | Every country under a formal travel warning, full warnings (Reisewarnung) first, then regional ones (Teilreisewarnung), with the totals. |
 | `getWarningChanges` | What changed since a snapshot of an earlier answer (newly warned, escalated, downgraded, lifted, other flags, text revised), or the advisories changed since a date. |
 | `listCountries` | Every country with its content id, ISO codes, warning level and dates, a page at a time. |
-| `getAdvisory` | One country's whole advisory as text, block by block with its section, or one section (Einreise, Visum, Gesundheit). |
+| `getAdvisory` | One country's whole advisory as text, block by block with its section, or one section (Einreise, Visum, Gesundheit); a link's address follows its text in parentheses. |
 
 Countries go by their official German short name (`Ägypten`, `Russische Föderation`, `USA`), an
 ISO code (`EG`, `RUS`; two or three letters are only ever a code, so `UK` is the United Kingdom, never
