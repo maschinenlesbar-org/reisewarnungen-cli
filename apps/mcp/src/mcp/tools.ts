@@ -236,7 +236,14 @@ export const TOOLS: readonly ToolDefinition[] = [
       const from = num(args, "offset") ?? 0;
       const page = answer.blocks.slice(from, from + (num(args, "limit") ?? 60));
       const next = from + page.length;
-      return { ...answer, blocks: page, blockCount: answer.blocks.length, ...(next < answer.blocks.length ? { nextOffset: next } : {}) };
+      const count = answer.blocks.length;
+      if (page.length === 0 && count > 0) {
+        const section = str(args, "section");
+        const reason =
+          section === undefined ? `The advisory holds ${count} blocks; offset ${from} is past its end.` : `The blocks of section ${JSON.stringify(section)} are ${count}; offset ${from} is past their end.`;
+        return { ...answer, status: "empty", reason, blocks: page, blockCount: count };
+      }
+      return { ...answer, blocks: page, blockCount: count, ...(next < count ? { nextOffset: next } : {}) };
     },
   },
 ];

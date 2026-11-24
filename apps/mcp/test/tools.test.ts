@@ -139,3 +139,15 @@ test("getTravelAdvice at the call deadline answers with the countries it has rea
   assert.match(String(content["reason"]), /The advisories of Mali, Türkei could not be read/);
   assert.equal(content["source"], `${BASE}/${THAILAND}`);
 });
+
+test("getAdvisory: an offset past the last block is empty, saying how many blocks there are", async () => {
+  const whole = await call("getAdvisory", { country: "Türkei" });
+  const count = whole.answer["blockCount"] as number;
+  const past = await call("getAdvisory", { country: "Türkei", offset: count });
+  assert.equal(past.answer["status"], "empty", past.text);
+  assert.equal(past.answer["reason"], `The advisory holds ${count} blocks; offset ${count} is past its end.`);
+  assert.equal(past.answer["blockCount"], count);
+  const section = await call("getAdvisory", { country: "Türkei", section: "Sicherheit", offset: 500 });
+  assert.equal(section.answer["status"], "empty");
+  assert.match(String(section.answer["reason"]), /^The blocks of section "Sicherheit" are \d+; offset 500 is past their end\.$/);
+});
