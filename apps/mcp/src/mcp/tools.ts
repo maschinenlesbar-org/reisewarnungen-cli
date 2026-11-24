@@ -146,7 +146,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     ].join("\n\n"),
     inputSchema: input({
       previous: { type: "string", minLength: 1, maxLength: 4000, description: "The snapshot string of an earlier answer, unchanged." },
-      since: { type: "string", minLength: 10, maxLength: 40, pattern: "^\\d{4}-\\d{2}-\\d{2}", description: "A date or time in ISO 8601 (2026-11-12 or 2026-11-12T08:00:00Z)." },
+      since: { type: "string", minLength: 10, maxLength: 40, pattern: "^\\d{4}-\\d{2}-\\d{2}", description: "A date or time in ISO 8601 (2026-11-12 or 2026-11-12T08:00:00Z; a time without a zone is UTC)." },
       limit: { type: "integer", minimum: 1, maximum: MAX_RECENT, description: `How many recently changed countries (1-${MAX_RECENT}, default 15).` },
     }),
     outputSchema: output({ verdict: str_, snapshot: str_, previousAsOf: str_, changes: obj, recent: arr, recentTotal: int }),

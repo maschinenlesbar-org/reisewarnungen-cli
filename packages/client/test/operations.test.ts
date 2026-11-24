@@ -354,6 +354,27 @@ test("getWarningChanges: since a date, the advisories changed after it, newest f
   await assert.rejects(getWarningChanges(clientOf(), { since: "last week" }), /Invalid since "last week": Expected a date or time in ISO 8601/);
 });
 
+test("getWarningChanges: since is a real date, and a time without a zone is UTC on any server", async () => {
+  for (const bad of ["2026-02-30", "2026-02-29", "2026-04-31", "2026-11-22T24:00", "2026-11-22T23:60", "2026-11-22T08:00:61Z"]) {
+    await assert.rejects(getWarningChanges(clientOf(), { since: bad }), /Invalid since .*: Expected a date or time in ISO 8601/, bad);
+  }
+  assert.equal((await getWarningChanges(clientOf(), { since: "2024-02-29" })).recentTotal, Object.keys(COUNTRIES).length);
+  const newest = Math.max(...Object.values(COUNTRIES).map((c) => c.lastModified));
+  const before = new Date((newest - 60) * 1000).toISOString().slice(0, 16); // a minute earlier, no zone
+  const zone = process.env["TZ"];
+  try {
+    for (const tz of ["UTC", "America/New_York", "Asia/Tokyo"]) {
+      process.env["TZ"] = tz;
+      for (const since of [before, `${before.replace("T", " ")}`, `${before}:00`, `${before}Z`, `${before}+00:00`]) {
+        assert.ok(((await getWarningChanges(clientOf(), { since })).recentTotal ?? 0) >= 1, `${since} under ${tz}`);
+      }
+    }
+  } finally {
+    if (zone === undefined) delete process.env["TZ"];
+    else process.env["TZ"] = zone;
+  }
+});
+
 test("getWarningChanges: a malformed snapshot is refused with the fix, before any request", async () => {
   const transport = reiseApi();
   for (const bad of ["", "rw2:1:1:", "rw1:x:1:", "rw1:1:1:12-0", "rw1:1:1:12-g", "rw1:1:1"]) {

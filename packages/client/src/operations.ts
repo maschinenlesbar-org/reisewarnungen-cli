@@ -660,12 +660,29 @@ export interface WarningChangesAnswer {
   recentTotal?: number;
 }
 
-/** `since` as Unix seconds; a date that is no date is a ReiseValidationError. */
+/** A date, optionally a time (minutes, seconds, a fraction), optionally a zone. */
+const SINCE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(\.\d{1,9})?)?(Z|[+-]\d{2}:?\d{2})?)?$/i;
+
+/**
+ * `since` as Unix seconds. A date that doesn't exist (30 February, hour 24) is a
+ * ReiseValidationError, not rolled over into the next month; a time without a zone is UTC, like
+ * every time the API and the answers give (it was read in the server's own time zone, so the same
+ * call found a change in Berlin and missed it in New York).
+ */
 function sinceSeconds(since: string): number {
   const text = since.trim();
-  const ms = /^\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(text) ? Date.parse(text.length === 10 ? `${text}T00:00:00Z` : text) : Number.NaN;
-  if (Number.isNaN(ms)) throw new ReiseValidationError(`Invalid since ${quoteValue(since)}: Expected a date or time in ISO 8601 (2026-11-12 or 2026-11-12T08:00:00Z).`);
-  return ms / 1000;
+  const bad = (): never => {
+    throw new ReiseValidationError(`Invalid since ${quoteValue(since)}: Expected a date or time in ISO 8601 (2026-11-12 or 2026-11-12T08:00:00Z; a time without a zone is UTC).`);
+  };
+  const match = SINCE.exec(text);
+  if (match === null) return bad();
+  const [, y, mo, d, h = "00", mi = "00", s = "00", fraction = "", zone = "Z"] = match as unknown as string[];
+  const [year, month, day, hour, minute, second] = [y, mo, d, h, mi, s].map(Number) as [number, number, number, number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59) return bad();
+  const offset = /^[+-]\d{2}:?\d{2}$/.test(zone) ? `${zone.slice(0, 3)}:${zone.slice(-2)}` : "Z";
+  const ms = Date.parse(`${y}-${mo}-${d}T${h}:${mi}:${s}${fraction}${offset}`);
+  return Number.isNaN(ms) ? bad() : ms / 1000;
 }
 
 /**
