@@ -206,3 +206,21 @@ test("getWarningChanges: 200 newly warned countries come a page at a time, by cl
   assert.equal(recent.answer["nextOffset"], undefined);
   assert.equal((await call("getWarningChanges", { limit: 10 }, reiseApi({ countries }))).answer["nextOffset"], 10);
 });
+
+test("getWarnedCountries: a worldwide warning comes a page at a time; the size cap leaves a nextOffset", async () => {
+  const countries = worldwide(200);
+  const first = await call("getWarnedCountries", {}, reiseApi({ countries }));
+  const page = first.answer["countries"] as { countryName: string }[];
+  assert.equal(first.answer["truncated"], true, "200 warned countries are over the default size cap");
+  assert.equal(first.answer["nextOffset"], page.length);
+  const rest = await call("getWarnedCountries", { offset: page.length }, reiseApi({ countries }));
+  const names = [...page, ...(rest.answer["countries"] as { countryName: string }[])].map((c) => c.countryName);
+  assert.equal(rest.answer["nextOffset"], undefined, rest.text);
+  assert.deepEqual(names, Object.values(countries).map((c) => c.countryName));
+  const small = await call("getWarnedCountries", { limit: 5, offset: 10 }, reiseApi({ countries }));
+  assert.deepEqual((small.answer["countries"] as { countryName: string }[]).map((c) => c.countryName), ["Land 010", "Land 011", "Land 012", "Land 013", "Land 014"]);
+  assert.equal(small.answer["nextOffset"], 15);
+  const past = await call("getWarnedCountries", { offset: 200 }, reiseApi({ countries }));
+  assert.equal(past.answer["status"], "empty");
+  assert.equal(past.answer["reason"], "The list holds 200 warned countries; offset 200 is past its end.");
+});

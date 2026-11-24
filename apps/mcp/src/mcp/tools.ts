@@ -129,15 +129,26 @@ export const TOOLS: readonly ToolDefinition[] = [
     title: "Countries with a travel warning",
     description: [
       'Every country under a formal German travel warning now, ranked: full warnings (Reisewarnung) first, then regional ones (Teilreisewarnung), each by German name, with the totals. Use it for "für welche Länder gibt es eine Reisewarnung?", "wo warnt Deutschland vor Reisen?", "which countries have a travel warning?", "list all full travel warnings", "how many countries are warned right now?", "warned countries in Africa".',
-      "Formal warnings only: advice against travel without a flag (Türkei, Jordanien) is in the advisory texts (getTravelAdvice), so call these \"countries with a formal travel warning\", not everywhere Germany advises against travel. Lead with the totals (verdict). List full warnings in full; a regional warning covers parts of a country, not all of it. There is no region field: for a continent or region, pick the countries yourself by their ISO codes and say which you included. The situation flags have been false in the live data so far: don't claim one that isn't set. Give the German name, ISO code and content id so the user can drill in with getTravelAdvice. status empty with the reason is a real answer (no warning of that level), never a failure.",
+      "Formal warnings only: advice against travel without a flag (Türkei, Jordanien) is in the advisory texts (getTravelAdvice), so call these \"countries with a formal travel warning\", not everywhere Germany advises against travel. Lead with the totals (verdict). List full warnings in full; a regional warning covers parts of a country, not all of it. There is no region field: for a continent or region, pick the countries yourself by their ISO codes and say which you included. The situation flags have been false in the live data so far: don't claim one that isn't set. Give the German name, ISO code and content id so the user can drill in with getTravelAdvice. A long list comes a page at a time (offset, limit; nextOffset says where the next page starts): read on before saying the list is complete. status empty with the reason is a real answer (no warning of that level), never a failure.",
       RULES,
     ].join("\n\n"),
-    inputSchema: input({ level: { type: "string", enum: LEVEL_ENUM, description: "Only this level (default: every formal warning)." } }),
-    outputSchema: output({ verdict: str_, listed: int, warned: int, byLevel: obj, countries: arr }),
+    inputSchema: input({
+      level: { type: "string", enum: LEVEL_ENUM, description: "Only this level (default: every formal warning)." },
+      offset,
+      limit: { type: "integer", minimum: 1, maximum: 250, description: "How many countries (default 250: all of them, unless the size cap cuts the page)." },
+    }),
+    outputSchema: output({ verdict: str_, listed: int, warned: int, byLevel: obj, countries: arr, nextOffset: int }),
     source: (_args, apiBase) => apiBase,
+    paged: (args) => ({ list: "countries", offset: num(args, "offset") ?? 0 }),
     async run(args, context) {
       const answer = await getWarnedCountries(context.client, { level: str(args, "level") as Exclude<WarningLevel, "none"> | undefined });
-      return { ...answer, countries: answer.countries.map(compact) };
+      const from = num(args, "offset") ?? 0;
+      const page = answer.countries.slice(from, from + (num(args, "limit") ?? 250));
+      const next = from + page.length;
+      if (page.length === 0 && answer.countries.length > 0) {
+        return { ...answer, status: "empty", reason: `The list holds ${answer.countries.length} warned countries; offset ${from} is past its end.`, countries: [] };
+      }
+      return { ...answer, countries: page.map(compact), ...(next < answer.countries.length ? { nextOffset: next } : {}) };
     },
   },
   {

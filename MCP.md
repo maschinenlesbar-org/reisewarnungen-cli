@@ -67,7 +67,7 @@ For scripts and shared configs, pin a release and its digest from the
 | Tool | What it answers |
 |---|---|
 | `getTravelAdvice` | One to five countries of a trip: each one's warning level and every sentence of its advisory that may advise against travel there or to a region, with the date the advice took effect and the last changes. |
-| `getWarnedCountries` | Every country under a formal travel warning, full warnings (Reisewarnung) first, then regional ones (Teilreisewarnung), with the totals. |
+| `getWarnedCountries` | Every country under a formal travel warning, full warnings (Reisewarnung) first, then regional ones (Teilreisewarnung), with the totals; a page at a time when the list is long. |
 | `getWarningChanges` | What changed since a snapshot of an earlier answer (newly warned, escalated, downgraded, lifted, other flags, text revised: one list by class, with the totals), or the advisories changed since a date; a page at a time. |
 | `listCountries` | Every country with its content id, ISO codes, warning level and dates, a page at a time. |
 | `getAdvisory` | One country's whole advisory as text, block by block with its section, or one section (Einreise, Visum, Gesundheit); a link's address follows its text in parentheses. |
