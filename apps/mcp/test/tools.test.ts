@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { NetworkError } from "../src/mcp/api.js";
 import { limitTransport } from "../src/mcp/limiter.js";
 import { listTools } from "../src/mcp/server.js";
+import { DEADLINE_HINT, SIZE_HINT, TOOLS } from "../src/mcp/tools.js";
 import { connect } from "./harness.js";
 import { COUNTRIES, MALI, THAILAND, TUERKEI, reiseApi, reiseResponder, type ListFixture } from "./helpers.js";
 
@@ -255,4 +256,32 @@ test("getTravelAdvice under a small size cap keeps every country and its verdict
     if (fewer) assert.match(String(answer["reason"]), /travelAdvice lost entries from the end/);
     assert.doesNotMatch(String(answer["reason"] ?? ""), /countries lost/);
   }
+});
+
+test("the deadline's and the size cap's advice name each option with the tools that take it", async () => {
+  const schemas = new Map(TOOLS.map((tool) => [tool.name, Object.keys((tool.inputSchema as { properties: Record<string, unknown> }).properties)]));
+  const options = new Set([...schemas.values()].flat());
+  for (const text of [DEADLINE_HINT, SIZE_HINT]) {
+    const pairs = [...text.matchAll(/(\w+(?: or \w+)*) \((\w+(?:, \w+)*)\)/g)];
+    assert.ok(pairs.length >= 2, text);
+    const named = new Set<string>();
+    for (const [, names, tools] of pairs) {
+      for (const tool of (tools as string).split(", ")) {
+        assert.ok(schemas.has(tool), `${tool} is no tool: ${text}`);
+        for (const option of (names as string).split(" or ")) {
+          assert.ok(schemas.get(tool)?.includes(option), `${tool} takes no ${option}: ${text}`);
+          named.add(option);
+        }
+      }
+    }
+    for (const word of text.match(/\w+/g) ?? []) assert.ok(!options.has(word) || named.has(word), `${word} named without its tools: ${text}`);
+  }
+  // Both reach the caller.
+  const hanging = { transport: (): Promise<never> => new Promise<never>(() => {}) };
+  const slow = await connect({ transport: hanging, config: { callTimeoutMs: 30 } });
+  assert.match((await slow.call("getTravelAdvice", { countries: ["Thailand"] })).content[0]?.text ?? "", /fewer countries \(getTravelAdvice\)/);
+  await slow.close();
+  const small = await connect({ transport: reiseApi(), config: { maxResultChars: 1000 } });
+  assert.match((await small.call("getAdvisory", { country: "Türkei" })).content[0]?.text ?? "", /section \(getAdvisory\)/);
+  await small.close();
 });
