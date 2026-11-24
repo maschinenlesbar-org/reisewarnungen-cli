@@ -69,6 +69,22 @@ test("timeoutMs bounds the whole response, not just idle gaps", async () => {
   );
 });
 
+test("a request its caller aborts says so, not that it passed a deadline; the engine's own deadline keeps its text", async () => {
+  await withServer(
+    () => {},
+    async (baseUrl) => {
+      const caller = new AbortController();
+      const pending = nodeHttpTransport({ method: "GET", url: baseUrl, timeoutMs: 30_000, signal: caller.signal });
+      setTimeout(() => caller.abort(), 20);
+      await assert.rejects(pending, (err) => err instanceof ReiseNetworkError && /aborted by its caller/.test(err.message) && !/deadline|timed out/.test(err.message));
+      const engine = new AbortController();
+      const timed = nodeHttpTransport({ method: "GET", url: baseUrl, timeoutMs: 30_000, signal: engine.signal });
+      setTimeout(() => engine.abort(new ReiseNetworkError("Request timed out after 50ms")), 20);
+      await assert.rejects(timed, (err) => err instanceof ReiseNetworkError && err.message === "Request timed out after 50ms");
+    },
+  );
+});
+
 test("a timeoutMs beyond Node's timer range is capped, not fired after 1 ms", async () => {
   const warnings: string[] = [];
   const onWarning = (warning: Error) => void warnings.push(warning.name);

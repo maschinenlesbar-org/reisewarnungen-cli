@@ -336,9 +336,13 @@ independently of the CLI.
 
 **Custom transports.** The engine enforces the documented limits for every transport,
 not only the built-in one. Each call runs under the overall `timeoutMs` deadline: the
-transport gets an `AbortSignal` (`HttpRequest.signal`) that fires at the deadline, and
-the call rejects then (`ReiseNetworkError: … Request timed out after …ms`) whether the
-transport stops or not, so a `fetch` or `node:http` transport can't hang a caller. The
+transport gets an `AbortSignal` (`HttpRequest.signal`) that fires at the deadline, with the
+timeout error as its reason, and the call rejects then (`ReiseNetworkError: … Request timed
+out after …ms`) whether the transport stops or not, so a `fetch` or `node:http` transport
+can't hang a caller. The built-in transport stops on that signal with its reason, and on a
+signal another caller aborted (the MCP server's limiter adds a tool call's deadline and
+cancellation) with "Request aborted by its caller before it finished": never a deadline that
+didn't pass. The
 engine checks `maxResponseBytes` on the body it gets back. A transport may return the
 body as a Buffer, any `ArrayBuffer` view (fetch's `Uint8Array`, from any realm) or an
 `ArrayBuffer`, and the headers as a plain record in any case, a `Headers` object or a
