@@ -89,7 +89,8 @@ content ids, flags and ISO codes, so a warned country that left the list is name
 one under a new content id is the same country (`previousId`), not a lifted and a new warning.
 
 Every tool only reads. An answer is JSON (`structuredContent` and the same as text), with the
-`source` it came from (whole, never cut like the data; an answer a redirect fetched from another
+`source` it came from (whole, never cut like the data; a trip names each advisory it read, by its URL,
+comma-separated; an answer a redirect fetched from another
 host says so there: "… (answered by https://other.example after a redirect)", and a WARN record
 names both) and the data licence. A text over 2000 characters is cut and ends in `…[cut, N
 characters in all]`, and the answer says `truncated`. An answer over `--max-result-chars` first

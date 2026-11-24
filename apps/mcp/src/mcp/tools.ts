@@ -95,10 +95,14 @@ const offset: JsonSchema = { type: "integer", minimum: 0, maximum: 10_000, descr
 /** The request an answer came from, as `run` resolved it (a name becomes a content id): read back by `source`. */
 const requested = new WeakMap<object, string>();
 
-/** The advisories of `ids` under the API base: one path, or several in braces; the list alone without any. */
+/**
+ * The advisories of `ids` under the API base: each one's URL, comma-separated (a URL the API
+ * serves, so each can be cited as a link; the brace notation `…/{201558,201962}` was none); the
+ * list alone without any. At most five ids, from the input's limit.
+ */
 function advisoriesPath(apiBase: string, ids: readonly string[]): string {
   if (ids.length === 0) return apiBase;
-  return ids.length === 1 ? `${apiBase}/${ids[0]}` : `${apiBase}/{${ids.join(",")}}`;
+  return ids.map((id) => `${apiBase}/${id}`).join(", ");
 }
 
 /** A country of a ranked list, without the advisory's title and effective date. */

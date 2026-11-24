@@ -39,7 +39,8 @@ test("getTravelAdvice: the verdict per country, the regions, the advisories as s
   // Each country's first sentences come first, so a cut from the end leaves every country its first ones.
   assert.deepEqual(advice.slice(0, 2).map((s) => s.country), ["Thailand", "Türkei"]);
   assert.deepEqual(answer["summary"], ["Thailand: regional travel warning (Teilreisewarnung).", "Türkei: no formal warning; read the advice against travel in the text.", "Österreich: advice only.", "Of 3 countries, 1 carries a formal warning: Thailand."]);
-  assert.equal(answer["source"], `${BASE}/{${THAILAND},${TUERKEI},210962}`);
+  // Each advisory read, as a URL the API serves (a model cites them as links).
+  assert.equal(answer["source"], `${BASE}/${THAILAND}, ${BASE}/${TUERKEI}, ${BASE}/210962`);
   assert.match(String(answer["licence"]), /^Quelle: Auswärtiges Amt .*Keine Gewähr.*no open licence.*taken over completely and kept current.*open-data-schnittstelle-736118$/);
   assert.equal(transport.calls.length, 4);
 });
