@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ReisewarnungenClient } from "../src/client.js";
-import { ReiseValidationError } from "../src/errors.js";
+import { ReiseParseError, ReiseValidationError } from "../src/errors.js";
 import {
   findCountry,
   getAdvisory,
@@ -166,6 +166,26 @@ test("getTravelAdvice: an unflagged country whose advisory asks Germans to leave
     const oesterreich = answer.countries[0] as TripCountry;
     assert.equal(oesterreich.verdict, "advice-in-text", sentence);
     assert.deepEqual(oesterreich.travelAdvice.map((s) => s.text), [sentence]);
+  }
+});
+
+test("getTravelAdvice and getAdvisory: an advisory without its text is a parse error, never advice only or no blocks", async () => {
+  // Live, Türkei's advisory has twelve travel sentences: without its text the verdict can't be
+  // made, and "advice-only" (the reassuring answer) was. The CLI's advice refused the same answer.
+  for (const content of [undefined, null, "", "  ", 42, "<p> </p><div></div>"]) {
+    const transport = reiseApi();
+    const client = clientOf({ ...transport, transport: async (request) => {
+      const response = await transport.transport(request);
+      if (!request.url.endsWith(`/${TUERKEI}`)) return response;
+      const body = JSON.parse(response.body.toString()) as { response: Record<string, Record<string, unknown>> };
+      const entry = body.response[TUERKEI] as Record<string, unknown>;
+      if (content === undefined) delete entry["content"];
+      else entry["content"] = content;
+      return { ...response, body: Buffer.from(JSON.stringify(body)) };
+    } });
+    const label = JSON.stringify(content) ?? "missing";
+    await assert.rejects(getTravelAdvice(client, { countries: ["Türkei"] }), (err: Error) => err instanceof ReiseParseError && new RegExp(`content id "${TUERKEI}" has no content, so its advice can't be read`).test(err.message), label);
+    await assert.rejects(getAdvisory(client, { country: TUERKEI }), ReiseParseError, label);
   }
 });
 

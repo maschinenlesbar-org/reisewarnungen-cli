@@ -121,10 +121,11 @@ into a `ReiseNetworkError` (`Invalid request: …`).
 ### Methods
 
 `client.list()` (raw `response` map), `client.summaries()` (flattened array with ids),
-`client.get(contentId)` (one full warning), `client.advice(contentId)` (the flags plus the
+`client.get(contentId)` (one full warning), `client.getWithContent(contentId)` (the same,
+refusing one without its text), `client.advice(contentId)` (the flags plus the
 advice-against-travel sentences; the CLI's `advice`).
 
-`advice(contentId)` fetches the advisory with `get` (same errors) and returns its flags,
+`advice(contentId)` fetches the advisory with `getWithContent` (same errors) and returns its flags,
 `effective`/`lastModified` and `sentences` from the exported `adviceSentences(html)`
 ([`advice.ts`](packages/client/src/advice.ts)): every sentence that matches one of
 `ADVICE_PATTERNS` (abraten, warnen, Reisewarnung, (ver)meiden/gemieden/vermieden,
@@ -147,7 +148,9 @@ two-digit ordinal); a sentence that ends in `:` before a list carries the list's
 flags record only the formal levels, so this is what keeps an all-false country from
 reading as "advice only" when its text says „Vermeiden Sie … Reisen" (Türkei), „Meiden Sie
 möglichst Reisen …" (Angola) or „… sollte … gemieden werden" (Bangladesch). An entry
-without `content` is a `ReiseParseError`, never "no advice".
+without its text (`content` missing, not a string, or no text in it) is a `ReiseParseError`,
+never "no advice": `getWithContent` refuses it, for `advice`, `getTravelAdvice` and
+`getAdvisory` alike.
 
 `summaries({ warnedOnly: true })` keeps only the countries with a warning of any
 kind in force: the exported `isWarned(entry)` is true when **any** of `warning`,

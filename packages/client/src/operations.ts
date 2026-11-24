@@ -388,10 +388,10 @@ export async function getTravelAdvice(client: ReisewarnungenClient, input: Trave
     }
     if (seen.has(lookup.entry.id)) continue; // the same country named twice is read once
     seen.add(lookup.entry.id);
-    const advisory = await client.get(lookup.entry.id);
+    const advisory = await client.getWithContent(lookup.entry.id);
     const entry: CountryEntry = { ...lookup.entry, ...advisory, id: lookup.entry.id };
     // An advisory repeats its key sentences under Aktuelles and Sicherheit: each text once, at its first place.
-    const sentences = onceEach(adviceSentences(typeof advisory.content === "string" ? advisory.content : ""));
+    const sentences = onceEach(adviceSentences(advisory.content));
     const travelAdvice = sentences.filter((s) => s.travel);
     const status = statusOf(entry);
     const verdict: TripVerdict = status.level !== "none" ? VERDICT_OF_LEVEL[status.level] : travelAdvice.length > 0 ? "advice-in-text" : "advice-only";
@@ -406,7 +406,7 @@ export async function getTravelAdvice(client: ReisewarnungenClient, input: Trave
       lastChanges: changeItems(advisory.lastChanges),
       travelAdvice,
       otherAdvice: sentences.length - travelAdvice.length,
-      sections: topSections(advisoryBlocks(typeof advisory.content === "string" ? advisory.content : "")),
+      sections: topSections(advisoryBlocks(advisory.content)),
     });
   }
   const failed = countries.filter((c) => c.status !== "ok");
@@ -758,9 +758,9 @@ export async function getAdvisory(client: ReisewarnungenClient, input: AdvisoryI
     lookup = findCountry(await client.summaries(), query);
   }
   if (lookup.status !== "ok") return lookup;
-  const advisory = await client.get(lookup.entry.id);
+  const advisory = await client.getWithContent(lookup.entry.id);
   const entry: CountryEntry = { ...lookup.entry, ...advisory, id: lookup.entry.id };
-  const all = advisoryBlocks(typeof advisory.content === "string" ? advisory.content : "");
+  const all = advisoryBlocks(advisory.content);
   const sections = topSections(all);
   const wanted = section === undefined ? undefined : fold(section);
   // A top-level section that starts with the text wins (`Sicherheit` is that section, not also

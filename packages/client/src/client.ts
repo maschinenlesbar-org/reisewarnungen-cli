@@ -10,7 +10,7 @@ import { RequestEngine, type EngineOptions } from "./engine.js";
 import { ReiseNotFoundError, ReiseParseError, ReiseValidationError, cutForMessage, quoteValue } from "./errors.js";
 import { assertKnownKeys, assertValid, booleanProblem, normalizeToken, tokenProblem } from "./validate.js";
 import type { TravelWarning, TravelWarningList, CountryEntry, JsonObject } from "./types.js";
-import { adviceSentences, type AdviceSentence } from "./advice.js";
+import { adviceSentences, advisoryBlocks, type AdviceSentence } from "./advice.js";
 
 const PATH = "/opendata/travelwarning";
 const enc = encodeURIComponent;
@@ -306,18 +306,12 @@ export class ReisewarnungenClient {
    * One country's warning flags plus every sentence of its advisory that warns or advises
    * against something (see {@link TravelAdvice}) — the part of the 40–70 KB HTML a
    * travel-safety verdict depends on, because the flags record only the formal warning
-   * levels. Fetches the advisory with {@link get} (same errors, same id rule); an entry
-   * without `content` is a ReiseParseError, never an advisory without advice.
+   * levels. Fetches the advisory with {@link getWithContent} (same errors, same id rule): an
+   * entry without its text is a ReiseParseError, never an advisory without advice.
    */
   async advice(contentId: string): Promise<TravelAdvice> {
     contentId = canonicalContentId(contentId);
-    const entry = await this.get(contentId);
-    if (typeof entry.content !== "string" || entry.content.trim() === "") {
-      throw new ReiseParseError(
-        `GET ${this.engine.describeUrl(`${PATH}/${enc(contentId)}`)}: the advisory for content id ` +
-          `"${idForMessage(contentId)}" has no content, so its advice can't be read.`,
-      );
-    }
+    const entry = await this.getWithContent(contentId);
     const pick = <K extends keyof TravelWarning>(key: K): Partial<Pick<TravelWarning, K>> =>
       entry[key] === undefined ? {} : ({ [key]: entry[key] } as Partial<Pick<TravelWarning, K>>);
     return {
@@ -333,6 +327,24 @@ export class ReisewarnungenClient {
       ...pick("lastModified"),
       sentences: adviceSentences(entry.content),
     };
+  }
+
+  /**
+   * One country's advisory with its text: {@link get} (same errors, same id rule), and an entry
+   * whose `content` is missing, not a string, or holds no text (only whitespace or empty tags) is
+   * a ReiseParseError naming the request. Without the text no verdict can be made: read as no
+   * text, an unflagged country was "advice only", the reassuring answer.
+   */
+  async getWithContent(contentId: string): Promise<TravelWarning & { content: string }> {
+    contentId = canonicalContentId(contentId);
+    const entry = await this.get(contentId);
+    if (typeof entry.content !== "string" || advisoryBlocks(entry.content).length === 0) {
+      throw new ReiseParseError(
+        `GET ${this.engine.describeUrl(`${PATH}/${enc(contentId)}`)}: the advisory for content id ` +
+          `"${idForMessage(contentId)}" has no content, so its advice can't be read.`,
+      );
+    }
+    return entry as TravelWarning & { content: string };
   }
 
   async get(contentId: string): Promise<TravelWarning> {
