@@ -51,7 +51,11 @@ export const DEADLINE_HINT =
   "The Auswärtiges Amt's server is slow at times: try again in a minute. A call can also ask for less: fewer countries (getTravelAdvice), " +
   "or one section of an advisory with section (getAdvisory).";
 
-/** An answer over the size cap says what to ask instead, each option with the tools that take it (as DEADLINE_HINT). */
+/**
+ * An answer over this server's result cap (--max-result-chars) says what to ask instead, each option
+ * with the tools that take it (as DEADLINE_HINT); one over the 16 MiB the server reads gets the kit's
+ * own error, which says that narrower options don't help.
+ */
 export const SIZE_HINT =
   "Ask for less: fewer countries (getTravelAdvice), one level (getWarnedCountries), one section of an advisory with section (getAdvisory), " +
   "or a smaller page with limit (getWarnedCountries, getWarningChanges, listCountries, getAdvisory), then the next with offset (getWarnedCountries, getWarningChanges, listCountries, getAdvisory).";
