@@ -1,6 +1,6 @@
 {
   "name": "@maschinenlesbar.org/reisewarnungen-mcp",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "MCP server for the travel and safety advice of the German Federal Foreign Office (Auswärtiges Amt), for AI agents (stdio and Streamable HTTP)",
   "type": "module",
   "bin": {
